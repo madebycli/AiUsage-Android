@@ -38,7 +38,9 @@ class ClaudeForecastTest {
         assertEquals(1791810000L, credential.expiresAt)
         assertEquals("Max 20x", credential.plan)
         assertFalse(credential.toString().contains("access-test"))
-        assertFalse(appJson.encodeToString(ClaudeCredential.serializer(), credential).contains("refresh"))
+        assertNull(credential.refresh)
+        assertFalse(credential.phoneLogin)
+        assertFalse(appJson.encodeToString(ClaudeCredential.serializer(), credential).contains("refresh-secret"))
     }
     @Test(expected = IllegalArgumentException::class) fun `API key cannot impersonate subscription credentials`() { ClaudeParser.credential("sk-ant-api03-test") }
     @Test(expected = SchemaException::class) fun `invalid Claude percent fails without a fabricated reading`() { ClaudeParser.parse("""{"five_hour":{"utilization":420}}""", 0, null) }
