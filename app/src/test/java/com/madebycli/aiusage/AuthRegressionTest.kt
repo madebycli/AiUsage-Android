@@ -88,6 +88,26 @@ class AuthRegressionTest {
                 assertFalse(message.contains("secret"))
             }
             assertNull(memory.saved)
+            assertEquals(2, server.requestCount)
+        } finally { server.shutdown() }
+    }
+
+    @Test fun `temporary approval polling failure retries without losing browser approval`() = runBlocking {
+        val server = MockWebServer(); server.start()
+        val memory = MemoryStore().apply { saved = null }
+        val retries = mutableListOf<Exception>()
+        server.enqueue(MockResponse().setResponseCode(503))
+        server.enqueue(MockResponse().setBody("""{"authorization_code":"approved","code_verifier":"verifier"}"""))
+        server.enqueue(MockResponse().setBody("""{"access_token":"access","refresh_token":"refresh"}"""))
+        try {
+            CodexAuth(HttpTransport(), memory, server.url("/").toString().trimEnd('/'))
+                .complete(DeviceCode("device", "ABCD", 1), onRetry = { retries += it })
+            assertEquals(1, retries.size)
+            assertEquals("access", memory.saved?.access)
+            assertEquals(3, server.requestCount)
+            assertEquals("/api/accounts/deviceauth/token", server.takeRequest().path)
+            assertEquals("/api/accounts/deviceauth/token", server.takeRequest().path)
+            assertEquals("/oauth/token", server.takeRequest().path)
         } finally { server.shutdown() }
     }
 

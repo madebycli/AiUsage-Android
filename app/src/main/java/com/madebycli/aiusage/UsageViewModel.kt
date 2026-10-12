@@ -23,7 +23,7 @@ data class UiState(
     val refreshing: Boolean = false, val creditsLoading: Boolean = false, val usageError: String? = null, val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
     val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
-    val deviceCode: DeviceCode? = null, val loginPhase: LoginPhase = LoginPhase.REQUEST_CODE, val loginLoading: Boolean = false, val loginError: String? = null,
+    val deviceCode: DeviceCode? = null, val loginPhase: LoginPhase = LoginPhase.REQUEST_CODE, val loginLoading: Boolean = false, val loginError: String? = null, val loginHint: String? = null,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val amoled: Boolean = false
 )
 
@@ -144,17 +144,23 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun connect() {
         if (loginJob?.isActive == true || state.value.disconnecting || state.value.initializing || state.value.connected) return
         val generation = session.advance()
-        mutable.update { it.copy(loginLoading = true, loginPhase = LoginPhase.REQUEST_CODE, loginError = null, demo = false, usage = null, previous = null, feed = null, storageWarning = null) }
+        mutable.update { it.copy(loginLoading = true, loginPhase = LoginPhase.REQUEST_CODE, loginError = null, loginHint = null, demo = false, usage = null, previous = null, feed = null, storageWarning = null) }
         publicQueue.request()
         val previousLogin = loginJob
         loginJob = viewModelScope.launch(Dispatchers.IO) {
             previousLogin?.join()
             try {
+                Log.i("AiUsage", "login phase=REQUEST_CODE")
                 val code = auth.begin()
+                Log.i("AiUsage", "login phase=WAITING")
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(deviceCode = code, loginPhase = LoginPhase.WAITING) }
-                auth.complete(code) { phase ->
+                auth.complete(code, onRetry = { error ->
+                    Log.w("AiUsage", diagnosticFailure("login_poll_retry", error))
+                    mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginHint =
+                        "Verbindung zur Freigabe kurz unterbrochen. Die App versucht es mit diesem Code erneut.") }
+                }) { phase ->
                     Log.i("AiUsage", "login phase=${phase.name}")
-                    mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginPhase = phase) }
+                    mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginPhase = phase, loginHint = null) }
                 }
                 currentCoroutineContext().ensureActive()
                 if (!session.isCurrent(generation)) return@launch
@@ -167,6 +173,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     it.usageError?.let { error -> "Anmeldung bestätigt, Verbrauch konnte nicht geladen werden. $error" }) }
                 publicQueue.request()
             } catch (e: TimeoutCancellationException) {
+                Log.w("AiUsage", diagnosticFailure("login_${state.value.loginPhase.name}", e))
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginError = "Anmeldecode abgelaufen. Bitte neu verbinden.") }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {

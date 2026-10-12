@@ -62,7 +62,10 @@ keine Bestätigung eines Resets auf deinem persönlichen Account.
    sichtbar, auch wenn die Anmeldung aus den Einstellungen gestartet wurde.
    Falls der Browser bestätigt, aber Werte fehlen: Fehlerdialog beachten.
    Im Logcat erscheinen unter `AiUsage` nur Phase, Fehlerklasse und HTTP-Status,
-   keine Codes, Tokens, Account-IDs oder Antwortinhalte.
+   keine Codes, Tokens, Account-IDs oder Antwortinhalte. Temporäre Netzwerk-
+   und Serverfehler beim Warten auf die Freigabe werden innerhalb der 15 Minuten
+   erneut abgefragt. Der einmalige OAuth-Code-Austausch wird niemals automatisch
+   wiederholt. Ein Rücksprung-Link aus dem Browser ist nicht erforderlich.
 6. Eine Codex-Aufgabe ausführen und mehrfach „Jetzt aktualisieren“ drücken.
    Abrufzeit und Verbrauch prüfen. Bei kleinen Aufgaben kann die gerundete
    Anbieter-Prozentzahl unverändert bleiben.

@@ -9,6 +9,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.*
 import java.time.Instant
+import java.io.IOException
 import java.util.Base64
 
 data class DeviceCode(val id: String, val code: String, val interval: Long)
@@ -24,7 +25,7 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
             (result.text("user_code") ?: result.text("usercode"))?.takeIf { it.isNotBlank() } ?: throw SchemaException(),
             result.integer("interval")?.coerceIn(1, 60) ?: 5)
     }
-    suspend fun complete(device: DeviceCode, onPhase: (LoginPhase) -> Unit = {}): Unit = withTimeout(15 * 60_000L) {
+    suspend fun complete(device: DeviceCode, onRetry: (Exception) -> Unit = {}, onPhase: (LoginPhase) -> Unit = {}): Unit = withTimeout(15 * 60_000L) {
         while (true) {
             delay(device.interval * 1000)
             val response = try {
@@ -33,7 +34,17 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
                 }.toString())
             } catch (e: HttpFailure) {
                 if (e.status == 403 || e.status == 404) continue
+                if (e.status == 429 || e.status in 500..599) {
+                    onRetry(e)
+                    delay((e.retrySeconds ?: device.interval).coerceIn(1, 900) * 1000)
+                    continue
+                }
                 throw e
+            } catch (e: IOException) {
+                // Approval polling can safely retry after mobile network/background interruptions.
+                // The one-time OAuth exchange below must never be replayed automatically.
+                onRetry(e)
+                continue
             }
             val code = appJson.parseToJsonElement(response).jsonObject
             onPhase(LoginPhase.EXCHANGING)

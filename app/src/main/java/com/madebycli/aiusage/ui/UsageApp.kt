@@ -90,6 +90,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(state.loginPhase.label, style = MaterialTheme.typography.titleSmall)
+                    state.loginHint?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                     if (state.loginPhase == LoginPhase.WAITING) Text("Im Browser anmelden, Code eingeben und die Freigabe bestätigen. Danach zu AI Usage zurückkehren.")
                     if (state.deviceCode == null) LoadingIndicator(Modifier.align(Alignment.CenterHorizontally))
                     state.deviceCode?.takeIf { state.loginPhase == LoginPhase.WAITING }?.let {
