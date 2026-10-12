@@ -55,10 +55,18 @@ class UiSmokeTest {
         compose.onNodeWithText("Claude Code").performClick()
         compose.onNodeWithText("Max 5x").assertIsDisplayed()
         screenshot("claude-light")
-        compose.runOnIdle { screen.value = screen.value.copy(forecasts = ResetSource.entries.associateWith { source -> ForecastResult(ResetForecast(source, listOf(ForecastChance(24, 27.0)), now, now, now - 86400)) }) }
+        compose.runOnIdle { screen.value = screen.value.copy(forecasts = ResetSource.entries.associateWith { source -> ForecastResult(ResetForecast(source, if (source == ResetSource.CODEX_RESET) listOf(ForecastChance(24, 19.0), ForecastChance(48, 34.0)) else listOf(ForecastChance(6, 3.2, 1.1, 9.7), ForecastChance(24, 27.0, 13.6, 45.2)), now, now, now - 86400)) }) }
         compose.onNodeWithContentDescription("Resets").performClick()
         compose.onNodeWithText("Forecast").assertIsDisplayed()
         screenshot("forecast-light")
+        compose.runOnIdle { screen.value = screen.value.copy(community = CommunitySource.entries.filter { it.provider == "Claude Code" }.associateWith { source ->
+            CommunityResult(CommunityReport(source, ForecastChance(if (source == CommunitySource.CLAUDE_RESETS) 168 else 48, if (source == CommunitySource.CLAUDE_RESETS) 80.0 else 42.0), null, now, null, emptyList()))
+        }) }
+        compose.onNodeWithText("Claude Code").performClick()
+        compose.onNodeWithText("Claude Forecast").assertIsDisplayed()
+        compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
+        compose.onNodeWithText("in 48 Stunden").assertIsDisplayed()
+        screenshot("claude-forecast-light")
         compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Anmeldungen verwalten").performClick()
         compose.onNodeWithText("Wen verbinden\nwir heute?").assertIsDisplayed()
