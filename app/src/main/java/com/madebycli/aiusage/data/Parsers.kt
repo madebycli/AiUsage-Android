@@ -47,10 +47,10 @@ object UsageParser {
             if (raw == null || raw == JsonNull) return@mapNotNull null
             val obj = raw as? JsonObject ?: throw SchemaException()
             val used = obj.number("used_percent")?.takeIf { it in 0.0..101.0 } ?: throw SchemaException()
-            val seconds = obj.integer("limit_window_seconds")?.takeIf { it > 0 } ?: throw SchemaException()
+            val seconds = obj.integer("limit_window_seconds")?.takeIf { it in 1..315_360_000L } ?: throw SchemaException()
             val at = if (obj["reset_at"] != null && obj["reset_at"] != JsonNull) {
-                obj.integer("reset_at")?.takeIf { it > 0 } ?: throw SchemaException()
-            } else obj.integer("reset_after_seconds")?.takeIf { it >= 0 }?.let { now + it }
+                obj.integer("reset_at")?.takeIf { it in 1..253_402_300_799L } ?: throw SchemaException()
+            } else obj.integer("reset_after_seconds")?.takeIf { it in 0..315_360_000L }?.let { now + it }
             UsageWindow(used, seconds, at)
         }.sortedBy { it.seconds }
         if (windows.map { it.seconds }.distinct().size != windows.size) throw SchemaException()

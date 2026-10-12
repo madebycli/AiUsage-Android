@@ -18,7 +18,7 @@ Geklont am 12.10.2026 von `master`, Commit
   eigene ruhige Salbei-Palette als Fallback, optional schwarzer Hintergrund.
 - Gradle-Startskripte und Wrapper-JAR übernommen; Version auf Gradle 8.13
   angepasst. Android/Kotlin-Abhängigkeiten auf die hier gebaute Kombination
-  AGP 8.13.2, Kotlin 2.2.21, SDK 36 und Material 3 1.4.0 reduziert.
+  AGP 8.13.2, Kotlin 2.2.21, SDK 36 und Material 3 1.5.0-beta01 reduziert.
 - Bottom-Navigation aus AniHyous `MainBottomNavBar.kt` für drei AI-Usage-Seiten
   angepasst; Anime-Routen, Ressourcen und Animationsvektoren entfernt.
 

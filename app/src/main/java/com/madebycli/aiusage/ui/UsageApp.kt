@@ -250,7 +250,7 @@ private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
         if (state.demo) item { DemoBanner(model::exitDemo) }
         item {
             SectionTitle("Öffentlicher Verlauf")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ResetSource.entries.forEach { source -> FilterChip(selected = state.source == source, onClick = { model.setSource(source) }, label = { Text(source.label) }) }
             }
         }
@@ -316,7 +316,7 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel) {
         SectionTitle("Darstellung")
         SoftCard {
             Text("Farbschema", style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Hell", ThemeMode.DARK to "Dunkel").forEach { (theme, name) ->
                     FilterChip(state.theme == theme, onClick = { model.setTheme(theme) }, label = { Text(name) })
                 }

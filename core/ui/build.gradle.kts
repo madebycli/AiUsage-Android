@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "com.axiel7.anihyou.core.ui"
     compileSdk = 36
+    buildToolsVersion = "36.0.0"
     defaultConfig { minSdk = 26 }
     buildFeatures { compose = true }
     compileOptions {
@@ -16,7 +17,7 @@ android {
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
-    implementation("androidx.compose.material3:material3:1.4.0")
+    implementation("androidx.compose.material3:material3:1.5.0-beta01")
     implementation("androidx.compose.ui:ui-tooling-preview")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -1,6 +1,9 @@
 package com.madebycli.aiusage.data
 
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
@@ -39,7 +42,12 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
                 "redirect_uri" to "$issuer/deviceauth/callback",
                 "code_verifier" to (code.text("code_verifier") ?: throw SchemaException())
             ))
-            mutex.withLock { store.writeTokens(parseTokens(tokens)) }
+            mutex.withLock {
+                currentCoroutineContext().ensureActive()
+                store.writeTokens(parseTokens(tokens))
+                try { currentCoroutineContext().ensureActive() }
+                catch (e: CancellationException) { store.clear(); throw e }
+            }
             break
         }
     }
