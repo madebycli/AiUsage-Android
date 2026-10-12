@@ -25,10 +25,7 @@ Während eines laufenden Abrufs wird ein weiterer Abruf vorgemerkt;
 weitere schnelle Taps werden zu diesem Folgeabruf zusammengefasst.
 
 Das erzwingt keine neue Messung auf OpenAIs Server. Gleiche Antworten können
-deshalb trotz erfolgreicher neuer Requests vorkommen. Die Anzeige `pp/s`
-bedeutet Prozentpunkte pro Sekunde, gemittelt zwischen zwei Abrufen desselben
-Fensters. Das ist kein Token-Zähler und keine garantierte Echtzeitmessung.
-Der Messwert steigt ausschließlich durch echte Antworten. Auch nach einem
+deshalb trotz erfolgreicher neuer Requests vorkommen. Es gibt keinen Token-Zähler und keine garantierte Echtzeitmessung. Auch nach einem
 abgelaufenen Countdown wird kein Budget erfunden.
 
 Der Verbrauch erscheint sofort nach der Quota-Antwort. Optionale Reset-Ablaufdetails

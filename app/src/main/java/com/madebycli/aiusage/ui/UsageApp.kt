@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -150,7 +153,6 @@ private fun UsageScreen(state: UiState, now: Long) {
     val active = provider?.takeIf { it in names }
     if (active == null) {
         LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 4.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            item { Text("Platz für deine nächste Idee.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (state.connected) item { ProviderBanner("Codex", state.usage, state.usageError, state.refreshing, now) { provider = "Codex" } }
             if (state.claudeConnected) item { ProviderBanner("Claude Code", state.claudeUsage, state.claudeError, state.claudeRefreshing, now) { provider = "Claude Code" } }
         }
@@ -162,7 +164,7 @@ private fun UsageScreen(state: UiState, now: Long) {
     val refreshing = if (active == "Codex") state.refreshing else state.claudeRefreshing
     LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 4.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            TextButton(onClick = { provider = null }) { Icon(Icons.Rounded.ArrowBack, null, Modifier.size(18.dp)); Text("Zur Übersicht") }
+            TextButton(onClick = { provider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(18.dp)); Text("Zur Übersicht") }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 names.forEach { name -> FilterChip(active == name, { provider = name }, label = { Text(name) },
                     leadingIcon = { Icon(if (name == "Codex") Icons.Rounded.Terminal else Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp)) }) }
@@ -353,7 +355,7 @@ private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, 
     val background = if (name == "Codex") colors.primaryContainer else colors.tertiaryContainer
     val foreground = if (name == "Codex") colors.onPrimaryContainer else colors.onTertiaryContainer
     Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 32.dp, topEnd = 12.dp, bottomEnd = 32.dp, bottomStart = 32.dp), color = background, contentColor = foreground) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(if (name == "Codex") Icons.Rounded.Terminal else Icons.Rounded.AutoAwesome, null, Modifier.size(28.dp))
                 Column(Modifier.weight(1f)) {
@@ -520,7 +522,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
         }
     }
     Column(Modifier.widthIn(max = 560.dp).fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-        if (close != null) TextButton(onClick = close) { Icon(Icons.Rounded.ArrowBack, null); Text("Zurück") }
+        if (close != null) TextButton(onClick = close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null); Text("Zurück") }
         Spacer(Modifier.height(18.dp))
         FlowerMark()
         Text("Wen verbinden\nwir heute?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -545,7 +547,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
             if (claudeForm) {
                 Text("Importiere deine Claude-Code-Anmeldung vom Computer oder füge einen OAuth-Token ein.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { picker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !state.claudeRefreshing) { Icon(Icons.Rounded.UploadFile, null); Text("Datei auswählen") }
-                OutlinedTextField(secret, { secret = it.take(65_536) }, label = { Text("OAuth-Token oder Zugangsdaten-JSON") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), maxLines = 3)
+                OutlinedTextField(secret, { secret = it.take(65_536) }, label = { Text("OAuth-Token oder Zugangsdaten-JSON") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth(), maxLines = 3)
                 Button(onClick = { model.importClaude(secret); secret = "" }, enabled = secret.isNotBlank() && !state.claudeRefreshing, modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeRefreshing) "Wird verbunden…" else "Anmeldung importieren") }
                 Disclosure("Wo finde ich die Anmeldung?") {
                     Text("Claude Code: ~/.claude/.credentials.json (Windows: %USERPROFILE%\\.claude\\.credentials.json). Ein mit claude setup-token erstellter OAuth-Token benötigt user:profile-Zugriff für die Verbrauchsanzeige. Ein API-Key zeigt keine Abo-Limits.", style = MaterialTheme.typography.bodySmall)

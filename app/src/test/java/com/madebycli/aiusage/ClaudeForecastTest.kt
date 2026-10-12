@@ -24,6 +24,10 @@ class ClaudeForecastTest {
         assertNull(usage.availableResets)
         assertNull(usage.extraUsage!!.used)
     }
+    @Test fun `ineligible reset block does not fabricate zero available credits`() {
+        val usage = ClaudeParser.parse("""{"five_hour":{"utilization":1},"cedar_ember":{"eligible":false,"ineligible_reason":"surface"}}""", 50, null)
+        assertNull(usage.availableResets)
+    }
     @Test fun `import drops rotating refresh token and converts millisecond expiry`() {
         val credential = ClaudeParser.credential("""{"claudeAiOauth":{"accessToken":"access-test","refreshToken":"refresh-secret","expiresAt":1791810000000.0,"subscriptionType":"max","rateLimitTier":"max_20x"}}""")
         assertEquals(1791810000L, credential.expiresAt)

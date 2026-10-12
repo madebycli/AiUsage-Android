@@ -54,6 +54,10 @@ object ClaudeParser {
                 if (groups.none { it.name.equals(name, true) }) groups += QuotaGroup(name.take(120), listOf(scoped))
             }
         }
+        listOf("extra_usage", "cedar_ember").forEach { key ->
+            if (root[key] != null && root[key] != JsonNull && root[key] !is JsonObject) throw SchemaException()
+        }
+        if (root["limits"] != null && root["limits"] != JsonNull && root["limits"] !is JsonArray) throw SchemaException()
         val block = root.obj("cedar_ember")
         val grants = block?.array("grants").orEmpty().map { it as? JsonObject ?: throw SchemaException() }
         fun count(obj: JsonObject) = obj.integer("resets_left")?.takeIf { it in 0..Int.MAX_VALUE }?.toInt() ?: throw SchemaException()
@@ -65,7 +69,7 @@ object ClaudeParser {
                 remaining == 0 -> "redeemed"; paused -> "paused"; usable -> "available"; else -> "unavailable"
             }, null, parseInstant(grant.text("ends_at")))
         }
-        val available = if (block == null) null else grants.filter {
+        val available = if (block == null || block["eligible"]?.jsonPrimitive?.booleanOrNull == false || block.array("grants") == null) null else grants.filter {
             it["usable_now"]?.jsonPrimitive?.booleanOrNull == true && it["paused"]?.jsonPrimitive?.booleanOrNull != true
         }.sumOf { count(it).toLong() }.takeIf { it <= Int.MAX_VALUE }?.toInt() ?: throw SchemaException()
         val extra = root.obj("extra_usage")?.let { e ->
