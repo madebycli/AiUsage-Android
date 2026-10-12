@@ -67,7 +67,7 @@ müssen auf einem echten Account getestet werden.
 
 ## Bauen
 
-JDK 17, Android SDK Platform 36 und Build Tools 36.0.0:
+JDK 17, Android SDK Platform 37 und Build Tools 37.0.0:
 
 ```bash
 ./gradlew testDebugUnitTest lintDebug assembleDebug
