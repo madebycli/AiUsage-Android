@@ -22,7 +22,7 @@ class HttpFailure(val status: Int, val retrySeconds: Long? = null) : Exception(
 )
 
 class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
-    .cache(null).followRedirects(false).followSslRedirects(false)
+    .cache(null).retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false)
     .connectTimeout(10, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
     .callTimeout(30, TimeUnit.SECONDS).build()) {
     suspend fun get(url: String, headers: Map<String, String> = emptyMap()): String = execute(
