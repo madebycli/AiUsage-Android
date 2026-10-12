@@ -87,6 +87,6 @@ class RefreshQueue(scope: CoroutineScope, private val refresh: suspend () -> Uni
 fun safeError(error: Exception): String = when (error) {
     is HttpFailure -> error.message.orEmpty()
     is SchemaException, is kotlinx.serialization.SerializationException, is IllegalArgumentException -> "Das Datenformat des Anbieters hat sich geändert."
-    is IllegalStateException -> "Bitte zuerst deinen Codex-Account verbinden."
+    is IllegalStateException -> "Bitte deinen Account erneut verbinden."
     else -> "Abruf fehlgeschlagen. Verbindung prüfen und erneut aktualisieren."
 }
