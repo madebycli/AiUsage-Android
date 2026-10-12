@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
@@ -61,6 +62,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
     val context = LocalContext.current
     val anyConnected = state.connected || state.claudeConnected
     val accounts = !anyConnected || page == 3
+    BackHandler(enabled = anyConnected && page != 0) { page = 0 }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
     Scaffold(
         topBar = {
@@ -154,6 +156,7 @@ private fun UsageScreen(state: UiState, now: Long) {
         }
         return
     }
+    BackHandler { provider = null }
     val usage = if (active == "Codex") state.usage else state.claudeUsage
     val error = if (active == "Codex") state.usageError else state.claudeError
     val refreshing = if (active == "Codex") state.refreshing else state.claudeRefreshing
@@ -520,8 +523,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
         if (close != null) TextButton(onClick = close) { Icon(Icons.Rounded.ArrowBack, null); Text("Zurück") }
         Spacer(Modifier.height(18.dp))
         FlowerMark()
-        Text("Wen verbinden
-wir heute?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("Wen verbinden\nwir heute?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Deine Tools. Dein Überblick.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

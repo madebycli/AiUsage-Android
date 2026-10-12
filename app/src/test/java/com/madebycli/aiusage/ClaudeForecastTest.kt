@@ -26,7 +26,7 @@ class ClaudeForecastTest {
     }
     @Test fun `import drops rotating refresh token and converts millisecond expiry`() {
         val credential = ClaudeParser.credential("""{"claudeAiOauth":{"accessToken":"access-test","refreshToken":"refresh-secret","expiresAt":1791810000000.0,"subscriptionType":"max","rateLimitTier":"max_20x"}}""")
-        assertEquals(1791810000, credential.expiresAt)
+        assertEquals(1791810000L, credential.expiresAt)
         assertEquals("Max 20x", credential.plan)
         assertFalse(credential.toString().contains("access-test"))
         assertFalse(appJson.encodeToString(ClaudeCredential.serializer(), credential).contains("refresh"))

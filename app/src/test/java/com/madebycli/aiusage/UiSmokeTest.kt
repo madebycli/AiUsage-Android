@@ -44,13 +44,14 @@ class UiSmokeTest {
         models.put("usage", model)
         val now = Instant.now().epochSecond
         val usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 9800), UsageWindow(36.0, 604800, now + 330000)))), now, 1)
-        val claude = UsageSnapshot("Max 5x", listOf(QuotaGroup("Claude Code", listOf(UsageWindow(42.0, 18000, now + 7600)))), now)
+        val claude = UsageSnapshot("Max 5x", listOf(QuotaGroup("Claude Code", listOf(UsageWindow(42.0, 18000, now + 7600), UsageWindow(18.0, 604800, now + 230000)))), now)
         val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true, usage = usage))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = screen.value.theme == ThemeMode.DARK) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Claude Code").assertDoesNotExist()
         compose.onNodeWithText("5 Stunden").assertIsDisplayed()
         screenshot("usage-light")
         compose.runOnIdle { screen.value = screen.value.copy(claudeConnected = true, claudeUsage = claude) }
+        screenshot("overview-both")
         compose.onNodeWithText("Claude Code").performClick()
         compose.onNodeWithText("Max 5x").assertIsDisplayed()
         screenshot("claude-light")
