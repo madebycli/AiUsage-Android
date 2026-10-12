@@ -8,6 +8,33 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HttpTransportTest {
+    @Test fun `device login waits for approval and exchanges PKCE code`() = runBlocking {
+        val server = MockWebServer(); server.start()
+        try {
+            val memory = object : TokenStore {
+                var saved: Tokens? = null
+                override fun readTokens() = saved
+                override fun writeTokens(tokens: Tokens) { saved = tokens }
+                override fun clear() { saved = null }
+            }
+            server.enqueue(MockResponse().setBody("""{"device_auth_id":"device","user_code":"ABCD","interval":"1"}"""))
+            server.enqueue(MockResponse().setResponseCode(403))
+            server.enqueue(MockResponse().setBody("""{"authorization_code":"approved","code_verifier":"verifier","code_challenge":"challenge"}"""))
+            server.enqueue(MockResponse().setBody("""{"access_token":"access","refresh_token":"refresh","expires_in":3600}"""))
+            val auth = CodexAuth(HttpTransport(), memory, server.url("/").toString().trimEnd('/'))
+            val code = auth.begin(); assertEquals("ABCD", code.code)
+            auth.complete(code)
+            assertEquals("access", memory.saved?.access)
+            assertEquals("/api/accounts/deviceauth/usercode", server.takeRequest().path)
+            assertEquals("/api/accounts/deviceauth/token", server.takeRequest().path)
+            assertEquals("/api/accounts/deviceauth/token", server.takeRequest().path)
+            val exchange = server.takeRequest()
+            assertEquals("/oauth/token", exchange.path)
+            val body = exchange.body.readUtf8()
+            assertTrue(body.contains("code_verifier=verifier"))
+            assertTrue(body.contains("grant_type=authorization_code"))
+        } finally { server.shutdown() }
+    }
     @Test fun `consecutive fetches reach server with no local cache`() = runBlocking {
         val server = MockWebServer()
         server.start()

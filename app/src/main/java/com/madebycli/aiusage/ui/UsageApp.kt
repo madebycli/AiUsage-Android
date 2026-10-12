@@ -110,6 +110,7 @@ private fun UsageScreen(state: UiState, now: Long, model: UsageViewModel) {
         }
         state.loginError?.let { item { Notice(it, true) } }
         state.usageError?.let { item { Notice(it, true) } }
+        state.storageWarning?.let { item { Notice(it) } }
         if (state.connected || state.demo) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -248,6 +249,19 @@ private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
     LazyColumn(Modifier.widthIn(max = 760.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state.demo) item { DemoBanner(model::exitDemo) }
+        state.usage?.let { usage ->
+            item { SectionTitle("Dein Account"); Spacer(Modifier.height(8.dp)); BankedCard(usage, now) }
+            items(usage.resetCredits.filter { it.grantedAt != null || it.status != "available" }) { credit ->
+                SoftCard {
+                    Text(credit.title, style = MaterialTheme.typography.titleSmall)
+                    Text(when (credit.status) {
+                        "available" -> "Verfügbar"; "redeemed" -> "Eingelöst"; "expired" -> "Abgelaufen"; else -> "Status: ${credit.status}"
+                    }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    credit.grantedAt?.let { Text("Vergeben: ${date(it)}", style = MaterialTheme.typography.bodySmall) }
+                    if (credit.status == "redeemed") Text("Einlösezeitpunkt vom Anbieter nicht gemeldet.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
         item {
             SectionTitle("Öffentlicher Verlauf")
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

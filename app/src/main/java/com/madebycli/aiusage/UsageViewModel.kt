@@ -15,7 +15,7 @@ data class UiState(
     val connected: Boolean = false, val demo: Boolean = false, val disconnecting: Boolean = false,
     val usage: UsageSnapshot? = null, val previous: UsageSnapshot? = null,
     val observations: List<ResetObservation> = emptyList(),
-    val refreshing: Boolean = false, val usageError: String? = null,
+    val refreshing: Boolean = false, val usageError: String? = null, val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
     val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
     val deviceCode: DeviceCode? = null, val loginLoading: Boolean = false, val loginError: String? = null,
@@ -70,7 +70,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             var persistenceWarning: String? = null
             try { withContext(Dispatchers.IO) { store.writeRecord(PersonalRecord(usage, observations)) } }
             catch (_: Exception) { persistenceWarning = "Live-Daten geladen; der Verlauf konnte nicht gespeichert werden." }
-            mutable.update { it.copy(usage = usage, previous = old, observations = observations, usageError = persistenceWarning) }
+            mutable.update { it.copy(usage = usage, previous = old, observations = observations, usageError = null, storageWarning = persistenceWarning) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) { mutable.update { it.copy(usageError = safeError(e)) } }
         finally { mutable.update { it.copy(refreshing = false) } }
@@ -89,7 +89,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun connect() {
         if (loginJob?.isActive == true || state.value.disconnecting) return
-        mutable.update { it.copy(loginLoading = true, loginError = null, demo = false, usage = null, previous = null, feed = null) }
+        mutable.update { it.copy(loginLoading = true, loginError = null, demo = false, usage = null, previous = null, feed = null, storageWarning = null) }
         publicQueue.request()
         loginJob = viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -112,7 +112,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         privateQueue.cancel()
         val oldPersonalJob = personalScope.coroutineContext[Job]
         personalScope.cancel()
-        mutable.update { it.copy(connected = false, disconnecting = true, demo = false, usage = null, previous = null, observations = emptyList(), refreshing = false, usageError = null) }
+        mutable.update { it.copy(connected = false, disconnecting = true, demo = false, usage = null, previous = null, observations = emptyList(), refreshing = false, usageError = null, storageWarning = null) }
         viewModelScope.launch(Dispatchers.IO) {
             loginJob?.join()
             oldPersonalJob?.join()
@@ -127,7 +127,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun demo() {
         if (state.value.connected || state.value.disconnecting) return
         cancelLogin()
-        mutable.update { it.copy(demo = true, usage = demoUsage(), previous = null, observations = emptyList(), usageError = null,
+        mutable.update { it.copy(demo = true, usage = demoUsage(), previous = null, observations = emptyList(), usageError = null, storageWarning = null,
             feed = demoFeed(it.source), feedError = null, loginError = null) }
     }
     fun exitDemo() {
