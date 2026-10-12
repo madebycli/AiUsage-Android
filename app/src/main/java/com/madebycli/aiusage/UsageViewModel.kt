@@ -17,14 +17,18 @@ import kotlinx.coroutines.sync.withLock
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 data class UiState(
-    val connected: Boolean = false, val demo: Boolean = false, val disconnecting: Boolean = false, val initializing: Boolean = true,
+    val connected: Boolean = false, val disconnecting: Boolean = false, val initializing: Boolean = true,
     val usage: UsageSnapshot? = null, val previous: UsageSnapshot? = null,
     val observations: List<ResetObservation> = emptyList(),
     val refreshing: Boolean = false, val creditsLoading: Boolean = false, val usageError: String? = null, val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
     val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
     val deviceCode: DeviceCode? = null, val loginPhase: LoginPhase = LoginPhase.REQUEST_CODE, val loginLoading: Boolean = false, val loginError: String? = null, val loginHint: String? = null,
-    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val amoled: Boolean = false
+    val claudeConnected: Boolean = false, val claudeInitializing: Boolean = true,
+    val claudeUsage: UsageSnapshot? = null, val claudeRefreshing: Boolean = false, val claudeError: String? = null,
+    val community: Map<CommunitySource, CommunityResult> = emptyMap(),
+    val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
+    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false
 )
 
 class UsageViewModel(application: Application) : AndroidViewModel(application) {
@@ -33,6 +37,14 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val http = HttpTransport()
     private val auth = CodexAuth(http, store)
     private val public = ResetRepository(http)
+    private val forecastRepository = ForecastRepository(http)
+    private val communityRepository = CommunityRepository(http)
+    private val claudeStore = SecureStore(application, "claude")
+    private var claudeRepository = ClaudeRepository(http)
+    private val claudeMutex = Mutex()
+    private val claudeGeneration = SessionGeneration()
+    private val claudeQueue = RefreshQueue(viewModelScope) { readClaude() }
+    private val forecastQueue = RefreshQueue(viewModelScope) { readForecasts() }
     private var personalScope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
     private var usageRepository = UsageRepository(auth)
     private var privateQueue = RefreshQueue(personalScope) { withContext(Dispatchers.IO) { readUsage() } }
@@ -46,7 +58,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(UiState(
         source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
-        dynamicColor = prefs.getBoolean("dynamic", true), amoled = prefs.getBoolean("amoled", false)
+        dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false)
     ))
     val state = mutable.asStateFlow()
     init {
@@ -69,19 +81,26 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     usageError = "Gespeicherte Anmeldung konnte nicht gelesen werden. Lokale Daten zurücksetzen und erneut verbinden.") }
             }
         }
-        publicQueue.request()
+        viewModelScope.launch(Dispatchers.IO) {
+            claudeMutex.withLock {
+                try {
+                    val credentials = claudeStore.readClaude()
+                    val record = if (credentials != null) runCatching { claudeStore.readRecord() }.getOrDefault(PersonalRecord()) else PersonalRecord()
+                    mutable.update { it.copy(claudeInitializing = false, claudeConnected = credentials != null, claudeUsage = record.usage) }
+                    if (credentials != null) claudeQueue.request()
+                } catch (_: Exception) { mutable.update { it.copy(claudeInitializing = false, claudeError = "Claude-Anmeldung konnte nicht gelesen werden. Bitte neu importieren.") } }
+            }
+        }
     }
     fun refresh() {
-        if (state.value.demo) {
-            mutable.update { it.copy(previous = it.usage, usage = demoUsage(), usageError = null) }
-            return
-        }
         if (state.value.connected) privateQueue.request()
-        publicQueue.request()
+        if (state.value.claudeConnected) claudeQueue.request()
+        if (state.value.connected) publicQueue.request()
+        if (state.value.connected || state.value.claudeConnected) forecastQueue.request()
     }
     private suspend fun readUsage() = quotaMutex.withLock { readUsageLocked() }
     private suspend fun readUsageLocked() {
-        if (!state.value.connected || state.value.demo) return
+        if (!state.value.connected) return
         val generation = session.current()
         mutable.update { it.copy(refreshing = true) }
         try {
@@ -108,7 +127,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         val generation = session.current()
         val revision = usageRevision.get()
         val reading = state.value.usage ?: return
-        if (!state.value.connected || state.value.demo || (reading.availableResets ?: 0) == 0) return
+        if (!state.value.connected || (reading.availableResets ?: 0) == 0) return
         try {
             val enriched = usageRepository.fetchCredits(reading)
             currentCoroutineContext().ensureActive()
@@ -130,12 +149,12 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     private suspend fun readFeed() {
-        if (state.value.demo) return
+        if (!state.value.connected) return
         val source = state.value.source
         mutable.update { it.copy(feedLoading = true) }
         try {
             val result = public.fetch(source)
-            if (state.value.source == source && !state.value.demo) mutable.update {
+            if (state.value.source == source) mutable.update {
                 it.copy(feed = result.feed, feedError = result.error ?: if (result.feed == null) it.feedError else null,
                     nextFeedSeconds = result.nextFetchSeconds)
             }
@@ -144,7 +163,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun connect() {
         if (loginJob?.isActive == true || state.value.disconnecting || state.value.initializing || state.value.connected) return
         val generation = session.advance()
-        mutable.update { it.copy(loginLoading = true, loginPhase = LoginPhase.REQUEST_CODE, loginError = null, loginHint = null, demo = false, usage = null, previous = null, feed = null, storageWarning = null) }
+        mutable.update { it.copy(loginLoading = true, loginPhase = LoginPhase.REQUEST_CODE, loginError = null, loginHint = null, usage = null, previous = null, feed = null, storageWarning = null) }
         publicQueue.request()
         val previousLogin = loginJob
         loginJob = viewModelScope.launch(Dispatchers.IO) {
@@ -172,6 +191,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginError =
                     it.usageError?.let { error -> "Anmeldung bestätigt, Verbrauch konnte nicht geladen werden. $error" }) }
                 publicQueue.request()
+                forecastQueue.request()
             } catch (e: TimeoutCancellationException) {
                 Log.w("AiUsage", diagnosticFailure("login_${state.value.loginPhase.name}", e))
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(loginError = "Anmeldecode abgelaufen. Bitte neu verbinden.") }
@@ -199,8 +219,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         creditsQueue.cancel()
         val oldPersonalJob = personalScope.coroutineContext[Job]
         personalScope.cancel()
-        mutable.update { it.copy(connected = false, disconnecting = true, demo = false, usage = null, previous = null,
-            observations = emptyList(), refreshing = false, creditsLoading = false, usageError = null, storageWarning = null) }
+        mutable.update { it.copy(connected = false, disconnecting = true, usage = null, previous = null,
+            observations = emptyList(), refreshing = false, creditsLoading = false, usageError = null, storageWarning = null, forecasts = emptyMap(), feed = null, community = it.community.filterKeys { key -> key.provider != "Codex" }) }
         viewModelScope.launch(Dispatchers.IO) {
             loginJob?.join()
             oldPersonalJob?.join()
@@ -213,39 +233,88 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             mutable.update { it.copy(disconnecting = false) }
         }
     }
-    fun demo() {
-        if (state.value.connected || state.value.disconnecting || state.value.initializing) return
-        session.advance()
-        cancelLogin()
-        mutable.update { it.copy(demo = true, usage = demoUsage(), previous = null, observations = emptyList(), usageError = null, storageWarning = null,
-            feed = demoFeed(it.source), feedError = null, loginError = null) }
-    }
-    fun exitDemo() {
-        session.advance()
-        mutable.update { it.copy(demo = false, usage = null, previous = null, feed = null) }
-        publicQueue.request()
-    }
     fun setSource(source: ResetSource) {
         prefs.edit { putString("source", source.name) }
-        mutable.update { it.copy(source = source, feed = if (it.demo) demoFeed(source) else null, feedError = null, nextFeedSeconds = 0) }
-        if (!state.value.demo) publicQueue.request()
+        mutable.update { it.copy(source = source, feed = null, feedError = null, nextFeedSeconds = 0) }
+        if (state.value.connected) publicQueue.request()
+    }
+    fun loadCommunity() { if (state.value.connected) publicQueue.request()
+        if (state.value.connected || state.value.claudeConnected) forecastQueue.request() }
+    private suspend fun readForecasts() {
+        if (!state.value.connected && !state.value.claudeConnected) return
+        val generation = session.current()
+        val claudeSession = claudeGeneration.current()
+        mutable.update { it.copy(forecastLoading = true) }
+        try {
+            // Sources are independent: a slow or failed source never removes the other.
+            coroutineScope {
+                val codexJobs = if (state.value.connected) ResetSource.entries.map { source -> launch {
+                    val result = forecastRepository.fetch(source)
+                    mutable.update { if (!it.connected || !session.isCurrent(generation)) it else it.copy(forecasts = it.forecasts + (source to result)) }
+                } } else emptyList()
+                val communityJobs = CommunitySource.entries.filter { if (it.provider == "Codex") state.value.connected else state.value.claudeConnected }.map { source -> launch {
+                    val result = communityRepository.fetch(source)
+                    mutable.update {
+                        val valid = if (source.provider == "Codex") it.connected && session.isCurrent(generation) else it.claudeConnected && claudeGeneration.isCurrent(claudeSession)
+                        if (!valid) it else it.copy(community = it.community + (source to result))
+                    }
+                } }
+                (codexJobs + communityJobs).joinAll()
+            }
+        } finally { mutable.update { it.copy(forecastLoading = false) } }
+    }
+    private suspend fun readClaude() = withContext(Dispatchers.IO) {
+        claudeMutex.withLock {
+            if (!state.value.claudeConnected) return@withLock
+            val generation = claudeGeneration.current()
+            mutable.update { it.copy(claudeRefreshing = true) }
+            try {
+                val credential = claudeStore.readClaude() ?: throw HttpFailure(401)
+                val usage = claudeRepository.fetch(credential)
+                currentCoroutineContext().ensureActive()
+                if (claudeGeneration.isCurrent(generation)) {
+                    mutable.update { it.copy(claudeUsage = usage, claudeError = null) }
+                    val warning = persistAccountRecord { claudeStore.writeRecord(PersonalRecord(usage)) }
+                    if (warning != null) mutable.update { it.copy(claudeError = warning) }
+                }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (claudeGeneration.isCurrent(generation)) mutable.update { it.copy(claudeError = safeError(e)) }
+            } finally { mutable.update { it.copy(claudeRefreshing = false) } }
+        }
+    }
+    fun importClaude(raw: String) {
+        if (state.value.claudeRefreshing || state.value.claudeInitializing) return
+        val generation = claudeGeneration.advance()
+        mutable.update { it.copy(claudeRefreshing = true, claudeError = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            claudeMutex.withLock {
+                try {
+                    val credentials = ClaudeParser.credential(raw)
+                    // Validate live access before saving or replacing an existing account.
+                    val usage = claudeRepository.fetch(credentials)
+                    currentCoroutineContext().ensureActive()
+                    if (!claudeGeneration.isCurrent(generation)) return@withLock
+                    claudeStore.writeClaude(credentials)
+                    mutable.update { it.copy(claudeConnected = true, claudeUsage = usage, claudeError = null) }
+                    val warning = persistAccountRecord { claudeStore.writeRecord(PersonalRecord(usage)) }
+                    if (warning != null) mutable.update { it.copy(claudeError = warning) }
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { if (claudeGeneration.isCurrent(generation)) mutable.update { it.copy(claudeError = "Claude verbinden: ${safeError(e)}") } }
+                finally { mutable.update { it.copy(claudeRefreshing = false) } }
+            }
+        }
+    }
+    fun disconnectClaude() {
+        claudeGeneration.advance()
+        mutable.update { it.copy(claudeConnected = false, claudeUsage = null, claudeError = null, community = it.community.filterKeys { key -> key.provider != "Claude Code" }) }
+        viewModelScope.launch(Dispatchers.IO) { claudeMutex.withLock {
+            try { claudeStore.clear(); claudeRepository = ClaudeRepository(http) }
+            catch (_: Exception) { mutable.update { it.copy(claudeError = "Claude-Daten konnten nicht gelöscht werden.") } }
+        } }
     }
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }
     fun setDynamic(enabled: Boolean) { prefs.edit { putBoolean("dynamic", enabled) }; mutable.update { it.copy(dynamicColor = enabled) } }
     fun setAmoled(enabled: Boolean) { prefs.edit { putBoolean("amoled", enabled) }; mutable.update { it.copy(amoled = enabled) } }
     private inline fun <reified T : Enum<T>> enumValueOr(value: String?, fallback: T): T = enumValues<T>().firstOrNull { it.name == value } ?: fallback
-}
-
-fun demoUsage(): UsageSnapshot {
-    val now = Instant.now().epochSecond
-    return UsageSnapshot("Plus · Demo", listOf(QuotaGroup("Codex", listOf(
-        UsageWindow(24.0, 18000, now + 9890), UsageWindow(61.0, 604800, now + 246600)
-    ))), now, 1, listOf(ResetCredit("Vollständiger Reset", "available", now - 172800, now + 1_209_600)))
-}
-fun demoFeed(source: ResetSource): ResetFeed {
-    val now = Instant.now().epochSecond
-    return ResetFeed(source, listOf(
-        ResetEvent("demo:1", now - 7200, if (source == ResetSource.CODEX_RESET) "Globaler Reset" else "Ledger-Ereignis", "Beispiel: Globale Limits wurden zurückgesetzt.", null),
-        ResetEvent("demo:2", now - 172800, "Banked · available", "Beispiel: Ein gespeicherter Reset wurde vergeben.", null)
-    ), now, now)
 }

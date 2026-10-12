@@ -23,9 +23,10 @@ interface TokenStore {
 }
 
 // All account data and tokens stay in noBackupFilesDir, encrypted by a device-bound key.
-class SecureStore(context: Context) : TokenStore {
+class SecureStore(context: Context, private val namespace: String = "account") : TokenStore {
     private val directory = context.noBackupFilesDir
-    private val alias = "aiusage.account.v1"
+    private val alias = "aiusage.$namespace.v1"
+    private fun filename(name: String) = if (namespace == "account") name else "$namespace.$name"
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         return (store.getKey(alias, null) as? SecretKey) ?: KeyGenerator.getInstance("AES", "AndroidKeyStore").apply {
@@ -38,13 +39,13 @@ class SecureStore(context: Context) : TokenStore {
     private fun write(name: String, text: String) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
         val bytes = byteArrayOf(cipher.iv.size.toByte()) + cipher.iv + cipher.doFinal(text.toByteArray())
-        val file = AtomicFile(File(directory, name))
+        val file = AtomicFile(File(directory, filename(name)))
         val stream = file.startWrite()
         try { stream.write(bytes); file.finishWrite(stream) } catch (e: Exception) { file.failWrite(stream); throw e }
     }
     @Synchronized
     private fun read(name: String): String? {
-        val file = AtomicFile(File(directory, name))
+        val file = AtomicFile(File(directory, filename(name)))
         if (!file.baseFile.exists()) return null
         val bytes = file.readFully()
         val ivLength = bytes.first().toInt()
@@ -58,10 +59,12 @@ class SecureStore(context: Context) : TokenStore {
     override fun writeTokens(tokens: Tokens) = write("tokens.enc", appJson.encodeToString(tokens))
     fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString(it) } ?: PersonalRecord()
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
+    fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
+    fun writeClaude(value: ClaudeCredential) = write("tokens.enc", appJson.encodeToString(value))
     @Synchronized
     override fun clear() {
-        AtomicFile(File(directory, "tokens.enc")).delete()
-        AtomicFile(File(directory, "usage.enc")).delete()
+        AtomicFile(File(directory, filename("tokens.enc"))).delete()
+        AtomicFile(File(directory, filename("usage.enc"))).delete()
         KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) }
     }
 }

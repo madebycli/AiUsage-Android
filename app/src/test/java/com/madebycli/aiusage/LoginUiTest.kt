@@ -26,11 +26,11 @@ class LoginUiTest {
     @Test fun `login result remains visible when started from settings`() {
         val model = UsageViewModel(ApplicationProvider.getApplicationContext())
         models.put("usage", model)
-        val screen = mutableStateOf(UiState(initializing = false))
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true))
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Einstellungen", useUnmergedTree = true).performClick()
         compose.runOnIdle {
-            screen.value = screen.value.copy(loginLoading = true, loginPhase = LoginPhase.WAITING,
+            screen.value = screen.value.copy(connected = false, loginLoading = true, loginPhase = LoginPhase.WAITING,
                 deviceCode = DeviceCode("device", "ABCD-1234", 5))
         }
         compose.onNodeWithText("ABCD-1234").assertIsDisplayed()

@@ -6,18 +6,15 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 
 ## Funktionen
 
-- Verbrauch und verbleibendes Budget für die vom Account gemeldeten
-  5-Stunden- und Wochenfenster, jeweils mit Reset-Zeit und lokalem Countdown.
-- Zusätzlich vom Server gemeldete Modell-/Reserve- und Code-Review-Limits.
-- Gespeicherte persönliche Resets: verfügbare Anzahl, Art und Ablaufdetails,
-  soweit der Account sie liefert. Keine automatische Einlösung.
-- Öffentlicher Reset-Verlauf aus codex-reset.com oder LunarWerx, inklusive
-  Quellenlinks, Quellenstand und klarer Trennung von persönlichen Daten.
-- Gerätecode-Anmeldung im Browser mit sichtbaren Phasen, Fehlerdialog und automatischer Token-Erneuerung.
-- Verschlüsselte lokale Tokens und Messungen im Android Keystore, kein Backup,
-  keine Analytics, kein eigener Server.
-- Dynamische Android-Farben, System-/Hell-/Dunkelmodus, schwarzer Hintergrund.
-- Expliziter Demomodus mit markierten Beispieldaten.
+- Codex und Claude Code mit getrennten verschlüsselten Anmeldungen.
+- Nur verbundene Anbieter als Banner auf der Hauptseite; Details per Tap.
+- Separate Anmeldeseite, keine Demo oder Vorschau ohne Login.
+- Zeitfenster, Modelllimits, persönlicher Reset-Vorrat und Claude-Zusatzverbrauch.
+- Reset Radar mit Anbieter-Untertabs, Forecasts und Quellenverläufen.
+- Eigenes kompaktes Material-3-Expressive-Design inspiriert von ArchiveTune.
+
+Siehe [docs/FEATURES-0.3.md](docs/FEATURES-0.3.md) für Datenumfang, Quellen,
+Claude-Import, Einschränkungen, Architektur und den aktuellen Gerätetest.
 
 ## Aktualisierung
 
@@ -50,33 +47,9 @@ keine Bestätigung eines Resets auf deinem persönlichen Account.
 
 ## Auf einem Gerät testen
 
-1. Debug-APK installieren.
-2. Optional „Erst das Design ansehen“ auswählen. Die Beispieldaten bleiben
-   sichtbar als Demo gekennzeichnet.
-3. Für echte Daten „Mit Codex verbinden“ auswählen. Falls nötig die
-   Gerätecode-Anmeldung in den Codex-Sicherheitseinstellungen aktivieren.
-4. Den angezeigten einmaligen Code unter
-   `https://auth.openai.com/codex/device` im Browser bestätigen.
-5. Zu AI Usage zurückkehren. Die App zeigt erst die Übernahme der Freigabe und
-   anschließend den ersten Verbrauchsabruf. Fehler bleiben in einem Dialog
-   sichtbar, auch wenn die Anmeldung aus den Einstellungen gestartet wurde.
-   Falls der Browser bestätigt, aber Werte fehlen: Fehlerdialog beachten.
-   Im Logcat erscheinen unter `AiUsage` nur Phase, Fehlerklasse und HTTP-Status,
-   keine Codes, Tokens, Account-IDs oder Antwortinhalte. Temporäre Netzwerk-
-   und Serverfehler beim Warten auf die Freigabe werden innerhalb der 15 Minuten
-   erneut abgefragt. Der einmalige OAuth-Code-Austausch wird niemals automatisch
-   wiederholt. Ein Rücksprung-Link aus dem Browser ist nicht erforderlich.
-6. Eine Codex-Aufgabe ausführen und mehrfach „Jetzt aktualisieren“ drücken.
-   Abrufzeit und Verbrauch prüfen. Bei kleinen Aufgaben kann die gerundete
-   Anbieter-Prozentzahl unverändert bleiben.
-7. Flugmodus aktivieren und erneut aktualisieren: Fehler anzeigen, alten
-   Abrufzeitpunkt beibehalten. Flugmodus aus, erneut aktualisieren.
-8. Unter „Resets“ persönliche Guthaben von öffentlichen Meldungen unterscheiden.
-
-Die App verwendet dieselben Account-Endpunkte und den öffentlichen
-OAuth-Client wie Codex. Sie ist inoffiziell. Diese Endpunkte sind keine
-zugesicherte allgemeine Drittanbieter-API. Anmeldung und reale Account-Werte
-müssen auf einem echten Account getestet werden.
+[Gerätetest und Anmeldung](docs/FEATURES-0.3.md#prüfung-auf-einem-gerät).
+Codex nutzt den Browser-Gerätecode. Claude importiert vorhandene CLI-Zugangsdaten;
+kopierte Refresh-Tokens werden nicht rotiert. Die Endpunkte sind inoffiziell.
 
 ## Bauen
 
@@ -93,8 +66,8 @@ Die GitHub-Actions-Pipeline erstellt dieselbe APK und lädt sie als
 Tests prüfen Parser, fehlende Fenster, fehlerhafte Antworten, getrennte
 Banked-/Global-Meldungen, Folgeabrufe, HTTP-Cache-Verhalten, 429 und die
 Persistierung rotierter Tokens, parallele Token-Rotation, sofortige Quota-Abrufe
-bei langsamen Ablaufdetails, Login-Fehlerphasen und Abbruch-/Speicherfehler. Der Robolectric-UI-Test prüft Demo,
-Reset-Quellenwechsel und Dunkelmodus und erzeugt Screenshots unter
+bei langsamen Ablaufdetails, Login-Fehlerphasen und Abbruch-/Speicherfehler. Der Robolectric-UI-Test prüft Anmeldung ohne Vorschau, Anbieter-Sichtbarkeit,
+Verbrauchsdetails, Forecasts, Account-Verwaltung und Dunkelmodus und erzeugt Screenshots unter
 `app/build/screenshots/`.
 
 ## Herkunft

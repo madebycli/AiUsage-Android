@@ -21,22 +21,22 @@ fun AniHyouTheme(
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         darkTheme -> darkColorScheme(
-            primary = Color(0xFFB0D391), onPrimary = Color(0xFF1D370C),
-            primaryContainer = Color(0xFF334E20), onPrimaryContainer = Color(0xFFD4EDBB),
-            secondary = Color(0xFFBECAB0), secondaryContainer = Color(0xFF3F4A36),
-            tertiary = Color(0xFFA2D0CB), tertiaryContainer = Color(0xFF234E4A),
-            background = Color(0xFF12150F), surface = Color(0xFF12150F),
-            surfaceContainer = Color(0xFF1E211A), surfaceContainerLow = Color(0xFF1A1D16),
-            surfaceContainerHigh = Color(0xFF292C24), surfaceContainerHighest = Color(0xFF33362F)
+            primary = Color(0xFFD4BCFF), onPrimary = Color(0xFF382451),
+            primaryContainer = Color(0xFF493364), onPrimaryContainer = Color(0xFFEEDDFF),
+            secondary = Color(0xFFCCC0DA), secondaryContainer = Color(0xFF463D51),
+            tertiary = Color(0xFFFFB59D), tertiaryContainer = Color(0xFF633B2E), onTertiaryContainer = Color(0xFFFFDBCF),
+            background = Color(0xFF17141C), surface = Color(0xFF17141C),
+            surfaceContainer = Color(0xFF25202D), surfaceContainerLow = Color(0xFF201B26),
+            surfaceContainerHigh = Color(0xFF302A38), surfaceContainerHighest = Color(0xFF3B3444)
         )
         else -> lightColorScheme(
-            primary = Color(0xFF46652E), onPrimary = Color.White,
-            primaryContainer = Color(0xFFD4EDBB), onPrimaryContainer = Color(0xFF263E17),
-            secondary = Color(0xFF58624D), secondaryContainer = Color(0xFFDCE6CE),
-            tertiary = Color(0xFF366A64), tertiaryContainer = Color(0xFFBAECE4),
-            background = Color(0xFFF9FAF4), surface = Color(0xFFF9FAF4),
-            surfaceContainer = Color(0xFFEEF1E6), surfaceContainerLow = Color(0xFFF3F5EC),
-            surfaceContainerHigh = Color(0xFFE8EBDD), surfaceContainerHighest = Color(0xFFE2E6D8)
+            primary = Color(0xFF715095), onPrimary = Color.White,
+            primaryContainer = Color(0xFFEEDDFF), onPrimaryContainer = Color(0xFF322043),
+            secondary = Color(0xFF665A72), secondaryContainer = Color(0xFFEDDFF5),
+            tertiary = Color(0xFF8D503C), tertiaryContainer = Color(0xFFFFDBCF), onTertiaryContainer = Color(0xFF3C2119),
+            background = Color(0xFFFCF8FF), surface = Color(0xFFFCF8FF),
+            surfaceContainer = Color(0xFFF1EAF6), surfaceContainerLow = Color(0xFFF6EFFB),
+            surfaceContainerHigh = Color(0xFFECE4F2), surfaceContainerHighest = Color(0xFFE5DDEB)
         )
     }
     MaterialExpressiveTheme(
