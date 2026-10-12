@@ -521,7 +521,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
             } catch (_: Exception) { fileError = "Datei konnte nicht gelesen werden. Kleine Claude-Code-Zugangsdaten-Datei auswählen." }
         }
     }
-    Column(Modifier.widthIn(max = 560.dp).fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+    Column(Modifier.widthIn(max = 560.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (close != null) TextButton(onClick = close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null); Text("Zurück") }
         Spacer(Modifier.height(18.dp))
         FlowerMark()
