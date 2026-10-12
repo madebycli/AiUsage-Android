@@ -23,6 +23,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +53,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val now = rememberNow()
     val uri = LocalUriHandler.current
+    val context = LocalContext.current
     DefaultScaffoldWithLargeTopAppBar(
         title = when (page) { 0 -> "AI Usage"; 1 -> "Resets"; else -> "Einstellungen" },
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -80,23 +85,38 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
         }
     }
     if (state.loginLoading) {
-        AlertDialog(onDismissRequest = model::cancelLogin,
+        AlertDialog(onDismissRequest = {},
             icon = { Icon(Icons.Rounded.Key, null) }, title = { Text("Codex verbinden") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Melde dich im Browser bei OpenAI an und gib diesen einmaligen Code ein. Die Freigabe verbindet deinen Account mit AI Usage.")
+                    Text(state.loginPhase.label, style = MaterialTheme.typography.titleSmall)
+                    if (state.loginPhase == LoginPhase.WAITING) Text("Im Browser anmelden, Code eingeben und die Freigabe bestätigen. Danach zu AI Usage zurückkehren.")
                     if (state.deviceCode == null) LoadingIndicator(Modifier.align(Alignment.CenterHorizontally))
-                    state.deviceCode?.let {
+                    state.deviceCode?.takeIf { state.loginPhase == LoginPhase.WAITING }?.let {
                         Text(it.code, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold,
                             modifier = Modifier.align(Alignment.CenterHorizontally))
+                        TextButton(onClick = {
+                            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                                .setPrimaryClip(ClipData.newPlainText("OpenAI Anmeldecode", it.code))
+                        }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Code kopieren") }
                         Text("Code gilt 15 Minuten. Die App wartet auf deine Freigabe.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
             confirmButton = {
-                state.deviceCode?.let { TextButton(onClick = { uri.openUri("https://auth.openai.com/codex/device") }) { Text("Im Browser anmelden") } }
-            }, dismissButton = { TextButton(onClick = model::cancelLogin) { Text("Abbrechen") } }
+                state.deviceCode?.takeIf { state.loginPhase == LoginPhase.WAITING }?.let { TextButton(onClick = { uri.openUri("https://auth.openai.com/codex/device") }) { Text("Im Browser anmelden") } }
+            }, dismissButton = { TextButton(onClick = model::cancelLogin) { Text(if (state.connected) "Schließen" else "Abbrechen") } }
         )
+    }
+    state.loginError?.takeIf { !state.loginLoading }?.let { error ->
+        AlertDialog(onDismissRequest = model::clearLoginError,
+            title = { Text(if (state.connected) "Verbrauch nicht geladen" else "Anmeldung fehlgeschlagen") },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = {
+                model.clearLoginError()
+                if (state.connected) model.refresh() else model.connect()
+            }) { Text(if (state.connected) "Erneut aktualisieren" else "Neuer Anmeldecode") } },
+            dismissButton = { TextButton(onClick = model::clearLoginError) { Text("Schließen") } })
     }
 }
 
@@ -106,9 +126,9 @@ private fun UsageScreen(state: UiState, now: Long, model: UsageViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.demo) item { DemoBanner(model::exitDemo) }
         if (!state.connected && !state.demo) item {
-            IntroCard(model::connect, model::demo)
+            IntroCard(model::connect, model::demo, !state.initializing && !state.disconnecting)
         }
-        state.loginError?.let { item { Notice(it, true) } }
+        if (state.initializing) item { LoadingIndicator(Modifier.fillMaxWidth()) }
         state.usageError?.let { item { Notice(it, true) } }
         state.storageWarning?.let { item { Notice(it) } }
         if (state.connected || state.demo) {
@@ -152,7 +172,7 @@ private fun UsageScreen(state: UiState, now: Long, model: UsageViewModel) {
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                item { BankedCard(usage, now) }
+                item { BankedCard(usage, now, state.creditsLoading) }
             }
         }
         item {
@@ -222,7 +242,7 @@ private fun WindowCard(window: UsageWindow, now: Long, rate: Double?, primary: B
 }
 
 @Composable
-private fun BankedCard(usage: UsageSnapshot, now: Long) {
+private fun BankedCard(usage: UsageSnapshot, now: Long, loading: Boolean) {
     SoftCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.ConfirmationNumber, null, tint = MaterialTheme.colorScheme.primary)
@@ -232,6 +252,8 @@ private fun BankedCard(usage: UsageSnapshot, now: Long) {
                 Text(usage.availableResets?.let { "$it verfügbar" } ?: "Anzahl nicht gemeldet", style = MaterialTheme.typography.bodyMedium)
             }
         }
+        if (loading) Text("Ablaufdetails werden geladen…", style = MaterialTheme.typography.bodySmall)
+        usage.creditsFetchedAt?.let { Text("Details abgerufen: ${date(it, true)}", style = MaterialTheme.typography.labelSmall) }
         usage.resetCredits.filter { it.status == "available" }.forEach { credit ->
             Text(credit.title, style = MaterialTheme.typography.labelLarge)
             Text(credit.expiresAt?.let { "Gültig bis ${date(it)}${if (it <= now) " · Ablauf erreicht" else ""}" } ?: "Ablaufdatum nicht gemeldet",
@@ -250,7 +272,7 @@ private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (state.demo) item { DemoBanner(model::exitDemo) }
         state.usage?.let { usage ->
-            item { SectionTitle("Dein Account"); Spacer(Modifier.height(8.dp)); BankedCard(usage, now) }
+            item { SectionTitle("Dein Account"); Spacer(Modifier.height(8.dp)); BankedCard(usage, now, state.creditsLoading) }
             items(usage.resetCredits.filter { it.grantedAt != null || it.status != "available" }) { credit ->
                 SoftCard {
                     Text(credit.title, style = MaterialTheme.typography.titleSmall)
@@ -291,7 +313,7 @@ private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
             FilledTonalButton(onClick = model::refresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shapes = ButtonDefaults.shapes()) {
                 Icon(Icons.Rounded.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Aktualisieren")
             }
-            Text("${state.source.label} veröffentlicht neue Daten höchstens alle ${state.source.minimumSeconds / 60} Minuten. Persönlicher Verbrauch wird unabhängig davon neu abgefragt.",
+            Text("${state.source.label} veröffentlicht neue Daten höchstens alle ${state.source.minimumSeconds / 60} ${if (state.source.minimumSeconds == 60L) "Minute" else "Minuten"}. Persönlicher Verbrauch wird unabhängig davon neu abgefragt.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
         }
         if (state.feedLoading && state.feed == null) item { LoadingIndicator(Modifier.fillMaxWidth()) }
@@ -343,12 +365,13 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel) {
             Text(if (state.connected) "Codex verbunden" else "Codex verbinden", style = MaterialTheme.typography.titleMedium)
             Text("Anmeldung über einen Gerätecode im OpenAI-Browser. Tokens bleiben verschlüsselt auf diesem Gerät. Keine Analyse- oder Trackingdienste.", style = MaterialTheme.typography.bodyMedium)
             if (state.connected) OutlinedButton(onClick = { confirmDisconnect = true }) { Text("Account trennen") }
-            else Button(onClick = model::connect, enabled = !state.disconnecting) { Text(if (state.disconnecting) "Wird getrennt" else "Mit Codex verbinden") }
+            else Button(onClick = model::connect, enabled = !state.disconnecting && !state.initializing) { Text(if (state.disconnecting) "Wird getrennt" else "Mit Codex verbinden") }
+            if (!state.connected) TextButton(onClick = { confirmDisconnect = true }, enabled = !state.initializing && !state.disconnecting) { Text("Lokale Account-Daten zurücksetzen") }
             TextButton(onClick = { uri.openUri("https://chatgpt.com/codex/cloud/settings/analytics#usage") }) { Text("OpenAI-Verbrauch im Browser") }
         }
         SectionTitle("Über AI Usage")
         SoftCard {
-            Text("0.1.0 · Native Android-App", style = MaterialTheme.typography.titleMedium)
+            Text("${BuildConfig.VERSION_NAME} · Native Android-App", style = MaterialTheme.typography.titleMedium)
             Text("Auf Basis von AniHyou von axiel7. Kotlin, Jetpack Compose und Material 3 Expressive. GPL-3.0.", style = MaterialTheme.typography.bodyMedium)
             TextButton(onClick = { uri.openUri("https://github.com/axiel7/AniHyou-android") }) { Text("AniHyou · Originalprojekt") }
             TextButton(onClick = { uri.openUri("https://github.com/madebycli/AiUsage-Android") }) { Text("AI Usage · Quellcode") }
@@ -358,21 +381,21 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel) {
             Text(if (state.demo) "Demo beenden" else "Design mit Beispieldaten ansehen")
         }
     }
-    if (confirmDisconnect) AlertDialog(onDismissRequest = { confirmDisconnect = false }, title = { Text("Account trennen?") },
+    if (confirmDisconnect) AlertDialog(onDismissRequest = { confirmDisconnect = false }, title = { Text(if (state.connected) "Account trennen?" else "Lokale Account-Daten zurücksetzen?") },
         text = { Text("Die lokale Anmeldung und dein lokal beobachteter Verlauf werden gelöscht.") },
-        confirmButton = { TextButton(onClick = { confirmDisconnect = false; model.disconnect() }) { Text("Trennen") } },
+        confirmButton = { TextButton(onClick = { confirmDisconnect = false; model.disconnect() }) { Text(if (state.connected) "Trennen" else "Zurücksetzen") } },
         dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Abbrechen") } })
 }
 
 @Composable
-private fun IntroCard(connect: () -> Unit, demo: () -> Unit) {
+private fun IntroCard(connect: () -> Unit, demo: () -> Unit, ready: Boolean) {
     Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = RoundedCornerShape(32.dp)) {
         Column(Modifier.fillMaxWidth().padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             Icon(Icons.Rounded.DonutLarge, null, Modifier.size(48.dp))
             Text("Dein Budget.\nAuf einen Blick.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Medium)
             Text("5 Stunden, eine Woche und deine gespeicherten Resets. Direkt aus deinem Codex-Account.", style = MaterialTheme.typography.bodyLarge)
-            Button(onClick = connect, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Mit Codex verbinden") }
-            TextButton(onClick = demo, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Erst das Design ansehen") }
+            Button(onClick = connect, enabled = ready, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp), shapes = ButtonDefaults.shapes()) { Text("Mit Codex verbinden") }
+            TextButton(onClick = demo, enabled = ready, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Erst das Design ansehen") }
         }
     }
 }

@@ -19,6 +19,7 @@ class UiSmokeTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun `demo dashboard reset list and appearance settings work`() {
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Erst das Design ansehen") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Erst das Design ansehen").performClick()
         compose.onNodeWithText("Demo · keine Live-Daten").assertIsDisplayed()
         compose.onNodeWithText("5 Stunden", useUnmergedTree = true).assertIsDisplayed()

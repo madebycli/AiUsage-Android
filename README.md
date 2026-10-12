@@ -13,7 +13,7 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
   soweit der Account sie liefert. Keine automatische Einlösung.
 - Öffentlicher Reset-Verlauf aus codex-reset.com oder LunarWerx, inklusive
   Quellenlinks, Quellenstand und klarer Trennung von persönlichen Daten.
-- Gerätecode-Anmeldung im Browser, automatische Token-Erneuerung.
+- Gerätecode-Anmeldung im Browser mit sichtbaren Phasen, Fehlerdialog und automatischer Token-Erneuerung.
 - Verschlüsselte lokale Tokens und Messungen im Android Keystore, kein Backup,
   keine Analytics, kein eigener Server.
 - Dynamische Android-Farben, System-/Hell-/Dunkelmodus, schwarzer Hintergrund.
@@ -34,6 +34,10 @@ Fensters. Das ist kein Token-Zähler und keine garantierte Echtzeitmessung.
 Der Messwert steigt ausschließlich durch echte Antworten. Auch nach einem
 abgelaufenen Countdown wird kein Budget erfunden.
 
+Der Verbrauch erscheint sofort nach der Quota-Antwort. Optionale Reset-Ablaufdetails
+werden getrennt geladen und haben einen eigenen Abrufzeitpunkt. Langsame Details
+blockieren weder die Anzeige noch weitere persönliche Quota-Abrufe.
+
 HTTP 429 respektiert die vom Anbieter vorgegebene Wartezeit. Fehler lassen die
 letzte Messung sichtbar, ohne deren Abrufzeit zu erneuern. Fehlende Fenster
 werden als „nicht gemeldet“ bezeichnet, niemals als 0 % Verbrauch.
@@ -53,12 +57,18 @@ keine Bestätigung eines Resets auf deinem persönlichen Account.
    Gerätecode-Anmeldung in den Codex-Sicherheitseinstellungen aktivieren.
 4. Den angezeigten einmaligen Code unter
    `https://auth.openai.com/codex/device` im Browser bestätigen.
-5. Eine Codex-Aufgabe ausführen und mehrfach „Jetzt aktualisieren“ drücken.
+5. Zu AI Usage zurückkehren. Die App zeigt erst die Übernahme der Freigabe und
+   anschließend den ersten Verbrauchsabruf. Fehler bleiben in einem Dialog
+   sichtbar, auch wenn die Anmeldung aus den Einstellungen gestartet wurde.
+   Falls der Browser bestätigt, aber Werte fehlen: Fehlerdialog beachten.
+   Im Logcat erscheinen unter `AiUsage` nur Phase, Fehlerklasse und HTTP-Status,
+   keine Codes, Tokens, Account-IDs oder Antwortinhalte.
+6. Eine Codex-Aufgabe ausführen und mehrfach „Jetzt aktualisieren“ drücken.
    Abrufzeit und Verbrauch prüfen. Bei kleinen Aufgaben kann die gerundete
    Anbieter-Prozentzahl unverändert bleiben.
-6. Flugmodus aktivieren und erneut aktualisieren: Fehler anzeigen, alten
+7. Flugmodus aktivieren und erneut aktualisieren: Fehler anzeigen, alten
    Abrufzeitpunkt beibehalten. Flugmodus aus, erneut aktualisieren.
-7. Unter „Resets“ persönliche Guthaben von öffentlichen Meldungen unterscheiden.
+8. Unter „Resets“ persönliche Guthaben von öffentlichen Meldungen unterscheiden.
 
 Die App verwendet dieselben Account-Endpunkte und den öffentlichen
 OAuth-Client wie Codex. Sie ist inoffiziell. Diese Endpunkte sind keine
@@ -79,7 +89,8 @@ Die GitHub-Actions-Pipeline erstellt dieselbe APK und lädt sie als
 
 Tests prüfen Parser, fehlende Fenster, fehlerhafte Antworten, getrennte
 Banked-/Global-Meldungen, Folgeabrufe, HTTP-Cache-Verhalten, 429 und die
-Persistierung rotierter Tokens. Der Robolectric-UI-Test prüft Demo,
+Persistierung rotierter Tokens, parallele Token-Rotation, sofortige Quota-Abrufe
+bei langsamen Ablaufdetails, Login-Fehlerphasen und Abbruch-/Speicherfehler. Der Robolectric-UI-Test prüft Demo,
 Reset-Quellenwechsel und Dunkelmodus und erzeugt Screenshots unter
 `app/build/screenshots/`.
 

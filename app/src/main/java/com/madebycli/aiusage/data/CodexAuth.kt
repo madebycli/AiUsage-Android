@@ -24,7 +24,7 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
             (result.text("user_code") ?: result.text("usercode"))?.takeIf { it.isNotBlank() } ?: throw SchemaException(),
             result.integer("interval")?.coerceIn(1, 60) ?: 5)
     }
-    suspend fun complete(device: DeviceCode): Unit = withTimeout(15 * 60_000L) {
+    suspend fun complete(device: DeviceCode, onPhase: (LoginPhase) -> Unit = {}): Unit = withTimeout(15 * 60_000L) {
         while (true) {
             delay(device.interval * 1000)
             val response = try {
@@ -36,6 +36,7 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
                 throw e
             }
             val code = appJson.parseToJsonElement(response).jsonObject
+            onPhase(LoginPhase.EXCHANGING)
             val tokens = http.postForm("$issuer/oauth/token", mapOf(
                 "grant_type" to "authorization_code", "client_id" to CLIENT_ID,
                 "code" to (code.text("authorization_code") ?: throw SchemaException()),
@@ -44,28 +45,40 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
             ))
             mutex.withLock {
                 currentCoroutineContext().ensureActive()
-                store.writeTokens(parseTokens(tokens))
+                val parsed = parseTokens(tokens)
+                onPhase(LoginPhase.SAVING)
+                store.writeTokens(parsed)
                 try { currentCoroutineContext().ensureActive() }
                 catch (e: CancellationException) { store.clear(); throw e }
             }
             break
         }
     }
-    suspend fun authorizedGet(url: String): String = mutex.withLock {
-        var tokens = store.readTokens() ?: throw IllegalStateException("Bitte zuerst deinen Codex-Account verbinden.")
-        if (tokens.expiresAt != null && tokens.expiresAt < Instant.now().epochSecond + 60 && tokens.refresh.isNotBlank())
-            tokens = refresh(tokens)
-        try { http.get(url, headers(tokens)) }
+    suspend fun authorizedGet(url: String): String {
+        // Only token access/rotation is serial. Slow GETs must not block another quota read.
+        val tokens = mutex.withLock {
+            val saved = store.readTokens() ?: throw IllegalStateException("Bitte zuerst deinen Codex-Account verbinden.")
+            if (saved.expiresAt != null && saved.expiresAt < Instant.now().epochSecond + 60 && saved.refresh.isNotBlank())
+                refresh(saved) else saved
+        }
+        return try { http.get(url, headers(tokens)) }
         catch (e: HttpFailure) {
             if (e.status != 401 || tokens.refresh.isBlank()) throw e
-            tokens = refresh(tokens)
-            http.get(url, headers(tokens))
+            val renewed = mutex.withLock {
+                val latest = store.readTokens() ?: throw HttpFailure(401)
+                // A parallel request may already have rotated this credential.
+                if (latest.access != tokens.access) latest else refresh(latest)
+            }
+            http.get(url, headers(renewed))
         }
     }
     private suspend fun refresh(old: Tokens): Tokens {
-        val body = http.postJson("$issuer/oauth/token", buildJsonObject {
+        val body = try { http.postJson("$issuer/oauth/token", buildJsonObject {
             put("client_id", CLIENT_ID); put("grant_type", "refresh_token"); put("refresh_token", old.refresh)
-        }.toString())
+        }.toString()) } catch (error: HttpFailure) {
+            if (error.status == 400 || error.status == 401) throw HttpFailure(401)
+            throw error
+        }
         val tokens = parseTokens(body, old)
         // Persist a rotated refresh token before any further request.
         store.writeTokens(tokens)
@@ -79,7 +92,8 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
         val obj = appJson.parseToJsonElement(body).jsonObject
         val access = obj.text("access_token")?.takeIf { it.isNotBlank() } ?: throw SchemaException()
         val claims = jwt(obj.text("id_token")) ?: jwt(access)
-        val account = claims?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id") ?: old?.accountId
+        val account = claims?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id")
+            ?: jwt(access)?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id") ?: old?.accountId
         val expiry = obj.integer("expires_in")?.takeIf { it > 0 }?.let { Instant.now().epochSecond + it }
             ?: jwt(access)?.integer("exp") ?: claims?.integer("exp")
         return Tokens(access, obj.text("refresh_token")?.takeIf { it.isNotBlank() } ?: old?.refresh.orEmpty(), account, expiry)

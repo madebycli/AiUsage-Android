@@ -20,7 +20,7 @@ data class ResetCredit(val title: String, val status: String, val grantedAt: Lon
 data class UsageSnapshot(
     val plan: String?, val groups: List<QuotaGroup>, val fetchedAt: Long,
     val availableResets: Int? = null, val resetCredits: List<ResetCredit> = emptyList(),
-    val creditsWarning: String? = null
+    val creditsWarning: String? = null, val creditsFetchedAt: Long? = null
 )
 @Serializable
 data class ResetObservation(val detectedAt: Long, val windowTitle: String, val before: Double, val after: Double)

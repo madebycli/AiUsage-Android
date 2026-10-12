@@ -4,41 +4,63 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 
 class UsageRepository(private val auth: CodexAuth) {
-    private var blockedUntilNanos = 0L
+    private val usageBackoff = RequestBackoff()
+    private val creditsBackoff = RequestBackoff()
     suspend fun fetch(): UsageSnapshot {
-        checkBackoff()
-        val usage = try {
+        usageBackoff.check()
+        return try {
             UsageParser.parse(auth.authorizedGet("https://chatgpt.com/backend-api/wham/usage"), Instant.now().epochSecond)
         } catch (e: HttpFailure) {
-            if (e.status == 429) blockedUntilNanos = System.nanoTime() + (e.retrySeconds ?: 60) * 1_000_000_000
+            if (e.status == 429) usageBackoff.defer(e.retrySeconds ?: 60)
             throw e
         }
+    }
+    suspend fun fetchCredits(usage: UsageSnapshot): UsageSnapshot {
         if ((usage.availableResets ?: 0) == 0) return usage
         return try {
-            usage.copy(resetCredits = UsageParser.credits(auth.authorizedGet("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")))
+            creditsBackoff.check()
+            val details = withTimeoutOrNull(5_000) {
+                UsageParser.credits(auth.authorizedGet("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"))
+            }
+            if (details == null) usage.copy(creditsWarning = "Reset-Anzahl aktuell; Ablaufdetails konnten nicht geladen werden.")
+            else usage.copy(resetCredits = details, creditsFetchedAt = Instant.now().epochSecond, creditsWarning = null)
         } catch (e: CancellationException) { throw e }
-        catch (_: Exception) { usage.copy(creditsWarning = "Reset-Anzahl aktuell; Ablaufdetails konnten nicht geladen werden.") }
+        catch (e: Exception) {
+            if (e is HttpFailure && e.status == 429) creditsBackoff.defer(e.retrySeconds ?: 60)
+            usage.copy(creditsWarning = "Reset-Anzahl aktuell; Ablaufdetails konnten nicht geladen werden.")
+        }
     }
-    private fun checkBackoff() {
-        val remaining = (blockedUntilNanos - System.nanoTime()) / 1_000_000_000
-        if (remaining > 0) throw HttpFailure(429, remaining)
+}
+
+class RequestBackoff(private val clock: () -> Long = System::nanoTime) {
+    private var until: Long? = null
+    fun remainingSeconds(): Long {
+        val remaining = until?.minus(clock())?.coerceAtLeast(0) ?: return 0
+        return remaining / 1_000_000_000 + if (remaining % 1_000_000_000 > 0) 1 else 0
     }
+    fun defer(seconds: Long) {
+        // Cap arithmetic to a safe monotonic interval, even for malformed Retry-After values.
+        val safeSeconds = seconds.coerceIn(1, Long.MAX_VALUE / 4 / 1_000_000_000)
+        if (safeSeconds >= remainingSeconds()) until = clock() + safeSeconds * 1_000_000_000
+    }
+    fun check() { remainingSeconds().takeIf { it > 0 }?.let { throw HttpFailure(429, it) } }
 }
 
 data class FeedResult(val feed: ResetFeed?, val nextFetchSeconds: Long, val error: String? = null)
 
 class ResetRepository(private val http: HttpTransport, private val clock: () -> Long = System::nanoTime) {
     private val feeds = mutableMapOf<ResetSource, ResetFeed>()
-    private val nextAllowed = mutableMapOf<ResetSource, Long>()
+    private val backoffs = mutableMapOf<ResetSource, RequestBackoff>()
     private val errors = mutableMapOf<ResetSource, String>()
     suspend fun fetch(source: ResetSource): FeedResult {
-        val now = clock()
-        val remaining = ((nextAllowed[source] ?: 0L) - now) / 1_000_000_000
+        val backoff = backoffs.getOrPut(source) { RequestBackoff(clock) }
+        val remaining = backoff.remainingSeconds()
         if (remaining > 0) return FeedResult(feeds[source], remaining, errors[source])
-        nextAllowed[source] = now + source.minimumSeconds * 1_000_000_000
+        backoff.defer(source.minimumSeconds)
         try {
             val feed = ResetParser.parse(source, http.get(source.endpoint), Instant.now().epochSecond)
             feeds[source] = feed
@@ -47,9 +69,9 @@ class ResetRepository(private val http: HttpTransport, private val clock: () -> 
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (e is HttpFailure && e.retrySeconds != null)
-                nextAllowed[source] = maxOf(nextAllowed[source] ?: 0L, now + e.retrySeconds * 1_000_000_000)
+                backoff.defer(e.retrySeconds)
             errors[source] = safeError(e)
-            return FeedResult(feeds[source], source.minimumSeconds, errors[source])
+            return FeedResult(feeds[source], backoff.remainingSeconds(), errors[source])
         }
     }
 }
