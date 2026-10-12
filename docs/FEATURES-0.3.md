@@ -31,8 +31,10 @@ Importierte Refresh-Tokens werden verworfen, damit die Android-App keine
 rotierende Anmeldung des Computers ungültig macht. Nach Ablauf neu importieren.
 Desktop-only Session-/Tokenkosten benötigen lokale CLI-Logs und sind nicht
 über die Account-Quota-API verfügbar. Keine erfundenen Token-/Dollarzahlen.
-Die App nennt ihren eigenen User-Agent; wird ein Reset-Grant an eine
-CLI-Kennung gebunden, kann dieser Block fehlen. Keine offizielle API-Garantie.
+Der Usage-Aufruf nutzt die Client-Kompatibilitätskennung der Referenz
+(claude-cli/2.1.281) und nennt zusätzlich AiUsage-Android im User-Agent.
+Version-/Scope-/Anbieter-Gates können weiterhin Zugriff oder Grants einschränken.
+Keine offizielle API-Garantie.
 
 ## Reset Radar
 

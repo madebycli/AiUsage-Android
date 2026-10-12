@@ -52,6 +52,8 @@ class ClaudeForecastTest {
             val request = server.takeRequest()
             assertEquals("no-cache, no-store", request.getHeader("Cache-Control"))
             assertEquals("Bearer access-test", request.getHeader("Authorization"))
+            assertTrue(request.getHeader("User-Agent")!!.startsWith("claude-cli/2.1.281"))
+            assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/0.3"))
         } finally { server.shutdown() }
     }
     @Test fun `source horizons are preserved without converting six hours to forty eight`() {
