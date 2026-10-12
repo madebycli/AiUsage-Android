@@ -74,7 +74,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
     val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
     BackHandler(enabled = anyConnected && (page != 0 || detail != null)) {
-        if (detail != null) selectedProvider = null else page = 0
+        if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
     }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
     val refreshAction: @Composable RowScope.() -> Unit = {
