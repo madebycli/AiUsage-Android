@@ -21,7 +21,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Pass only explicit build-host networking properties; CI needs none.
+            listOf("http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort",
+                "javax.net.ssl.trustStore").forEach { key ->
+                System.getProperty(key)?.let { value -> it.systemProperty(key, value) }
+            }
+            it.systemProperty("http.nonProxyHosts", "localhost|127.*")
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
+    }
 }
 dependencies {
     implementation(project(":core:ui"))
