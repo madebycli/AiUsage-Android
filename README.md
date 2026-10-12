@@ -1,6 +1,6 @@
 # AI Usage für Android
 
-Native Codex-Verbrauchsanzeige auf Basis von
+Native Codex- und Claude-Code-Verbrauchsanzeige auf Basis von
 [AniHyou-android](https://github.com/axiel7/AniHyou-android).
 Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 
@@ -11,7 +11,7 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 - Separate Anmeldeseite, keine Demo oder Vorschau ohne Login.
 - Zeitfenster, Modelllimits, persönlicher Reset-Vorrat und Claude-Zusatzverbrauch.
 - Reset Radar mit Anbieter-Untertabs, Forecasts und Quellenverläufen.
-- Eigenes kompaktes Material-3-Expressive-Design inspiriert von ArchiveTune.
+- Bisherige Farben und AniHyou-Tab-Leiste, gleichmäßig runde Karten und eigene Detailseiten mit Zurück-Pfeil.
 
 Siehe [docs/FEATURES-0.3.md](docs/FEATURES-0.3.md) für Datenumfang, Quellen,
 Claude-Import, Einschränkungen, Architektur und den aktuellen Gerätetest.

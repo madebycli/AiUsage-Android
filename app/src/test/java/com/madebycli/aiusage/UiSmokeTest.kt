@@ -54,9 +54,13 @@ class UiSmokeTest {
         screenshot("overview-both")
         compose.onNodeWithText("Claude Code").performClick()
         compose.onNodeWithText("Max 5x").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Verbrauchsdetails öffnen").assertDoesNotExist()
         screenshot("claude-light")
+        compose.onNodeWithContentDescription("Zurück").performClick()
         compose.runOnIdle { screen.value = screen.value.copy(forecasts = ResetSource.entries.associateWith { source -> ForecastResult(ResetForecast(source, if (source == ResetSource.CODEX_RESET) listOf(ForecastChance(24, 19.0), ForecastChance(48, 34.0)) else listOf(ForecastChance(6, 3.2, 1.1, 9.7), ForecastChance(24, 27.0, 13.6, 45.2)), now, now, now - 86400)) }) }
-        compose.onNodeWithContentDescription("Resets").performClick()
+        compose.onNode(hasText("Resets") and hasClickAction()).performClick()
         compose.onNodeWithText("Forecast").assertIsDisplayed()
         screenshot("forecast-light")
         compose.runOnIdle { screen.value = screen.value.copy(community = CommunitySource.entries.filter { it.provider == "Claude Code" }.associateWith { source ->
@@ -67,15 +71,15 @@ class UiSmokeTest {
         compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
         compose.onNodeWithText("in 48 Stunden").assertIsDisplayed()
         screenshot("claude-forecast-light")
-        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
         compose.onNodeWithText("Anmeldungen verwalten").performClick()
         compose.onNodeWithText("Wen verbinden\nwir heute?").assertIsDisplayed()
-        compose.onNodeWithText("Zurück").performClick()
-        compose.onNodeWithContentDescription("Verbrauch").performClick()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithText("Verbrauch", useUnmergedTree = true).performClick()
         compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
         screenshot("usage-dark")
         compose.runOnIdle { screen.value = screen.value.copy(connected = false) }
-        compose.onNodeWithContentDescription("Resets").assertIsDisplayed()
+        compose.onNode(hasText("Resets") and hasClickAction()).assertIsDisplayed()
         compose.onNodeWithText("Codex").assertDoesNotExist()
     }
     private fun screenshot(name: String) {

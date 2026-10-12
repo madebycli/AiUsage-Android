@@ -28,7 +28,7 @@ data class UiState(
     val claudeUsage: UsageSnapshot? = null, val claudeRefreshing: Boolean = false, val claudeError: String? = null,
     val community: Map<CommunitySource, CommunityResult> = emptyMap(),
     val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
-    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false
+    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val amoled: Boolean = false
 )
 
 class UsageViewModel(application: Application) : AndroidViewModel(application) {
@@ -58,7 +58,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(UiState(
         source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
-        dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false)
+        dynamicColor = prefs.getBoolean("dynamic", true), amoled = prefs.getBoolean("amoled", false)
     ))
     val state = mutable.asStateFlow()
     init {

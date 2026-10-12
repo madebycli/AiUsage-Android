@@ -28,7 +28,7 @@ class LoginUiTest {
         models.put("usage", model)
         val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true))
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
-        compose.onNodeWithText("Einstellungen", useUnmergedTree = true).performClick()
+        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
         compose.runOnIdle {
             screen.value = screen.value.copy(connected = false, loginLoading = true, loginPhase = LoginPhase.WAITING,
                 deviceCode = DeviceCode("device", "ABCD-1234", 5))

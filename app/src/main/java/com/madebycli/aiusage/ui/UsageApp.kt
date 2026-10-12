@@ -18,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithLargeTopAppBar
+import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithSmallTopAppBar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
@@ -57,55 +59,67 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private val cardShape = RoundedCornerShape(28.dp)
+
 @Composable
 fun UsageApp(state: UiState, model: UsageViewModel) {
     var page by rememberSaveable { mutableIntStateOf(0) }
+    var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
     val now = rememberNow()
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     val anyConnected = state.connected || state.claudeConnected
     val accounts = !anyConnected || page == 3
-    BackHandler(enabled = anyConnected && page != 0) { page = 0 }
+    val detail = selectedProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
+    val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
+    BackHandler(enabled = anyConnected && (page != 0 || detail != null)) {
+        if (detail != null) selectedProvider = null else page = 0
+    }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
-    Scaffold(
-        topBar = {
-            if (!accounts) Row(Modifier.fillMaxWidth().statusBarsPadding().padding(24.dp, 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("AI USAGE", style = MaterialTheme.typography.labelSmall, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-                    Text(when (page) { 1 -> "Reset Radar"; 2 -> "Ganz dein Stil"; else -> "Dein Überblick" }, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                }
-                FilledTonalIconButton(onClick = model::refresh) {
-                    if (state.refreshing || state.claudeRefreshing) SmallCircularProgressIndicator()
-                    else Icon(Icons.Rounded.Refresh, "Jetzt aktualisieren")
-                }
-            }
-        },
-        bottomBar = {
-            if (!accounts) Surface(Modifier.navigationBarsPadding().padding(20.dp, 8.dp), shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    val destinations = buildList {
-                        add(Triple(0, "Verbrauch", Icons.Rounded.DonutLarge))
-                        add(Triple(1, "Resets", Icons.Rounded.AutoAwesome))
-                        add(Triple(2, "Einstellungen", Icons.Rounded.Tune))
-                    }
-                    destinations.forEach { (index, label, icon) ->
-                        Surface(onClick = { page = index }, shape = RoundedCornerShape(26.dp), color = if (page == index) MaterialTheme.colorScheme.primaryContainer else Color.Transparent) {
-                            Column(Modifier.padding(16.dp, 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(icon, label, Modifier.size(22.dp)); Text(label, style = MaterialTheme.typography.labelSmall)
-                            }
-                        }
-                    }
-                }
-            }
+    val refreshAction: @Composable RowScope.() -> Unit = {
+        FilledTonalIconButton(onClick = model::refresh, modifier = Modifier.size(48.dp)) {
+            if (state.refreshing || state.claudeRefreshing) SmallCircularProgressIndicator()
+            else Icon(Icons.Rounded.Refresh, "Jetzt aktualisieren")
         }
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-            if (state.initializing || state.claudeInitializing) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { LoadingIndicator() }
-            else if (accounts) LoginScreen(state, model, if (anyConnected) ({ page = 0 }) else null)
-            else when (page) {
-                1 -> ResetScreen(state, now, model)
-                2 -> SettingsScreen(state, model) { page = 3 }
-                else -> UsageScreen(state, now)
+        Spacer(Modifier.width(16.dp))
+    }
+    when {
+        state.initializing || state.claudeInitializing -> Scaffold { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { LoadingIndicator() }
+        }
+        accounts -> {
+            if (anyConnected) DefaultScaffoldWithSmallTopAppBar(
+                title = "Anmeldungen", scrollBehavior = detailScroll,
+                navigationIcon = { IconButton(onClick = { page = 2 }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } }
+            ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
+            else Scaffold { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
+        }
+        detail != null -> DefaultScaffoldWithSmallTopAppBar(
+            title = detail, scrollBehavior = detailScroll,
+            modifier = Modifier.nestedScroll(detailScroll.nestedScrollConnection),
+            navigationIcon = { IconButton(onClick = { selectedProvider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
+            actions = refreshAction
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ProviderUsageScreen(state, now, detail) } }
+        else -> DefaultScaffoldWithLargeTopAppBar(
+            title = when (page) { 1 -> "Resets"; 2 -> "Einstellungen"; else -> "AI Usage" },
+            modifier = Modifier.nestedScroll(mainScroll.nestedScrollConnection),
+            scrollBehavior = mainScroll, actions = refreshAction,
+            bottomBar = {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    listOf("Verbrauch" to Icons.Rounded.DonutLarge, "Resets" to Icons.Rounded.History, "Einstellungen" to Icons.Rounded.Tune).forEachIndexed { index, destination ->
+                        NavigationBarItem(selected = page == index, onClick = { page = index },
+                            icon = { Icon(destination.second, null) }, label = { Text(destination.first) })
+                    }
+                }
+            }
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+                when (page) {
+                    1 -> ResetScreen(state, now, model)
+                    2 -> SettingsScreen(state, model) { page = 3 }
+                    else -> UsageScreen(state, now) { selectedProvider = it }
+                }
             }
         }
     }
@@ -147,28 +161,20 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
 }
 
 @Composable
-private fun UsageScreen(state: UiState, now: Long) {
-    var provider by rememberSaveable { mutableStateOf<String?>(null) }
-    val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
-    val active = provider?.takeIf { it in names }
-    if (active == null) {
-        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 4.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            if (state.connected) item { ProviderBanner("Codex", state.usage, state.usageError, state.refreshing, now) { provider = "Codex" } }
-            if (state.claudeConnected) item { ProviderBanner("Claude Code", state.claudeUsage, state.claudeError, state.claudeRefreshing, now) { provider = "Claude Code" } }
-        }
-        return
+private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit) {
+    LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (state.connected) item { ProviderBanner("Codex", state.usage, state.usageError, state.refreshing, now) { open("Codex") } }
+        if (state.claudeConnected) item { ProviderBanner("Claude Code", state.claudeUsage, state.claudeError, state.claudeRefreshing, now) { open("Claude Code") } }
     }
-    BackHandler { provider = null }
+}
+
+@Composable
+private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
     val usage = if (active == "Codex") state.usage else state.claudeUsage
     val error = if (active == "Codex") state.usageError else state.claudeError
     val refreshing = if (active == "Codex") state.refreshing else state.claudeRefreshing
     LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 4.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            TextButton(onClick = { provider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null, Modifier.size(18.dp)); Text("Zur Übersicht") }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                names.forEach { name -> FilterChip(active == name, { provider = name }, label = { Text(name) },
-                    leadingIcon = { Icon(if (name == "Codex") Icons.Rounded.Terminal else Icons.Rounded.AutoAwesome, null, Modifier.size(18.dp)) }) }
-            }
             Text(usage?.plan?.replaceFirstChar { it.titlecase() } ?: "Verbunden", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         error?.let { item { Notice(it, true) } }
@@ -202,7 +208,7 @@ private fun WindowCard(window: UsageWindow, now: Long, primary: Boolean) {
     val background = when { exhausted -> colors.errorContainer; primary -> colors.primaryContainer; else -> colors.surfaceContainer }
     val foreground = when { exhausted -> colors.onErrorContainer; primary -> colors.onPrimaryContainer; else -> colors.onSurface }
     val animated by animateFloatAsState((window.usedPercent / 100).toFloat().coerceIn(0f, 1f), label = "usage")
-    Surface(shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp, bottomEnd = 32.dp, bottomStart = 12.dp), color = background, contentColor = foreground, modifier = Modifier.fillMaxWidth().animateContentSize()) {
+    Surface(shape = cardShape, color = background, contentColor = foreground, modifier = Modifier.fillMaxWidth().animateContentSize()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(window.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -354,7 +360,7 @@ private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, 
     val colors = MaterialTheme.colorScheme
     val background = if (name == "Codex") colors.primaryContainer else colors.tertiaryContainer
     val foreground = if (name == "Codex") colors.onPrimaryContainer else colors.onTertiaryContainer
-    Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 32.dp, topEnd = 12.dp, bottomEnd = 32.dp, bottomStart = 32.dp), color = background, contentColor = foreground) {
+    Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = cardShape, color = background, contentColor = foreground) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(if (name == "Codex") Icons.Rounded.Terminal else Icons.Rounded.AutoAwesome, null, Modifier.size(28.dp))
@@ -362,7 +368,6 @@ private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, 
                     Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(usage?.plan?.replaceFirstChar { it.titlecase() } ?: "Verbunden", style = MaterialTheme.typography.labelMedium)
                 }
-                Icon(Icons.Rounded.NorthEast, "Verbrauchsdetails öffnen", Modifier.size(20.dp))
             }
             val windows = usage?.groups?.firstOrNull { it.name == name }?.windows.orEmpty()
             windows.forEach { window ->
@@ -389,8 +394,8 @@ private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
     val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            names.forEach { name -> FilterChip(active == name, { provider = name }, label = { Text(name) }) }
+        PrimaryTabRow(selectedTabIndex = names.indexOf(active)) {
+            names.forEach { name -> Tab(selected = active == name, onClick = { provider = name }, text = { Text(name) }) }
         }
         if (active == "Codex") CodexResetScreen(state, now, model)
         else LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 8.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -590,7 +595,7 @@ private fun Disclosure(label: String, content: @Composable ColumnScope.() -> Uni
 }
 @Composable
 private fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }

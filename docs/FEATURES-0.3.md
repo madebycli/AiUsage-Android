@@ -5,9 +5,11 @@
 Nur Codex und Claude Code. Native Android-App ab Android 8, Kotlin/Compose.
 Hauptseite: kompakte Anbieter-Banner, ausschließlich für verbundene Accounts.
 Tap öffnet Zeitfenster, Modelllimits und Zusatzinformationen. Separate
-Anmeldeseite, keine Demo oder Quota-Anzeige ohne Anmeldung. Eigene weiche
-Lavendel-/Pfirsich-Palette, animierte Anzeigen und kompakte Navigation,
-inspiriert von ArchiveTune. Keine ArchiveTune-Markenassets übernommen.
+Anmeldeseite, keine Demo oder Quota-Anzeige ohne Anmeldung. Die bisherigen
+Android-/Salbei-Farben und die untere AniHyou-Tab-Leiste sind wiederhergestellt.
+Anbieter- und Datenkarten haben einheitliche 28dp-Rundungen, keine asymmetrischen
+Ecken oder Karten-Pfeile. Verbrauchsdetails sind eigene Unterseiten mit
+Anbieter-Überschrift und Zurück-Pfeil aus den AniHyou-Scaffolds.
 
 ## Claude Code
 
