@@ -39,3 +39,11 @@ eigenständig; der OAuth-Client ist der öffentliche Codex-Client.
 Die Noctalia-Referenz verwendet selbst den CLI-Report von
 [ai-usagebar](https://github.com/akitaonrails/ai-usagebar). Android ruft die
 Account-Daten direkt ab, ohne Rust-CLI oder Desktop-Credential-Dateien.
+
+Claude-Handy-OAuth ab 0.4.0: Protokoll und Aufbau inspiziert in
+[G-biggy/claude-pulse-android](https://github.com/G-biggy/claude-pulse-android),
+Commit `1f915e257f162052bef6b11e9c189a8e2f32dba7`, `TokenManager.kt`.
+Autor Ghayyath Huzayen, MIT; Lizenzhinweis in
+[CLAUDE-PULSE-LICENSE.txt](CLAUDE-PULSE-LICENSE.txt). Eigenständige Anpassung an
+OkHttp/Coroutines, verschlüsseltes Storage, Ablauf/State-Prüfung, Einmal-Austausch
+und Sessiongeneration. Siehe [Handy-Login](CLAUDE-PHONE-LOGIN.md).

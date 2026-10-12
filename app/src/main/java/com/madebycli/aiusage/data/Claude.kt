@@ -4,10 +4,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.time.Instant
 
-// Imported CLI credentials are read-only. Never rotate a copied refresh token:
-// doing so could invalidate the user's desktop Claude Code session.
+// Only independently obtained phone logins retain a refresh token. Imports
+// remain read-only so rotation cannot invalidate the desktop session.
 @Serializable
-class ClaudeCredential(val access: String, val expiresAt: Long? = null, val plan: String? = null) {
+class ClaudeCredential(val access: String, val expiresAt: Long? = null, val plan: String? = null,
+    val refresh: String? = null, val phoneLogin: Boolean = false) {
     override fun toString() = "ClaudeCredential(redacted)"
 }
 
@@ -92,7 +93,7 @@ class ClaudeRepository(private val http: HttpTransport, private val endpoint: St
             val body = http.get(endpoint, mapOf("Authorization" to "Bearer ${credential.access}",
                 "anthropic-beta" to "oauth-2025-04-20",
                 // Compatibility marker from the reference; retain our explicit app identity.
-                "User-Agent" to "claude-cli/2.1.281 (external, cli) AiUsage-Android/0.3 (+https://github.com/madebycli/AiUsage-Android)"))
+                "User-Agent" to "claude-cli/2.1.281 (external, cli) AiUsage-Android/0.4 (+https://github.com/madebycli/AiUsage-Android)"))
             return ClaudeParser.parse(body, Instant.now().epochSecond, credential.plan)
         } catch (e: HttpFailure) { if (e.status == 429) backoff.defer(e.retrySeconds ?: 60); throw e }
     }

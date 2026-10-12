@@ -85,6 +85,7 @@ class RefreshQueue(scope: CoroutineScope, private val refresh: suspend () -> Uni
 }
 
 fun safeError(error: Exception): String = when (error) {
+    is ClaudeLoginFailure -> error.message.orEmpty()
     is HttpFailure -> error.message.orEmpty()
     is SchemaException, is kotlinx.serialization.SerializationException, is IllegalArgumentException -> "Das Datenformat des Anbieters hat sich geändert."
     is IllegalStateException -> "Bitte deinen Account erneut verbinden."

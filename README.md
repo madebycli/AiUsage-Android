@@ -7,6 +7,8 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 ## Funktionen
 
 - Codex und Claude Code mit getrennten verschlüsselten Anmeldungen.
+- Claude direkt am Handy per Browser-Freigabe und einmaligem Code verbinden;
+  unabhängige Handy-Anmeldung mit automatischer Erneuerung (experimentell).
 - Nur verbundene Anbieter als Banner auf der Hauptseite; Details per Tap.
 - Separate Anmeldeseite, keine Demo oder Vorschau ohne Login.
 - Zeitfenster, Modelllimits, persönlicher Reset-Vorrat und Claude-Zusatzverbrauch.
@@ -14,7 +16,8 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 - Bisherige Farben und AniHyou-Tab-Leiste, gleichmäßig runde Karten und eigene Detailseiten mit Zurück-Pfeil.
 
 Siehe [docs/FEATURES-0.3.md](docs/FEATURES-0.3.md) für Datenumfang, Quellen,
-Claude-Import, Einschränkungen, Architektur und den aktuellen Gerätetest.
+Claude-Import, Einschränkungen und Architektur. Der zusätzliche Handy-Login
+ab 0.4.0 steht in [docs/CLAUDE-PHONE-LOGIN.md](docs/CLAUDE-PHONE-LOGIN.md).
 
 ## Aktualisierung
 
@@ -45,8 +48,10 @@ keine Bestätigung eines Resets auf deinem persönlichen Account.
 ## Auf einem Gerät testen
 
 [Gerätetest und Anmeldung](docs/FEATURES-0.3.md#prüfung-auf-einem-gerät).
-Codex nutzt den Browser-Gerätecode. Claude importiert vorhandene CLI-Zugangsdaten;
-kopierte Refresh-Tokens werden nicht rotiert. Die Endpunkte sind inoffiziell.
+Codex nutzt den Browser-Gerätecode. Claude bietet ab 0.4.0 einen experimentellen
+Browser-Login direkt am Handy, siehe [Anleitung](docs/CLAUDE-PHONE-LOGIN.md).
+Der optionale CLI-Import rotiert weiterhin keine kopierten Refresh-Tokens.
+Die persönlichen Verbrauchsendpunkte sind inoffiziell.
 
 ## Bauen
 

@@ -73,8 +73,9 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
     val detail = selectedProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
     val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
-    BackHandler(enabled = anyConnected && (page != 0 || detail != null)) {
-        if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
+    BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null))) {
+        if (state.claudeLoginOpen) model.cancelClaudeLogin()
+        else if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
     }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
     val refreshAction: @Composable RowScope.() -> Unit = {
@@ -88,6 +89,10 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
         state.initializing || state.claudeInitializing -> Scaffold { padding ->
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { LoadingIndicator() }
         }
+        state.claudeLoginOpen -> DefaultScaffoldWithSmallTopAppBar(
+            title = "Claude verbinden", scrollBehavior = detailScroll,
+            navigationIcon = { IconButton(onClick = model::cancelClaudeLogin) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } }
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ClaudeLoginScreen(state, model) } }
         accounts -> {
             if (anyConnected) DefaultScaffoldWithSmallTopAppBar(
                 title = "Anmeldungen", scrollBehavior = detailScroll,
@@ -548,25 +553,74 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
                 if (state.claudeConnected) Icon(Icons.Rounded.CheckCircle, "Verbunden", tint = MaterialTheme.colorScheme.tertiary)
             }
             if (state.claudeConnected) TextButton(onClick = { confirm = "Claude Code" }) { Text("Verbindung trennen") }
-            FilledTonalButton(onClick = { claudeForm = !claudeForm }, modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeConnected) "Anmeldung erneuern" else "Mit Claude Code verbinden") }
+            FilledTonalButton(onClick = model::beginClaudeLogin, enabled = !state.claudeRefreshing && !state.claudeDisconnecting,
+                modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeConnected) "Am Handy neu anmelden" else "Mit Claude Code verbinden") }
+            Text("Direkt am Handy anmelden.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { claudeForm = !claudeForm }, enabled = !state.claudeDisconnecting) { Text(if (claudeForm) "Import schließen" else "Vorhandene Anmeldung importieren") }
             if (claudeForm) {
                 Text("Importiere deine Claude-Code-Anmeldung vom Computer oder füge einen OAuth-Token ein.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = { picker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !state.claudeRefreshing) { Icon(Icons.Rounded.UploadFile, null); Text("Datei auswählen") }
                 OutlinedTextField(secret, { secret = it.take(65_536) }, label = { Text("OAuth-Token oder Zugangsdaten-JSON") }, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false), modifier = Modifier.fillMaxWidth(), maxLines = 3)
                 Button(onClick = { model.importClaude(secret); secret = "" }, enabled = secret.isNotBlank() && !state.claudeRefreshing, modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeRefreshing) "Wird verbunden…" else "Anmeldung importieren") }
                 Disclosure("Wo finde ich die Anmeldung?") {
-                    Text("Claude Code: ~/.claude/.credentials.json (Windows: %USERPROFILE%\\.claude\\.credentials.json). Ein mit claude setup-token erstellter OAuth-Token benötigt user:profile-Zugriff für die Verbrauchsanzeige. Ein API-Key zeigt keine Abo-Limits.", style = MaterialTheme.typography.bodySmall)
+                    Text("Claude Code: ~/.claude/.credentials.json (Windows: %USERPROFILE%\\.claude\\.credentials.json). Benötigt eine Anmeldung mit Profilzugriff. claude setup-token und API-Keys eignen sich nicht für die Abo-Verbrauchsanzeige.", style = MaterialTheme.typography.bodySmall)
                     Text("Die App liest die Anmeldung nur und erneuert keinen kopierten Refresh-Token. Bei Ablauf erneut importieren. Tokens bleiben verschlüsselt auf diesem Gerät.", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (state.claudeRefreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.claudeError?.let { Notice(it, true) }
             fileError?.let { Notice(it, true) }
+            state.claudeError?.takeIf { !state.claudeConnected }?.let { TextButton(onClick = model::disconnectClaude,
+                enabled = !state.claudeDisconnecting) { Text("Lokale Claude-Daten zurücksetzen") } }
         }
         Text("Nur verbundene Tools erscheinen in deiner Übersicht.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.usageError?.takeIf { !state.connected }?.let { Notice(it, true); TextButton(onClick = model::disconnect) { Text("Lokale Codex-Daten zurücksetzen") } }
     }
     if (confirm != null) AlertDialog(onDismissRequest = { confirm = null }, title = { Text("$confirm trennen?") }, text = { Text("Die Anmeldung und Messungen dieses Anbieters werden auf dem Gerät gelöscht.") }, confirmButton = { TextButton(onClick = { if (confirm == "Codex") model.disconnect() else model.disconnectClaude(); confirm = null }) { Text("Trennen") } }, dismissButton = { TextButton(onClick = { confirm = null }) { Text("Abbrechen") } })
+}
+
+@Composable
+private fun ClaudeLoginScreen(state: UiState, model: UsageViewModel) {
+    val uri = LocalUriHandler.current
+    var code by remember(state.claudeLoginUrl) { mutableStateOf("") }
+    var browserError by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.widthIn(max = 560.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)) {
+        Spacer(Modifier.height(8.dp))
+        FlowerMark()
+        Text("Einmal verbinden.\nAlles im Blick.", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Text("Melde dich bei Claude an und gib den Zugriff frei. Kopiere anschließend den angezeigten Code und kehre hierher zurück.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SoftCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(Icons.Rounded.Public, null, tint = MaterialTheme.colorScheme.primary)
+                Text("1 · Bei Claude anmelden", style = MaterialTheme.typography.titleMedium)
+            }
+            Text("Google oder E-Mail funktionieren im Browser. Du brauchst keinen Computer.", style = MaterialTheme.typography.bodySmall)
+            if (state.claudeLoginUrl != null) Button(onClick = {
+                try { uri.openUri(state.claudeLoginUrl); browserError = null }
+                catch (_: Exception) { browserError = "Browser konnte nicht geöffnet werden. Bitte einen Browser auf dem Handy aktivieren." }
+            }, enabled = !state.claudeLoginBusy, modifier = Modifier.fillMaxWidth()) { Text("Claude im Browser öffnen") }
+            else if (!state.claudeLoginBusy) Button(onClick = model::beginClaudeLogin,
+                modifier = Modifier.fillMaxWidth()) { Text("Neue Anmeldung starten") }
+        }
+        if (state.claudeLoginUrl != null) SoftCard {
+            Text("2 · Code einfügen", style = MaterialTheme.typography.titleMedium)
+            Text("Den vollständigen Code kopieren, inklusive # und dem Text dahinter. Dieser Anmeldeversuch gilt 10 Minuten.", style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(code, { code = it.take(4096) }, enabled = !state.claudeLoginBusy,
+                label = { Text("Anmeldecode") }, visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button(onClick = { model.completeClaudeLogin(code); code = "" }, enabled = code.isNotBlank() && !state.claudeLoginBusy,
+                modifier = Modifier.fillMaxWidth()) { Text("Anmeldung abschließen") }
+        }
+        if (state.claudeLoginBusy) { LinearProgressIndicator(Modifier.fillMaxWidth()); Text("Anmeldung wird vorbereitet oder übernommen…", style = MaterialTheme.typography.bodySmall) }
+        state.claudeLoginError?.let { Notice(it, true) }
+        browserError?.let { Notice(it, true) }
+        Disclosure("Über diese Anmeldung") {
+            Text("Experimenteller Browser-Login über die Claude-Code-Freigabe. Diese umfasst Profil- und Modellzugriff. AI Usage ruft nur deine Verbrauchsdaten ab. Die Anmeldung wird verschlüsselt auf diesem Handy gespeichert und hier erneuert.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable

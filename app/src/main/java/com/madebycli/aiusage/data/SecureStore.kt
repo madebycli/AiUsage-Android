@@ -23,7 +23,7 @@ interface TokenStore {
 }
 
 // All account data and tokens stay in noBackupFilesDir, encrypted by a device-bound key.
-class SecureStore(context: Context, private val namespace: String = "account") : TokenStore {
+class SecureStore(context: Context, private val namespace: String = "account") : TokenStore, ClaudeCredentialStore {
     private val directory = context.noBackupFilesDir
     private val alias = "aiusage.$namespace.v1"
     private fun filename(name: String) = if (namespace == "account") name else "$namespace.$name"
@@ -59,12 +59,17 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun writeTokens(tokens: Tokens) = write("tokens.enc", appJson.encodeToString(tokens))
     fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString(it) } ?: PersonalRecord()
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
-    fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
-    fun writeClaude(value: ClaudeCredential) = write("tokens.enc", appJson.encodeToString(value))
+    override fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
+    override fun writeClaude(value: ClaudeCredential) = write("tokens.enc", appJson.encodeToString(value))
+    override fun readClaudeLogin(): ClaudePendingLogin? = read("login.enc")?.let { appJson.decodeFromString(it) }
+    override fun writeClaudeLogin(value: ClaudePendingLogin) = write("login.enc", appJson.encodeToString(value))
+    @Synchronized
+    override fun clearClaudeLogin() { AtomicFile(File(directory, filename("login.enc"))).delete() }
     @Synchronized
     override fun clear() {
         AtomicFile(File(directory, filename("tokens.enc"))).delete()
         AtomicFile(File(directory, filename("usage.enc"))).delete()
+        clearClaudeLogin()
         KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) }
     }
 }

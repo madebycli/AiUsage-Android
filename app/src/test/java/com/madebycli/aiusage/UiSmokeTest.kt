@@ -82,6 +82,27 @@ class UiSmokeTest {
         compose.onNode(hasText("Resets") and hasClickAction()).assertIsDisplayed()
         compose.onNodeWithText("Codex").assertDoesNotExist()
     }
+    @Test fun `phone login is a separate titled screen with code entry and no main navigation`() {
+        val model = UsageViewModel(ApplicationProvider.getApplicationContext())
+        models.put("usage", model)
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false,
+            claudeLoginOpen = true, claudeLoginUrl = "https://claude.com/cai/oauth/authorize"))
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
+        compose.onNodeWithText("Claude verbinden").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").assertIsDisplayed()
+        compose.onNodeWithText("Claude im Browser öffnen").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.onNodeWithText("Resets").assertDoesNotExist()
+        screenshot("claude-phone-login")
+        compose.onNodeWithText("Anmeldecode").performScrollTo().performTextInput("code#state")
+        compose.onNodeWithText("Anmeldung abschließen").performScrollTo().assertIsEnabled()
+        compose.runOnIdle { screen.value = screen.value.copy(claudeLoginBusy = true) }
+        compose.onNodeWithText("Anmeldung abschließen").assertIsNotEnabled()
+        compose.runOnIdle { screen.value = screen.value.copy(claudeLoginBusy = false, claudeLoginUrl = null,
+            claudeLoginError = "Browser-Freigabe konnte nicht übernommen werden. Bitte neu anmelden.") }
+        compose.onNodeWithText("Neue Anmeldung starten").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Anmeldecode").assertDoesNotExist()
+    }
     private fun screenshot(name: String) {
         compose.waitForIdle()
         val directory = File("build/screenshots").apply { mkdirs() }

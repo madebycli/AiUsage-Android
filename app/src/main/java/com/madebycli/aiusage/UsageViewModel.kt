@@ -26,6 +26,8 @@ data class UiState(
     val deviceCode: DeviceCode? = null, val loginPhase: LoginPhase = LoginPhase.REQUEST_CODE, val loginLoading: Boolean = false, val loginError: String? = null, val loginHint: String? = null,
     val claudeConnected: Boolean = false, val claudeInitializing: Boolean = true,
     val claudeUsage: UsageSnapshot? = null, val claudeRefreshing: Boolean = false, val claudeError: String? = null,
+    val claudeDisconnecting: Boolean = false, val claudeLoginOpen: Boolean = false,
+    val claudeLoginBusy: Boolean = false, val claudeLoginUrl: String? = null, val claudeLoginError: String? = null,
     val community: Map<CommunitySource, CommunityResult> = emptyMap(),
     val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val amoled: Boolean = false
@@ -40,10 +42,12 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val forecastRepository = ForecastRepository(http)
     private val communityRepository = CommunityRepository(http)
     private val claudeStore = SecureStore(application, "claude")
+    private var claudeAuth = ClaudeAuth(http, claudeStore)
+    private var claudeLoginJob: Job? = null
     private var claudeRepository = ClaudeRepository(http)
     private val claudeMutex = Mutex()
     private val claudeGeneration = SessionGeneration()
-    private val claudeQueue = RefreshQueue(viewModelScope) { readClaude() }
+    private var claudeQueue = RefreshQueue(viewModelScope) { readClaude() }
     private val forecastQueue = RefreshQueue(viewModelScope) { readForecasts() }
     private var personalScope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
     private var usageRepository = UsageRepository(auth)
@@ -86,9 +90,12 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val credentials = claudeStore.readClaude()
                     val record = if (credentials != null) runCatching { claudeStore.readRecord() }.getOrDefault(PersonalRecord()) else PersonalRecord()
-                    mutable.update { it.copy(claudeInitializing = false, claudeConnected = credentials != null, claudeUsage = record.usage) }
+                    val pendingUrl = claudeAuth.pendingUrl()
+                    mutable.update { it.copy(claudeInitializing = false, claudeConnected = credentials != null, claudeUsage = record.usage,
+                        claudeLoginOpen = pendingUrl != null, claudeLoginUrl = pendingUrl) }
                     if (credentials != null) claudeQueue.request()
-                } catch (_: Exception) { mutable.update { it.copy(claudeInitializing = false, claudeError = "Claude-Anmeldung konnte nicht gelesen werden. Bitte neu importieren.") } }
+                } catch (e: CancellationException) { throw e }
+                catch (_: Exception) { mutable.update { it.copy(claudeInitializing = false, claudeError = "Claude-Anmeldung konnte nicht gelesen werden. Bitte neu verbinden.") } }
             }
         }
     }
@@ -269,22 +276,88 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             val generation = claudeGeneration.current()
             mutable.update { it.copy(claudeRefreshing = true) }
             try {
-                val credential = claudeStore.readClaude() ?: throw HttpFailure(401)
-                val usage = claudeRepository.fetch(credential)
+                val credential = claudeAuth.credential()
+                val usage = try { claudeRepository.fetch(credential) } catch (e: HttpFailure) {
+                    if (e.status != 401 || !credential.phoneLogin || credential.refresh == null) throw e
+                    claudeRepository.fetch(claudeAuth.credential(forceRefresh = true))
+                }
                 currentCoroutineContext().ensureActive()
-                if (claudeGeneration.isCurrent(generation)) {
+                claudeGeneration.commitIfCurrent(generation) {
                     mutable.update { it.copy(claudeUsage = usage, claudeError = null) }
-                    val warning = persistAccountRecord { claudeStore.writeRecord(PersonalRecord(usage)) }
-                    if (warning != null) mutable.update { it.copy(claudeError = warning) }
+                    try { claudeStore.writeRecord(PersonalRecord(usage)) }
+                    catch (_: Exception) { mutable.update { it.copy(claudeError = "Live-Daten geladen; der Verlauf konnte nicht gespeichert werden.") } }
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
                 if (claudeGeneration.isCurrent(generation)) mutable.update { it.copy(claudeError = safeError(e)) }
-            } finally { mutable.update { it.copy(claudeRefreshing = false) } }
+            } finally { mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeRefreshing = false) } }
+        }
+    }
+    fun beginClaudeLogin() {
+        if (state.value.claudeInitializing || state.value.claudeDisconnecting || state.value.claudeRefreshing || state.value.claudeLoginBusy) return
+        val generation = claudeGeneration.advance()
+        mutable.update { it.copy(claudeLoginOpen = true, claudeLoginBusy = true, claudeLoginUrl = null, claudeLoginError = null) }
+        val previous = claudeLoginJob
+        claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
+            previous?.join()
+            claudeMutex.withLock {
+                try {
+                    val url = claudeAuth.begin()
+                    mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeLoginUrl = url) }
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) { mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeLoginError = safeError(e)) } }
+                finally { mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeLoginBusy = false) } }
+            }
+        }
+    }
+    fun completeClaudeLogin(code: String) {
+        if (!state.value.claudeLoginOpen || state.value.claudeLoginBusy || state.value.claudeLoginUrl == null) return
+        val generation = claudeGeneration.current()
+        mutable.update { it.copy(claudeLoginBusy = true, claudeLoginError = null) }
+        claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
+            claudeMutex.withLock {
+                try {
+                    val credentials = claudeAuth.complete(code)
+                    currentCoroutineContext().ensureActive()
+                    claudeGeneration.commitIfCurrent(generation) {
+                        // Clear old measurements before replacing the account.
+                        claudeStore.writeRecord(PersonalRecord())
+                        claudeStore.writeClaude(credentials)
+                        mutable.update { it.copy(claudeConnected = true, claudeUsage = null, claudeError = null,
+                            claudeLoginOpen = false, claudeLoginUrl = null) }
+                    }
+                } catch (e: CancellationException) { throw e }
+                catch (e: Exception) {
+                    val pending = runCatching { claudeAuth.pendingUrl() }.getOrNull()
+                    val message = when {
+                        e is ClaudeLoginFailure -> e.message!!
+                        e is HttpFailure && e.status in listOf(400, 401) -> "Browser-Freigabe konnte nicht übernommen werden. Bitte neu anmelden."
+                        else -> safeError(e)
+                    }
+                    mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeLoginError = message, claudeLoginUrl = pending) }
+                } finally { mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeLoginBusy = false) } }
+            }
+            if (claudeGeneration.isCurrent(generation) && !state.value.claudeLoginOpen && state.value.claudeConnected) {
+                claudeQueue.request()
+                forecastQueue.request()
+            }
+        }
+    }
+    fun cancelClaudeLogin() {
+        claudeGeneration.advance()
+        val previous = claudeLoginJob
+        previous?.cancel()
+        mutable.update { it.copy(claudeLoginOpen = false, claudeLoginBusy = false, claudeLoginUrl = null, claudeLoginError = null, claudeRefreshing = false) }
+        claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
+            previous?.join()
+            claudeMutex.withLock {
+                try { claudeAuth.cancel() }
+                catch (_: Exception) { mutable.update { it.copy(claudeError = "Anmeldeversuch konnte nicht gelöscht werden. Bitte Claude-Daten zurücksetzen.") } }
+            }
         }
     }
     fun importClaude(raw: String) {
-        if (state.value.claudeRefreshing || state.value.claudeInitializing) return
+        if (state.value.claudeRefreshing || state.value.claudeInitializing || state.value.claudeDisconnecting || state.value.claudeLoginOpen || state.value.claudeLoginBusy) return
         val generation = claudeGeneration.advance()
         mutable.update { it.copy(claudeRefreshing = true, claudeError = null) }
         viewModelScope.launch(Dispatchers.IO) {
@@ -306,11 +379,23 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun disconnectClaude() {
+        if (state.value.claudeDisconnecting) return
         claudeGeneration.advance()
-        mutable.update { it.copy(claudeConnected = false, claudeUsage = null, claudeError = null, community = it.community.filterKeys { key -> key.provider != "Claude Code" }) }
-        viewModelScope.launch(Dispatchers.IO) { claudeMutex.withLock {
-            try { claudeStore.clear(); claudeRepository = ClaudeRepository(http) }
+        val previous = claudeLoginJob
+        previous?.cancel()
+        claudeQueue.cancel()
+        mutable.update { it.copy(claudeConnected = false, claudeUsage = null, claudeError = null, claudeRefreshing = false,
+            claudeDisconnecting = true, claudeLoginOpen = false, claudeLoginBusy = false, claudeLoginUrl = null, claudeLoginError = null,
+            community = it.community.filterKeys { key -> key.provider != "Claude Code" }) }
+        viewModelScope.launch(Dispatchers.IO) { previous?.join(); claudeMutex.withLock {
+            try { claudeStore.clear() }
             catch (_: Exception) { mutable.update { it.copy(claudeError = "Claude-Daten konnten nicht gelöscht werden.") } }
+            finally {
+                claudeRepository = ClaudeRepository(http)
+                claudeAuth = ClaudeAuth(http, claudeStore)
+                claudeQueue = RefreshQueue(viewModelScope) { readClaude() }
+                mutable.update { it.copy(claudeDisconnecting = false) }
+            }
         } }
     }
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }

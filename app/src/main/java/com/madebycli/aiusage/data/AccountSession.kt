@@ -6,8 +6,13 @@ import java.util.concurrent.atomic.AtomicLong
 class SessionGeneration {
     private val value = AtomicLong()
     fun current(): Long = value.get()
-    fun advance(): Long = value.incrementAndGet()
+    @Synchronized fun advance(): Long = value.incrementAndGet()
     fun isCurrent(generation: Long): Boolean = value.get() == generation
+    @Synchronized fun commitIfCurrent(generation: Long, action: () -> Unit): Boolean {
+        if (!isCurrent(generation)) return false
+        action()
+        return true
+    }
 }
 
 suspend fun persistAccountRecord(write: suspend () -> Unit): String? = try {
