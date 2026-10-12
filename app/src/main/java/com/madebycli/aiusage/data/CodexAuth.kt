@@ -1,0 +1,84 @@
+package com.madebycli.aiusage.data
+
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.*
+import java.time.Instant
+import java.util.Base64
+
+data class DeviceCode(val id: String, val code: String, val interval: Long)
+
+// Device-code and refresh protocol follows openai/codex, not a WebView/cookie scraper.
+class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
+    private val issuer: String = "https://auth.openai.com") {
+    private val mutex = Mutex()
+    suspend fun begin(): DeviceCode {
+        val result = appJson.parseToJsonElement(http.postJson("$issuer/api/accounts/deviceauth/usercode",
+            buildJsonObject { put("client_id", CLIENT_ID) }.toString())).jsonObject
+        return DeviceCode(result.text("device_auth_id")?.takeIf { it.isNotBlank() } ?: throw SchemaException(),
+            (result.text("user_code") ?: result.text("usercode"))?.takeIf { it.isNotBlank() } ?: throw SchemaException(),
+            result.integer("interval")?.coerceIn(1, 60) ?: 5)
+    }
+    suspend fun complete(device: DeviceCode): Unit = withTimeout(15 * 60_000L) {
+        while (true) {
+            delay(device.interval * 1000)
+            val response = try {
+                http.postJson("$issuer/api/accounts/deviceauth/token", buildJsonObject {
+                    put("device_auth_id", device.id); put("user_code", device.code)
+                }.toString())
+            } catch (e: HttpFailure) {
+                if (e.status == 403 || e.status == 404) continue
+                throw e
+            }
+            val code = appJson.parseToJsonElement(response).jsonObject
+            val tokens = http.postForm("$issuer/oauth/token", mapOf(
+                "grant_type" to "authorization_code", "client_id" to CLIENT_ID,
+                "code" to (code.text("authorization_code") ?: throw SchemaException()),
+                "redirect_uri" to "$issuer/deviceauth/callback",
+                "code_verifier" to (code.text("code_verifier") ?: throw SchemaException())
+            ))
+            mutex.withLock { store.writeTokens(parseTokens(tokens)) }
+            break
+        }
+    }
+    suspend fun authorizedGet(url: String): String = mutex.withLock {
+        var tokens = store.readTokens() ?: throw IllegalStateException("Bitte zuerst deinen Codex-Account verbinden.")
+        if (tokens.expiresAt != null && tokens.expiresAt < Instant.now().epochSecond + 60 && tokens.refresh.isNotBlank())
+            tokens = refresh(tokens)
+        try { http.get(url, headers(tokens)) }
+        catch (e: HttpFailure) {
+            if (e.status != 401 || tokens.refresh.isBlank()) throw e
+            tokens = refresh(tokens)
+            http.get(url, headers(tokens))
+        }
+    }
+    private suspend fun refresh(old: Tokens): Tokens {
+        val body = http.postJson("$issuer/oauth/token", buildJsonObject {
+            put("client_id", CLIENT_ID); put("grant_type", "refresh_token"); put("refresh_token", old.refresh)
+        }.toString())
+        val tokens = parseTokens(body, old)
+        // Persist a rotated refresh token before any further request.
+        store.writeTokens(tokens)
+        return tokens
+    }
+    private fun headers(tokens: Tokens): Map<String, String> = buildMap {
+        put("Authorization", "Bearer ${tokens.access}")
+        tokens.accountId?.let { put("ChatGPT-Account-Id", it) }
+    }
+    internal fun parseTokens(body: String, old: Tokens? = null): Tokens {
+        val obj = appJson.parseToJsonElement(body).jsonObject
+        val access = obj.text("access_token")?.takeIf { it.isNotBlank() } ?: throw SchemaException()
+        val claims = jwt(obj.text("id_token")) ?: jwt(access)
+        val account = claims?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id") ?: old?.accountId
+        val expiry = obj.integer("expires_in")?.takeIf { it > 0 }?.let { Instant.now().epochSecond + it }
+            ?: jwt(access)?.integer("exp") ?: claims?.integer("exp")
+        return Tokens(access, obj.text("refresh_token")?.takeIf { it.isNotBlank() } ?: old?.refresh.orEmpty(), account, expiry)
+    }
+    private fun jwt(token: String?): JsonObject? = runCatching {
+        val part = token?.split('.')?.getOrNull(1) ?: return null
+        appJson.parseToJsonElement(Base64.getUrlDecoder().decode(part).toString(Charsets.UTF_8)).jsonObject
+    }.getOrNull()
+    companion object { const val CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann" }
+}
