@@ -14,7 +14,7 @@ class ClaudeForecastTest {
         assertNull(ClaudeParser.profilePlan("""{"account":{"has_claude_pro":false,"has_claude_max":false}}"""))
     }
     @Test fun `Claude parses only reported windows model caps extra money and usable grants`() {
-        val body = """{"five_hour":{"utilization":42,"resets_at":"2026-10-12T18:00:00Z"},"seven_day":null,"seven_day_sonnet":{"utilization":18},"limits":[{"kind":"weekly_scoped","percent":7,"scope":{"model":{"display_name":"Fable"}}}],"extra_usage":{"is_enabled":true,"used_credits":1200.0,"monthly_limit":5000,"currency":"EUR","decimal_places":2},"cedar_ember":{"grants":[{"label":"One reset","resets_left":2,"usable_now":true},{"label":"Paused","resets_left":3,"usable_now":true,"paused":true}]}}"""
+        val body = """{"five_hour":{"utilization":42,"resets_at":"2026-10-12T18:00:00Z"},"seven_day":null,"seven_day_sonnet":{"utilization":18},"limits":[{"kind":"weekly_scoped","percent":7,"scope":{"model":{"display_name":"Fable"}}}],"extra_usage":{"is_enabled":true,"used_credits":1200.0,"monthly_limit":5000,"currency":"EUR","decimal_places":2},"cedar_ember":{"eligible":true,"grants":[{"label":"One reset","resets_left":2,"usable_now":true},{"label":"Paused","resets_left":3,"usable_now":true,"paused":true}]}}"""
         val usage = ClaudeParser.parse(body, 50, "Max 5x")
         assertEquals(3, usage.groups.size)
         assertEquals(1, usage.groups.first().windows.size)
@@ -60,7 +60,7 @@ class ClaudeForecastTest {
             assertEquals("no-cache, no-store", request.getHeader("Cache-Control"))
             assertEquals("Bearer access-test", request.getHeader("Authorization"))
             assertTrue(request.getHeader("User-Agent")!!.startsWith("claude-cli/2.1.281"))
-            assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/0.4"))
+            assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/0.4.1"))
         } finally { server.shutdown() }
     }
     @Test fun `source horizons are preserved without converting six hours to forty eight`() {

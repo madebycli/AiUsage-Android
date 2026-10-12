@@ -28,6 +28,7 @@ data class UiState(
     val claudeUsage: UsageSnapshot? = null, val claudeRefreshing: Boolean = false, val claudeError: String? = null,
     val claudeDisconnecting: Boolean = false, val claudeLoginOpen: Boolean = false,
     val claudeLoginBusy: Boolean = false, val claudeLoginUrl: String? = null, val claudeLoginError: String? = null,
+    val claudeLoginResult: Long = 0,
     val community: Map<CommunitySource, CommunityResult> = emptyMap(),
     val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val amoled: Boolean = false
@@ -105,6 +106,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.connected) publicQueue.request()
         if (state.value.connected || state.value.claudeConnected) forecastQueue.request()
     }
+    fun refreshClaude() { if (state.value.claudeConnected) claudeQueue.request() }
     private suspend fun readUsage() = quotaMutex.withLock { readUsageLocked() }
     private suspend fun readUsageLocked() {
         if (!state.value.connected) return
@@ -275,13 +277,16 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             if (!state.value.claudeConnected) return@withLock
             val generation = claudeGeneration.current()
             mutable.update { it.copy(claudeRefreshing = true) }
+            var operation = "claude_auth"
             try {
                 val credential = claudeAuth.credential()
+                operation = "claude_usage"
                 val usage = try { claudeRepository.fetch(credential) } catch (e: HttpFailure) {
                     if (e.status != 401 || !credential.phoneLogin || credential.refresh == null) throw e
                     claudeRepository.fetch(claudeAuth.credential(forceRefresh = true))
                 }
                 currentCoroutineContext().ensureActive()
+                if (usage.warnings.isNotEmpty()) Log.w("AiUsage", "claude_usage partial warnings=${usage.warnings.size}")
                 claudeGeneration.commitIfCurrent(generation) {
                     mutable.update { it.copy(claudeUsage = usage, claudeError = null) }
                     try { claudeStore.writeRecord(PersonalRecord(usage)) }
@@ -289,7 +294,11 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (claudeGeneration.isCurrent(generation)) mutable.update { it.copy(claudeError = safeError(e)) }
+                Log.w("AiUsage", diagnosticFailure(operation, e))
+                val message = if (operation == "claude_auth" &&
+                    (e is SchemaException || e is kotlinx.serialization.SerializationException || e is IllegalArgumentException))
+                    "Claude-Anmeldung konnte nicht gelesen oder erneuert werden. Bitte erneut verbinden." else safeError(e)
+                if (claudeGeneration.isCurrent(generation)) mutable.update { it.copy(claudeError = message) }
             } finally { mutable.update { if (!claudeGeneration.isCurrent(generation)) it else it.copy(claudeRefreshing = false) } }
         }
     }
@@ -328,7 +337,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                         claudeStore.writeRecord(PersonalRecord())
                         claudeStore.writeClaude(credentials)
                         mutable.update { it.copy(claudeConnected = true, claudeUsage = null, claudeError = null,
-                            claudeLoginOpen = false, claudeLoginUrl = null) }
+                            claudeLoginOpen = false, claudeLoginUrl = null, claudeLoginResult = it.claudeLoginResult + 1) }
                     }
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {

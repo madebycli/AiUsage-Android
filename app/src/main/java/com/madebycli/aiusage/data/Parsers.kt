@@ -3,7 +3,7 @@ package com.madebycli.aiusage.data
 import kotlinx.serialization.json.*
 
 val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-class SchemaException : Exception("Das Datenformat des Anbieters hat sich geändert.")
+open class SchemaException : Exception("Das Datenformat des Anbieters hat sich geändert.")
 internal fun JsonObject.text(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull
 internal fun JsonObject.obj(key: String): JsonObject? = get(key) as? JsonObject
 internal fun JsonObject.array(key: String): JsonArray? = get(key) as? JsonArray

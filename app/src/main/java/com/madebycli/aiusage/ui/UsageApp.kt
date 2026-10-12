@@ -78,6 +78,9 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
         else if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
     }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
+    LaunchedEffect(state.claudeLoginResult) {
+        if (state.claudeLoginResult > 0 && state.claudeConnected) { page = 0; selectedProvider = "Claude Code" }
+    }
     val refreshAction: @Composable RowScope.() -> Unit = {
         FilledTonalIconButton(onClick = model::refresh, modifier = Modifier.size(48.dp)) {
             if (state.refreshing || state.claudeRefreshing) SmallCircularProgressIndicator()
@@ -186,16 +189,17 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
         if (active == "Codex") state.storageWarning?.let { item { Notice(it) } }
         if (usage == null) item { SoftCard {
             if (refreshing) LoadingIndicator()
-            Text("Verbrauch wird geladen", style = MaterialTheme.typography.titleMedium)
+            Text(if (refreshing) "Verbrauch wird geladen" else "Verbrauch noch nicht geladen", style = MaterialTheme.typography.titleMedium)
             Text("Aktualisiere oben, um es erneut zu versuchen.", style = MaterialTheme.typography.bodySmall)
         } }
         usage?.let { snapshot ->
+            if (snapshot.warnings.isNotEmpty()) item { Notice(snapshot.warnings.joinToString("\n")) }
             snapshot.groups.forEachIndexed { index, group ->
                 if (group.name != active) item(key = "title:$index") { SectionTitle(group.name) }
                 items(group.windows, key = { "$index:${it.seconds}" }) { window -> WindowCard(window, now, window.seconds == 18000L) }
             }
             if (snapshot.groups.all { it.windows.isEmpty() }) item { Notice("Der Anbieter meldet aktuell keine Zeitfenster.") }
-            if (snapshot.availableResets != null || snapshot.resetCredits.isNotEmpty()) item { BankedCard(snapshot, now, active == "Codex" && state.creditsLoading) }
+            if (snapshot.availableResets != null || snapshot.resetCredits.isNotEmpty() || snapshot.creditsWarning != null) item { BankedCard(snapshot, now, active == "Codex" && state.creditsLoading) }
             snapshot.extraUsage?.let { extra -> item { ExtraUsageCard(extra) } }
             item { Text("${if (refreshing) "Aktualisiert… · " else ""}${age(now - snapshot.fetchedAt)} · ${date(snapshot.fetchedAt, true)}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -258,7 +262,7 @@ private fun BankedCard(usage: UsageSnapshot, now: Long, loading: Boolean) {
         if (usage.resetCredits.isNotEmpty() || usage.creditsWarning != null) Disclosure("Details ansehen") {
             usage.resetCredits.forEach { credit ->
                 Text(credit.title, style = MaterialTheme.typography.labelLarge)
-                Text(when (credit.status) { "available" -> "Verfügbar"; "redeemed" -> "Eingelöst"; "paused" -> "Pausiert"; "expired" -> "Abgelaufen"; else -> "Derzeit nicht verfügbar" }, style = MaterialTheme.typography.bodySmall)
+                Text(when (credit.status) { "available" -> "Verfügbar"; "redeemed" -> "Eingelöst"; "paused" -> "Pausiert"; "expired" -> "Abgelaufen"; "unknown" -> "Verfügbarkeit nicht bestätigt"; else -> "Derzeit nicht verfügbar" }, style = MaterialTheme.typography.bodySmall)
                 credit.expiresAt?.let { Text("Bis ${date(it)}${if (it <= now) " · Ablauf erreicht" else ""}", style = MaterialTheme.typography.bodySmall) }
             }
             usage.creditsWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -268,14 +272,11 @@ private fun BankedCard(usage: UsageSnapshot, now: Long, loading: Boolean) {
 }
 @Composable
 private fun ExtraUsageCard(extra: ExtraUsage) {
-    fun money(value: Double?): String = value?.let {
-        val decimals = extra.decimals ?: if (extra.currency == null) 2 else return "${percent(it)} Minor Units (${extra.currency})"
-        "${String.format(Locale.GERMAN, "%.${decimals}f", it / Math.pow(10.0, decimals.toDouble()))} ${extra.currency ?: "USD"}"
-    } ?: "Nicht gemeldet"
+    fun money(value: Double?) = extraAmountText(value, extra.currency, extra.decimals)
     SoftCard {
         Text("Zusatzverbrauch", style = MaterialTheme.typography.titleMedium)
-        Text(if (extra.enabled) "Aktiviert" else "Deaktiviert", style = MaterialTheme.typography.labelMedium)
-        if (extra.enabled) {
+        Text(when (extra.enabled) { true -> "Aktiviert"; false -> "Deaktiviert"; null -> "Aktivierung nicht gemeldet" }, style = MaterialTheme.typography.labelMedium)
+        if (extra.enabled == true || extra.used != null || extra.limit != null) {
             Text(money(extra.used), style = MaterialTheme.typography.headlineSmall)
             Text("Monatslimit: ${money(extra.limit)}", style = MaterialTheme.typography.bodySmall)
         }
@@ -552,7 +553,10 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
                 Text("Claude Code", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 if (state.claudeConnected) Icon(Icons.Rounded.CheckCircle, "Verbunden", tint = MaterialTheme.colorScheme.tertiary)
             }
-            if (state.claudeConnected) TextButton(onClick = { confirm = "Claude Code" }) { Text("Verbindung trennen") }
+            if (state.claudeConnected) {
+                Text(if (state.claudeUsage == null) "Angemeldet · Verbrauch noch nicht geladen" else "Angemeldet · Verbrauch geladen", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { confirm = "Claude Code" }) { Text("Verbindung trennen") }
+            }
             FilledTonalButton(onClick = model::beginClaudeLogin, enabled = !state.claudeRefreshing && !state.claudeDisconnecting,
                 modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeConnected) "Am Handy neu anmelden" else "Mit Claude Code verbinden") }
             Text("Direkt am Handy anmelden.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -569,6 +573,8 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
             }
             if (state.claudeRefreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.claudeError?.let { Notice(it, true) }
+            if (state.claudeConnected && state.claudeError != null) OutlinedButton(onClick = model::refreshClaude,
+                enabled = !state.claudeRefreshing && !state.claudeDisconnecting, modifier = Modifier.fillMaxWidth()) { Text("Verbrauch erneut laden") }
             fileError?.let { Notice(it, true) }
             state.claudeError?.takeIf { !state.claudeConnected }?.let { TextButton(onClick = model::disconnectClaude,
                 enabled = !state.claudeDisconnecting) { Text("Lokale Claude-Daten zurücksetzen") } }

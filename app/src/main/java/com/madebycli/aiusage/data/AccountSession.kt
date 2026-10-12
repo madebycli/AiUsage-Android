@@ -48,4 +48,5 @@ fun loginFailure(phase: LoginPhase, error: Exception): String {
 
 // Only a phase, numeric status and class name. Never bodies, codes, URLs, tokens or stack traces.
 fun diagnosticFailure(operation: String, error: Exception): String =
-    "$operation failed kind=${error.javaClass.simpleName} status=${(error as? HttpFailure)?.status ?: "none"}"
+    "$operation failed kind=${error.javaClass.simpleName} status=${(error as? HttpFailure)?.status ?: "none"}" +
+        (error as? ClaudeUsageFormatException)?.let { " section=${it.section.name}" }.orEmpty()

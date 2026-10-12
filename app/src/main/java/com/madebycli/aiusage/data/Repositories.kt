@@ -85,6 +85,7 @@ class RefreshQueue(scope: CoroutineScope, private val refresh: suspend () -> Uni
 }
 
 fun safeError(error: Exception): String = when (error) {
+    is ClaudeUsageFormatException -> "Claude-Verbrauch konnte nicht gelesen werden (${if (error.section == ClaudeUsageSection.WINDOWS) "Zeitfenster" else "Antwortformat"}). Bitte erneut aktualisieren."
     is ClaudeLoginFailure -> error.message.orEmpty()
     is HttpFailure -> error.message.orEmpty()
     is SchemaException, is kotlinx.serialization.SerializationException, is IllegalArgumentException -> "Das Datenformat des Anbieters hat sich geändert."

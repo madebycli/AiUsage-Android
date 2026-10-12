@@ -18,6 +18,8 @@ Kotlin, Jetpack Compose und Material 3 Expressive. Android 8.0 oder neuer.
 Siehe [docs/FEATURES-0.3.md](docs/FEATURES-0.3.md) für Datenumfang, Quellen,
 Claude-Import, Einschränkungen und Architektur. Der zusätzliche Handy-Login
 ab 0.4.0 steht in [docs/CLAUDE-PHONE-LOGIN.md](docs/CLAUDE-PHONE-LOGIN.md).
+0.4.1 korrigiert den Claude-Verbrauchsparser nach erfolgreicher Anmeldung;
+siehe [Fehlerbehebung und Gerätetest](docs/FIX-0.4.1.md).
 
 ## Aktualisierung
 

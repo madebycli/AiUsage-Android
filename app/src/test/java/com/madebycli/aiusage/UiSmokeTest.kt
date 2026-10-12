@@ -108,4 +108,35 @@ class UiSmokeTest {
         val directory = File("build/screenshots").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+    @Test fun `completed Claude login opens usage details and preserves quota with optional warnings`() {
+        val model = UsageViewModel(ApplicationProvider.getApplicationContext())
+        models.put("usage", model)
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false,
+            connected = true, claudeLoginOpen = true, claudeLoginUrl = "https://claude.com/cai/oauth/authorize"))
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
+        compose.onNodeWithText("Claude verbinden").assertIsDisplayed()
+        compose.runOnIdle { screen.value = screen.value.copy(claudeLoginOpen = false, claudeLoginUrl = null,
+            claudeConnected = true, claudeLoginResult = 1, claudeRefreshing = true) }
+        compose.onNodeWithText("Claude Code").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch wird geladen").assertIsDisplayed()
+        compose.onNodeWithText("Wen verbinden\nwir heute?").assertDoesNotExist()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.runOnIdle {
+            screen.value = screen.value.copy(claudeRefreshing = false,
+                claudeUsage = ClaudeParser.parse("""{"five_hour":{"utilization":42},"seven_day":{"utilization":18},"cedar_ember":{"eligible":true,"grants":"changed"},"extra_usage":{"is_enabled":true,"used_credits":434.43,"monthly_limit":600,"currency":"EUR","decimal_places":2}}""", Instant.now().epochSecond, "Pro"))
+        }
+        compose.onNodeWithText("42%").assertIsDisplayed()
+        compose.onNodeWithText("Reset-Details konnten nicht gelesen werden.").assertIsDisplayed()
+        screenshot("claude-partial-usage")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Zusatzverbrauch"))
+        compose.onNodeWithText("Zusatzverbrauch").assertIsDisplayed()
+        compose.onNodeWithText("4,34 EUR").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
+        compose.onNodeWithText("Anmeldungen verwalten").performClick()
+        compose.runOnIdle { screen.value = screen.value.copy(claudeUsage = null,
+            claudeError = safeError(ClaudeUsageFormatException(ClaudeUsageSection.WINDOWS))) }
+        compose.onNodeWithText("Angemeldet · Verbrauch noch nicht geladen").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch erneut laden").performScrollTo().assertIsEnabled()
+    }
 }
