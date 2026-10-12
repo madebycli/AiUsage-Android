@@ -16,6 +16,8 @@ Kein Computer oder Export einer Desktop-Credential-Datei erforderlich.
 
 Die App erhält eine eigene Handy-Anmeldung und fragt die persönlichen Limits
 direkt bei Anthropic ab. Sie erneuert nur den Refresh-Token dieser Anmeldung.
+Der gemeldete Plan wird bei Anmeldung optional über `/api/oauth/profile`
+gelesen (maximal vier Sekunden); fehlende Planangaben bleiben unbekannt.
 Ein vorhandener Login in der offiziellen Claude-App wird nicht übernommen.
 Tokens/Code niemals in GitHub-Issues oder Chatnachrichten veröffentlichen.
 
@@ -38,6 +40,10 @@ Diese Android-Implementierung verwendet den Hosted-Code-Flow mit
 Zusätzlich geprüft: [ClaudexBar AUTH](https://github.com/ipangdz/claudexbar/blob/main/docs/AUTH.md),
 [offizielle Claude-Code-Anmeldung](https://code.claude.com/docs/en/authentication),
 [Anthropic-Anmeldehinweise](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account).
+Profil-Response-Referenz:
+[GooddyLife/claude-usage-monitor-plus](https://github.com/GooddyLife/claude-usage-monitor-plus/blob/main/docs/api-reference.md)
+(anonymisierte Originalantworten des Autors; unbekannte Felder werden nicht
+als Abo-Plan ausgegeben).
 
 Technisch umgesetzt, noch kein erfolgreicher Live-Login mit einem persönlichen
 Claude-Account behauptet. Anbieter-Endpunkte, Freigabe und Zugriff können sich

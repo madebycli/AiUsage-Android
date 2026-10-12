@@ -158,12 +158,22 @@ class ClaudeAuthTest {
             assertEquals(2, server.requestCount)
         } finally { server.shutdown() }
     }
-    @Test fun `cancelled generation cannot commit a fresh account`() {
-        val session = SessionGeneration()
-        val attempt = session.advance()
-        session.advance()
-        var saved = false
-        assertFalse(session.commitIfCurrent(attempt) { saved = true })
-        assertFalse(saved)
+    @Test fun `cancelling an in flight exchange consumes attempt without accepting an account`() = runBlocking {
+        val server = MockWebServer()
+        try {
+            server.enqueue(response().setBodyDelay(3, java.util.concurrent.TimeUnit.SECONDS))
+            server.start()
+            val store = MemoryStore()
+            val auth = ClaudeAuth(HttpTransport(), store, server.url("/token").toString())
+            auth.begin()
+            val code = "code#${store.pending!!.state}"
+            val exchange = async(Dispatchers.IO) { auth.complete(code) }
+            withContext(Dispatchers.IO) { assertNotNull(server.takeRequest(5, java.util.concurrent.TimeUnit.SECONDS)) }
+            exchange.cancelAndJoin()
+            assertNull(store.credential)
+            assertNull(store.pending)
+            try { auth.complete(code); fail() } catch (_: ClaudeLoginFailure) { }
+            assertEquals(1, server.requestCount)
+        } finally { server.shutdown() }
     }
 }

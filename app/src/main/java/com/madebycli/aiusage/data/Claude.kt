@@ -13,6 +13,25 @@ class ClaudeCredential(val access: String, val expiresAt: Long? = null, val plan
 }
 
 object ClaudeParser {
+    fun profilePlan(body: String): String? {
+        val root = appJson.parseToJsonElement(body) as? JsonObject ?: throw SchemaException()
+        val org = root.obj("organization")
+        val account = root.obj("account")
+        val tier = org?.text("rate_limit_tier").orEmpty()
+        val plan = when (org?.text("organization_type")) {
+            "claude_enterprise", "enterprise" -> "Enterprise"
+            "claude_team", "team" -> "Team"
+            "claude_max" -> "Max"
+            "claude_pro" -> "Pro"
+            else -> when {
+                account?.get("has_claude_max")?.jsonPrimitive?.booleanOrNull == true -> "Max"
+                account?.get("has_claude_pro")?.jsonPrimitive?.booleanOrNull == true -> "Pro"
+                else -> null
+            }
+        }
+        // False Pro/Max flags do not mean Free: Team/Enterprise also have them.
+        return plan?.let { it + if (it == "Max") when { "20x" in tier -> " 20x"; "5x" in tier -> " 5x"; else -> "" } else "" }
+    }
     fun credential(raw: String): ClaudeCredential {
         if (raw.length !in 1..65_536) throw SchemaException()
         val value = raw.trim()
@@ -86,6 +105,8 @@ object ClaudeParser {
 
 class ClaudeRepository(private val http: HttpTransport, private val endpoint: String = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1") {
     private val backoff = RequestBackoff()
+    suspend fun profilePlan(credential: ClaudeCredential): String? = ClaudeParser.profilePlan(http.get(
+        "https://api.anthropic.com/api/oauth/profile", mapOf("Authorization" to "Bearer ${credential.access}", "anthropic-beta" to "oauth-2025-04-20")))
     suspend fun fetch(credential: ClaudeCredential): UsageSnapshot {
         backoff.check()
         if (credential.expiresAt?.let { it <= Instant.now().epochSecond } == true) throw HttpFailure(401)

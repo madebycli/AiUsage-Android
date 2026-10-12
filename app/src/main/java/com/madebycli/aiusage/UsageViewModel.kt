@@ -317,7 +317,11 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
             claudeMutex.withLock {
                 try {
-                    val credentials = claudeAuth.complete(code)
+                    val issued = claudeAuth.complete(code)
+                    val plan = try { withTimeoutOrNull(4_000) { claudeRepository.profilePlan(issued) } }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { null }
+                    val credentials = ClaudeCredential(issued.access, issued.expiresAt, plan ?: issued.plan, issued.refresh, issued.phoneLogin)
                     currentCoroutineContext().ensureActive()
                     claudeGeneration.commitIfCurrent(generation) {
                         // Clear old measurements before replacing the account.

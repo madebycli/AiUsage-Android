@@ -8,6 +8,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ClaudeForecastTest {
+    @Test fun `phone profile preserves reported plan and does not infer Free for Team`() {
+        assertEquals("Max 20x", ClaudeParser.profilePlan("""{"account":{"has_claude_max":true},"organization":{"organization_type":"claude_max","rate_limit_tier":"default_claude_max_20x"}}"""))
+        assertEquals("Team", ClaudeParser.profilePlan("""{"account":{"has_claude_pro":false,"has_claude_max":false},"organization":{"organization_type":"claude_team"}}"""))
+        assertNull(ClaudeParser.profilePlan("""{"account":{"has_claude_pro":false,"has_claude_max":false}}"""))
+    }
     @Test fun `Claude parses only reported windows model caps extra money and usable grants`() {
         val body = """{"five_hour":{"utilization":42,"resets_at":"2026-10-12T18:00:00Z"},"seven_day":null,"seven_day_sonnet":{"utilization":18},"limits":[{"kind":"weekly_scoped","percent":7,"scope":{"model":{"display_name":"Fable"}}}],"extra_usage":{"is_enabled":true,"used_credits":1200.0,"monthly_limit":5000,"currency":"EUR","decimal_places":2},"cedar_ember":{"grants":[{"label":"One reset","resets_left":2,"usable_now":true},{"label":"Paused","resets_left":3,"usable_now":true,"paused":true}]}}"""
         val usage = ClaudeParser.parse(body, 50, "Max 5x")
