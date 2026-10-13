@@ -246,7 +246,8 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String, stats
             Text("Aktualisiere oben, um es erneut zu versuchen.", style = MaterialTheme.typography.bodySmall)
         } }
         usage?.let { snapshot ->
-            if (snapshot.warnings.isNotEmpty()) item { Notice(snapshot.warnings.joinToString("\n")) }
+            val warnings = snapshot.warnings.filterNot { it == snapshot.creditsWarning }
+            if (warnings.isNotEmpty()) item { Notice(warnings.joinToString("\n")) }
             snapshot.groups.forEachIndexed { index, group ->
                 if (group.name != active) item(key = "title:$index") { SectionTitle(group.name) }
                 items(group.windows, key = { "$index:${it.seconds}" }) { window -> WindowCard(window, now, window.seconds == 18000L) }

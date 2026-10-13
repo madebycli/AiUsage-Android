@@ -3,8 +3,40 @@ package com.madebycli.aiusage
 import com.madebycli.aiusage.data.*
 import org.junit.Assert.*
 import org.junit.Test
+import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 
 class UsageStatsTest {
+    @Test fun `API reporting sends only GETs with separate provider credentials and date bounds`() = runBlocking {
+        val server = MockWebServer(); server.start()
+        try {
+            val urls = mutableListOf<String>()
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                urls += chain.request().url.toString()
+                chain.proceed(chain.request().newBuilder().url(server.url(chain.request().url.encodedPath + "?" + chain.request().url.encodedQuery)).build())
+            }.build()
+            val repository = ApiStatsRepository(HttpTransport(client))
+            server.enqueue(MockResponse().setBody("""{"data":[{"start_time":1791849600,"results":[{"amount":{"value":0.25,"currency":"usd"}}]}],"has_more":false}"""))
+            val at = java.time.Instant.parse("2026-10-13T12:00:00Z").epochSecond
+            repository.fetch("Codex", "test-openai-admin", true, at)
+            val openai = server.takeRequest()
+            assertEquals("GET", openai.method)
+            assertEquals("Bearer test-openai-admin", openai.getHeader("Authorization"))
+            assertNull(openai.getHeader("x-api-key"))
+            assertEquals("api.openai.com", java.net.URI(urls.first()).host)
+            assertTrue(openai.path!!.contains("bucket_width=1d"))
+            server.enqueue(MockResponse().setBody("""{"data":[{"starting_at":"2026-10-13T00:00:00Z","results":[{"output_tokens":20}]}],"has_more":false}"""))
+            repository.fetch("Claude Code", "test-claude-admin", false, at)
+            val claude = server.takeRequest()
+            assertEquals("GET", claude.method)
+            assertEquals("test-claude-admin", claude.getHeader("x-api-key"))
+            assertNull(claude.getHeader("Authorization"))
+            assertEquals("api.anthropic.com", java.net.URI(urls.last()).host)
+            assertTrue(claude.path!!.contains("ending_at=2026-10-14"))
+        } finally { server.shutdown() }
+    }
     @Test fun `optional credit balance and individual spend values preserve fractional amounts`() {
         val usage = UsageParser.parse("""{"rate_limit":null,"credits":{"has_credits":true,"unlimited":false,"balance":"8.25"},"spend_control":{"individual_limit":{"limit":"25000","used":"8000.5","remaining_percent":68,"resets_at":200000}}}""", 1)
         assertEquals(8.25, usage.accountCredits!!.balance!!, 0.0)
