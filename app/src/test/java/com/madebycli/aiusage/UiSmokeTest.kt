@@ -189,7 +189,7 @@ class UiSmokeTest {
         models.put("usage", model)
         val now = Instant.now().epochSecond
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
-        val report = StatsParser.codex(CodexReport.PROFILE, """{"stats":{"lifetime_tokens":2000,"current_streak_days":2,"daily_usage_buckets":[{"start_date":"$today","tokens":250},{"start_date":"${today.minusDays(1)}","tokens":1750}]}}""", now)
+        val report = StatsParser.codex(CodexReport.PROFILE, """{"stats":{"lifetime_tokens":2150000000,"current_streak_days":2,"daily_usage_buckets":[{"start_date":"$today","tokens":250},{"start_date":"${today.minusDays(1)}","tokens":1750}]}}""", now)
         val screen = UiState(initializing = false, claudeInitializing = false, connected = true,
             usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 1000)))), now), stats = StatsBundle(listOf(report)))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
@@ -202,6 +202,11 @@ class UiSmokeTest {
         compose.onNodeWithText("2.000").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
         screenshot("stats-dark")
+        compose.onNodeWithText("Messwert: Tokens").performClick()
+        compose.onNodeWithText("Tokens insgesamt").performClick()
+        compose.onNodeWithText("2,15 Mrd.").assertIsDisplayed()
+        compose.onNodeWithText("2.150.000.000").assertIsDisplayed()
+        screenshot("stats-large-dark")
         compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.ScrollToIndex)).performScrollToNode(hasText("Datenquellen"))
         compose.onNodeWithText("Datenquellen").performClick()
         compose.onNodeWithText("Admin-API-Key").performScrollTo().assertIsDisplayed()

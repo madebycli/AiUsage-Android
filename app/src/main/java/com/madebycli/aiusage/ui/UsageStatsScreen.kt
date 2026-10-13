@@ -95,12 +95,12 @@ internal fun UsageStatsScreen(provider: String, state: UiState, model: UsageView
                     MetricPicker("Produkt / Modell / Kategorie", labels, label.orEmpty(), { series = it }, { it })
                     if (daily.isNotEmpty()) {
                         SegmentedTabGroup(listOf(7, 30), period, { period = it }, { "$it Tage" }, fillEqually = true)
-                        Text(statsNumber(daily.values.sum()), style = MaterialTheme.typography.displayLarge.copy(fontSize = 56.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        BigStatNumber(daily.values.sum())
                         Text(metric.second, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         DailyStatsChart(List(period) { index -> daily[end.minusDays((period - index - 1).toLong()).toString()] })
                         Text("${daily.keys.first()} – ${daily.keys.last()} · ${daily.count { it.value > 0 }} aktive Tage", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else points.firstOrNull()?.let { point ->
-                        Text(statsNumber(point.value), style = MaterialTheme.typography.displayLarge.copy(fontSize = 56.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        BigStatNumber(point.value)
                         Text("${point.unit} · Gesamtzeitraum des Berichts", style = MaterialTheme.typography.labelMedium)
                     }
                 } else Text(if (report.error != null) "Keine lesbaren Werte" else "Der Anbieter meldet keine Werte für diesen Bericht.", style = MaterialTheme.typography.bodyMedium)
@@ -152,6 +152,17 @@ internal fun UsageStatsScreen(provider: String, state: UiState, model: UsageView
     }
 }
 
+@Composable
+private fun BigStatNumber(value: Double) {
+    val headline = when {
+        kotlin.math.abs(value) >= 1e12 -> "${statsNumber(value / 1e12)} Bio."
+        kotlin.math.abs(value) >= 1e9 -> "${statsNumber(value / 1e9)} Mrd."
+        kotlin.math.abs(value) >= 1e6 -> "${statsNumber(value / 1e6)} Mio."
+        else -> statsNumber(value)
+    }
+    Text(headline, style = MaterialTheme.typography.displayLarge.copy(fontSize = 56.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    if (headline != statsNumber(value)) Text(statsNumber(value), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
 @Composable
 private fun MetricPicker(title: String, options: List<String>, selected: String, select: (String) -> Unit, label: (String) -> String) {
     var open by remember { mutableStateOf(false) }
