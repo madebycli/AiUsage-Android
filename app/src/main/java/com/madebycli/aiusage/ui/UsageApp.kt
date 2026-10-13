@@ -72,7 +72,8 @@ import kotlinx.coroutines.withContext
 private val cardShape = RoundedCornerShape(28.dp)
 
 @Composable
-fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String? = null) {
+fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String? = null, notificationEvent: Long = 0) {
+    var handledNotification by rememberSaveable { mutableLongStateOf(0) }
     var page by rememberSaveable { mutableIntStateOf(0) }
     var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
     var resetProvider by rememberSaveable { mutableStateOf("Codex") }
@@ -96,8 +97,9 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     LaunchedEffect(state.claudeLoginResult) {
         if (state.claudeLoginResult > 0 && state.claudeConnected) { page = 0; selectedProvider = "Claude Code" }
     }
-    LaunchedEffect(notificationProvider, state.connected, state.claudeConnected) {
-        if (notificationProvider == "Codex" && state.connected || notificationProvider == "Claude Code" && state.claudeConnected) {
+    LaunchedEffect(notificationEvent, notificationProvider, state.connected, state.claudeConnected) {
+        if (notificationEvent > 0 && notificationEvent != handledNotification && (notificationProvider == "Codex" && state.connected || notificationProvider == "Claude Code" && state.claudeConnected)) {
+            handledNotification = notificationEvent
             page = 0; selectedProvider = notificationProvider; resetPage = null
         }
     }

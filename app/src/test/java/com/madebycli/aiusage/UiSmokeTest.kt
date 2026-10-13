@@ -10,6 +10,10 @@ import androidx.test.core.app.ApplicationProvider
 import com.axiel7.anihyou.core.ui.theme.AniHyouTheme
 import com.madebycli.aiusage.data.*
 import com.madebycli.aiusage.ui.UsageApp
+import androidx.work.Configuration
+import androidx.work.testing.WorkManagerTestInitHelper
+import androidx.work.testing.SynchronousExecutor
+import org.junit.Before
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -26,6 +30,10 @@ import java.time.Instant
 class UiSmokeTest {
     @get:Rule val compose = createComposeRule()
     private val models = ViewModelStore()
+    @Before fun initializeBackgroundScheduler() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(ApplicationProvider.getApplicationContext(),
+            Configuration.Builder().setExecutor(SynchronousExecutor()).build())
+    }
     @After fun clearModels() = models.clear()
     @Test fun `signed out screen has no quotas preview navigation or public data`() {
         val model = UsageViewModel(ApplicationProvider.getApplicationContext())
@@ -158,6 +166,21 @@ class UiSmokeTest {
         compose.onNodeWithText("Claude Code").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("Anmeldungen verwalten").assertIsDisplayed()
+    }
+    @Test fun `notification tap is consumed once and does not override a later Claude login`() {
+        val model = UsageViewModel(ApplicationProvider.getApplicationContext())
+        models.put("usage", model)
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true))
+        val event = mutableStateOf(1L)
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model, "Codex", event.value) } }
+        compose.onNodeWithText("Codex").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.runOnIdle { screen.value = screen.value.copy(claudeConnected = true, claudeLoginResult = 1) }
+        compose.onNodeWithText("Claude Code").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.runOnIdle { event.value = 2L }
+        compose.onNodeWithText("Codex").assertIsDisplayed()
     }
     private fun screenshot(name: String) {
         compose.waitForIdle()

@@ -2,6 +2,7 @@ package com.madebycli.aiusage
 
 import android.os.Bundle
 import android.content.Intent
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
@@ -17,13 +18,16 @@ import com.axiel7.anihyou.core.ui.theme.AniHyouTheme
 import com.madebycli.aiusage.ui.UsageApp
 
 class MainActivity : ComponentActivity() {
+    private var notificationEvent by mutableLongStateOf(0)
+    override fun onSaveInstanceState(outState: Bundle) { outState.putLong("notificationEvent", notificationEvent); super.onSaveInstanceState(outState) }
     private var notificationProvider by mutableStateOf<String?>(null)
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationProvider = intent.getStringExtra("provider") }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationProvider = intent.getStringExtra("provider"); notificationEvent++ }
     private val model: UsageViewModel by viewModels()
     override fun onResume() { super.onResume(); model.foregroundRefresh() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationProvider = intent.getStringExtra("provider")
+        notificationEvent = savedInstanceState?.getLong("notificationEvent") ?: if (notificationProvider != null) 1L else 0L
         enableEdgeToEdge()
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
@@ -35,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             AniHyouTheme(darkTheme = dark, dynamicColor = state.dynamicColor, blackColors = state.amoled) {
-                UsageApp(state, model, notificationProvider)
+                UsageApp(state, model, notificationProvider, notificationEvent)
             }
         }
     }

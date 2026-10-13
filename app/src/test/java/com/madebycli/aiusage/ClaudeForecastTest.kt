@@ -60,7 +60,7 @@ class ClaudeForecastTest {
             assertEquals("no-cache, no-store", request.getHeader("Cache-Control"))
             assertEquals("Bearer access-test", request.getHeader("Authorization"))
             assertTrue(request.getHeader("User-Agent")!!.startsWith("claude-cli/2.1.281"))
-            assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/0.4.1"))
+            assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/${BuildConfig.VERSION_NAME}"))
         } finally { server.shutdown() }
     }
     @Test fun `source horizons are preserved without converting six hours to forty eight`() {

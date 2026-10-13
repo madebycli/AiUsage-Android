@@ -59,7 +59,7 @@ object ResetAlerts {
             // Refreshing an unchanged deadline must not reset an already-running job.
             if (prefs.getString("scheduled.${rule.key}", null) == signature) return@forEach
             val request = OneTimeWorkRequestBuilder<ResetAlertWorker>()
-                .setInputData(workDataOf("rule" to rule.key, "reset" to reset, "generation" to generation!!))
+                .setInputData(workDataOf("rule" to rule.key, "reset" to reset, "generation" to generation!!, "scheduled" to signature))
                 .setInitialDelay((reset - lead * 60L - now).coerceAtLeast(0), TimeUnit.SECONDS).build()
             work.enqueueUniqueWork(rule.channel, ExistingWorkPolicy.REPLACE, request)
             prefs.edit().putString("scheduled.${rule.key}", signature).apply()
@@ -76,8 +76,11 @@ class ResetAlertWorker(context: Context, parameters: WorkerParameters) : Corouti
         val prefs = ResetAlerts.prefs(applicationContext)
         val target = inputData.getLong("reset", 0)
         val generation = inputData.getString("generation") ?: return Result.success()
+        val planned = inputData.getString("scheduled") ?: return Result.success()
+        var delivered = false
         val lock = if (rule.provider == "Codex") AccountAccess.codex else AccountAccess.claude
-        lock.withLock {
+        try { lock.withLock {
+            if (prefs.getString("scheduled.${rule.key}", null) != planned) return@withLock
             if (!prefs.getBoolean("enabled", false) || !prefs.getBoolean("rule.${rule.key}", true) ||
                 prefs.getString("generation.${rule.provider}", null) != generation || !ResetAlerts.permitted(applicationContext)) return@withLock
             val store = SecureStore(applicationContext, if (rule.provider == "Codex") "account" else "claude")
@@ -86,19 +89,24 @@ class ResetAlertWorker(context: Context, parameters: WorkerParameters) : Corouti
             val now = Instant.now().epochSecond
             if (prefs.getBoolean("usedOnly", true) && usage?.groups?.firstOrNull { it.name == rule.provider }?.windows?.firstOrNull { it.seconds == rule.seconds }?.usedPercent?.let { it > 0 } != true) return@withLock
             if (!ResetAlerts.valid(rule, usage, target, now)) return@withLock
-            if (prefs.getString("delivered.${rule.key}", null) == "$generation:$target") return@withLock
+            if (prefs.getString("delivered.${rule.key}", null) == "$generation:$target") { delivered = true; return@withLock }
             ResetAlerts.channels(applicationContext)
             val intent = Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("provider", rule.provider)
             val content = PendingIntent.getActivity(applicationContext, rule.key.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             val remaining = target - now
             val message = if (remaining > 0) "Laut Anbieter Reset in ${(remaining + 59) / 60} Minuten." else "Gemeldeter Reset-Zeitpunkt erreicht. Verbrauch aktualisieren."
             synchronized(ResetAlerts.deliveryLock) {
-                if (prefs.getString("generation.${rule.provider}", null) != generation || !prefs.getBoolean("enabled", false)) return@synchronized
+                if (prefs.getString("generation.${rule.provider}", null) != generation || !prefs.getBoolean("enabled", false) || prefs.getString("scheduled.${rule.key}", null) != planned) return@synchronized
                 NotificationManagerCompat.from(applicationContext).notify(rule.channel.hashCode(), NotificationCompat.Builder(applicationContext, rule.channel)
                 .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${rule.provider} · ${rule.title}")
                 .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
                 .setAutoCancel(true).setOnlyAlertOnce(true).build())
                 prefs.edit().putString("delivered.${rule.key}", "$generation:$target").apply()
+                delivered = true
+            }
+        } } finally {
+            synchronized(ResetAlerts.deliveryLock) {
+                if (!delivered && prefs.getString("scheduled.${rule.key}", null) == planned) prefs.edit().remove("scheduled.${rule.key}").apply()
             }
         }
         return Result.success()

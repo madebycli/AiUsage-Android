@@ -42,13 +42,24 @@ class BackgroundSettingsTest {
     @Test fun `notification workers ignore disabled stale account generations`() = runBlocking {
         val rule = ResetAlerts.rules.first()
         val prefs = ResetAlerts.prefs(context)
-        prefs.edit().putBoolean("enabled", false).putString("generation.Codex", "new").commit()
+        prefs.edit().putBoolean("enabled", false).putString("generation.Codex", "new").putString("scheduled.${rule.key}", "old:200000:0").commit()
         val worker = TestListenableWorkerBuilder<ResetAlertWorker>(context)
-            .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old")).build()
+            .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
         assertNull(prefs.getString("delivered.${rule.key}", null))
+        assertNull(prefs.getString("scheduled.${rule.key}", null))
         ResetAlerts.invalidate(context, "Codex")
         assertNotEquals("new", prefs.getString("generation.Codex", null))
         assertNull(prefs.getString("generation.Claude Code", null))
     }
+    @Test fun `a replaced reminder cannot remove the new schedule`() = runBlocking {
+        val rule = ResetAlerts.rules.first()
+        val prefs = ResetAlerts.prefs(context)
+        prefs.edit().putString("scheduled.${rule.key}", "new:200000:15").commit()
+        val worker = TestListenableWorkerBuilder<ResetAlertWorker>(context)
+            .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
+        assertEquals(ListenableWorker.Result.success(), worker.doWork())
+        assertEquals("new:200000:15", prefs.getString("scheduled.${rule.key}", null))
+    }
+
 }
