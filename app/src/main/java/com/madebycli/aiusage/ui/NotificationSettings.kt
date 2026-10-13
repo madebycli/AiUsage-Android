@@ -37,7 +37,7 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
         }
         SectionTitle("Reset-Benachrichtigungen")
         SoftCard {
-            SwitchRow("Benachrichtigungen", "Gemeldete Account-Termine, kein Forecast", checked("enabled", false)) { enabled ->
+            SwitchRow("Reset-Hinweise", "Gemeldete Account-Termine, kein Forecast", checked("enabled", false)) { enabled ->
                 if (enabled && Build.VERSION.SDK_INT >= 33 && !ResetAlerts.permitted(context)) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 else update("enabled", enabled)
             }
