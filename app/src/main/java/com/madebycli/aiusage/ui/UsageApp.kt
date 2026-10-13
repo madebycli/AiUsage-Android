@@ -49,7 +49,7 @@ import java.util.Locale
 
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.graphics.vector.vectorResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
