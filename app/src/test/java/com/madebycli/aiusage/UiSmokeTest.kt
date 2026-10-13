@@ -177,11 +177,16 @@ class UiSmokeTest {
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model, "Codex", event.value) } }
         compose.onNodeWithText("Codex").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        compose.onNodeWithText("Statistiken").performClick()
+        compose.onNodeWithText("Statistiken · Codex").assertIsDisplayed()
+        compose.runOnIdle { event.value = 2L }
+        compose.onNodeWithText("Statistiken · Codex").assertDoesNotExist()
+        compose.onNodeWithText("Codex").assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.runOnIdle { screen.value = screen.value.copy(claudeConnected = true, claudeLoginResult = 1) }
         compose.onNodeWithText("Claude Code").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
-        compose.runOnIdle { event.value = 2L }
+        compose.runOnIdle { event.value = 3L }
         compose.onNodeWithText("Codex").assertIsDisplayed()
     }
     @Test fun `provider daily tokens show real activity and detailed statistics without fetch counts`() {

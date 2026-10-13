@@ -98,12 +98,12 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     LaunchedEffect(state.connected, state.claudeConnected, state.initializing, state.claudeInitializing) { model.syncBackground() }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
     LaunchedEffect(state.claudeLoginResult) {
-        if (state.claudeLoginResult > 0 && state.claudeConnected) { page = 0; selectedProvider = "Claude Code" }
+        if (state.claudeLoginResult > 0 && state.claudeConnected) { page = 0; selectedProvider = "Claude Code"; statsProvider = null; resetPage = null }
     }
     LaunchedEffect(notificationEvent, notificationProvider, state.connected, state.claudeConnected) {
         if (notificationEvent > 0 && notificationEvent != handledNotification && (notificationProvider == "Codex" && state.connected || notificationProvider == "Claude Code" && state.claudeConnected)) {
             handledNotification = notificationEvent
-            page = 0; selectedProvider = notificationProvider; resetPage = null
+            page = 0; selectedProvider = notificationProvider; resetPage = null; statsProvider = null
         }
     }
     val refreshAction: @Composable RowScope.() -> Unit = {
