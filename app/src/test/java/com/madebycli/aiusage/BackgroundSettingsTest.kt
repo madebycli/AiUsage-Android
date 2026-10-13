@@ -6,6 +6,7 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.testing.WorkManagerTestInitHelper
 import androidx.work.testing.SynchronousExecutor
 import com.madebycli.aiusage.background.*
+import com.madebycli.aiusage.data.StatsBeta
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
@@ -20,6 +21,7 @@ class BackgroundSettingsTest {
     private val context = ApplicationProvider.getApplicationContext<android.app.Application>()
     @Before fun init() {
         context.getSharedPreferences("alerts", 0).edit().clear().commit()
+        context.getSharedPreferences("features", 0).edit().clear().commit()
         WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
     }
     @Test fun `four hour work migrates old daily schedule is unique and disabled removes it`() {
@@ -42,6 +44,25 @@ class BackgroundSettingsTest {
         assertEquals(ListenableWorker.Result.success(), result)
         assertFalse(context.noBackupFilesDir.resolve("usage.enc").exists())
         assertFalse(context.noBackupFilesDir.resolve("claude.usage.enc").exists())
+    }
+    @Test fun `statistics opt in persists but stale background reports are rejected after opt out`() {
+        assertFalse(StatsBeta.enabled(context))
+        StatsBeta.setEnabled(context, true)
+        val revision = StatsBeta.revision(context)
+        var writes = 0
+        StatsBeta.ifCurrent(context, revision) { writes++ }
+        assertEquals(1, writes)
+        StatsBeta.setEnabled(context, false)
+        StatsBeta.ifCurrent(context, revision) { writes++ }
+        StatsBeta.setEnabled(context, true)
+        StatsBeta.ifCurrent(context, revision) { writes++ }
+        assertEquals(1, writes)
+        assertTrue(StatsBeta.enabled(context))
+        // Quota refresh and reminder configuration are independent of the beta switch.
+        DailyRefresh.sync(context, true)
+        StatsBeta.setEnabled(context, false)
+        DailyRefresh.sync(context, true)
+        assertEquals(1, WorkManager.getInstance(context).getWorkInfosForUniqueWork(DailyRefresh.NAME).get().count { !it.state.isFinished })
     }
     @Test fun `notification workers ignore disabled stale account generations`() = runBlocking {
         val rule = ResetAlerts.rules.first()

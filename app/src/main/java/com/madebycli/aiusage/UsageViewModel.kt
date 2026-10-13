@@ -23,6 +23,7 @@ data class UiState(
     val observations: List<ResetObservation> = emptyList(),
     val days: List<UsageDay> = emptyList(), val claudeDays: List<UsageDay> = emptyList(),
     val stats: StatsBundle = StatsBundle(), val claudeStats: StatsBundle = StatsBundle(),
+    val statsBetaEnabled: Boolean = false,
     val statsLoading: Boolean = false, val claudeStatsLoading: Boolean = false,
     val statsError: String? = null, val claudeStatsError: String? = null,
     val apiConnected: Boolean = false, val claudeApiConnected: Boolean = false,
@@ -68,6 +69,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val publicQueue = RefreshQueue(viewModelScope) { readFeed() }
     private var loginJob: Job? = null
     private val mutable = MutableStateFlow(UiState(
+        statsBetaEnabled = StatsBeta.enabled(application),
         source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false)
@@ -80,7 +82,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 lock.withLock {
                     runCatching {
                         val record = (if (provider == "Codex") store else claudeStore).readRecord()
-                        val reports = (if (provider == "Codex") store else claudeStore).readStats()
+                        val reports = if (state.value.statsBetaEnabled) (if (provider == "Codex") store else claudeStore).readStats() else StatsBundle()
                         mutable.update { if (provider == "Codex" && it.connected) it.copy(usage = record.usage, days = record.days, stats = reports)
                             else if (provider == "Claude Code" && it.claudeConnected) it.copy(claudeUsage = record.usage, claudeDays = record.days) else it }
                     }
@@ -100,8 +102,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 } else PersonalRecord()
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(initializing = false,
                     connected = tokens != null, usage = record.usage, observations = record.observations, days = record.days, storageWarning = recordWarning,
-                    stats = if (tokens != null) runCatching { store.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
-                    apiConnected = tokens != null && runCatching { store.readAnalyticsKey() != null }.getOrDefault(false)) }
+                    stats = if (tokens != null && it.statsBetaEnabled) runCatching { store.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
+                    apiConnected = tokens != null && it.statsBetaEnabled && runCatching { store.readAnalyticsKey() != null }.getOrDefault(false)) }
                 if (tokens != null && session.isCurrent(generation)) privateQueue.request()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
@@ -116,8 +118,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     val record = if (credentials != null) runCatching { claudeStore.readRecord() }.getOrDefault(PersonalRecord()) else PersonalRecord()
                     val pendingUrl = claudeAuth.pendingUrl()
                     mutable.update { it.copy(claudeInitializing = false, claudeConnected = credentials != null, claudeUsage = record.usage, claudeDays = record.days,
-                        claudeStats = if (credentials != null) runCatching { claudeStore.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
-                        claudeApiConnected = credentials != null && runCatching { claudeStore.readAnalyticsKey() != null }.getOrDefault(false),
+                        claudeStats = if (credentials != null && it.statsBetaEnabled) runCatching { claudeStore.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
+                        claudeApiConnected = credentials != null && it.statsBetaEnabled && runCatching { claudeStore.readAnalyticsKey() != null }.getOrDefault(false),
                         claudeLoginOpen = pendingUrl != null, claudeLoginUrl = pendingUrl) }
                     if (credentials != null) claudeQueue.request()
                 } catch (e: CancellationException) { throw e }
@@ -126,7 +128,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     private fun statsState(provider: String, bundle: StatsBundle? = null, loading: Boolean? = null, error: String? = null, api: Boolean? = null) {
-        mutable.update { if (provider == "Codex") it.copy(stats = bundle ?: it.stats, statsLoading = loading ?: it.statsLoading,
+        mutable.update { if (!it.statsBetaEnabled) it else if (provider == "Codex") it.copy(stats = bundle ?: it.stats, statsLoading = loading ?: it.statsLoading,
             statsError = error, apiConnected = api ?: it.apiConnected) else it.copy(claudeStats = bundle ?: it.claudeStats,
             claudeStatsLoading = loading ?: it.claudeStatsLoading, claudeStatsError = error, claudeApiConnected = api ?: it.claudeApiConnected) }
     }
@@ -135,6 +137,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             .putLong("retry.$provider", Instant.now().epochSecond + (error.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
     }
     fun refreshStats(provider: String, force: Boolean = false, profileOnly: Boolean = false) {
+        if (!state.value.statsBetaEnabled) return
         if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
         val reports = if (provider == "Codex") state.value.stats else state.value.claudeStats
         val now = Instant.now().epochSecond
@@ -145,7 +148,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         if (profileOnly && statsPrefs.getLong("profile.$provider", 0) > now) return
         if (!force && reports.reports.any { (if (profileOnly) it.id == CodexReport.PROFILE.id else it.id.startsWith("codex.") && it.id != CodexReport.PROFILE.id) && now - it.fetchedAt < 14400 }) return
         val generation = if (provider == "Codex") session.current() else claudeGeneration.current()
-        fun current() = if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected
+        val statsRevision = StatsBeta.revision(getApplication<Application>())
+        fun current() = StatsBeta.isCurrent(getApplication<Application>(), statsRevision) && (if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected)
         val lock = if (provider == "Codex") quotaMutex else claudeMutex
         val target = if (provider == "Codex") store else claudeStore
         statsState(provider, loading = true)
@@ -168,7 +172,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                             (previous.reports.firstOrNull { it.id == id } ?: StatsReport(id, title, scope, 0)).copy(error = text)
                         }
                         currentCoroutineContext().ensureActive()
-                        if (current()) { val next = previous.merge(result); target.writeStats(next); statsState(provider, bundle = next) }
+                        StatsBeta.ifCurrent(getApplication<Application>(), statsRevision) {
+                            if (current()) { val next = previous.merge(result); target.writeStats(next); statsState(provider, bundle = next) }
+                        }
                     }
                 }
                 if (provider == "Codex") {
@@ -193,22 +199,27 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun importClaudeStats(raw: String) {
-        if (!state.value.claudeConnected || statsJobs["Claude Code"]?.isActive == true) return
+        if (!state.value.statsBetaEnabled || !state.value.claudeConnected || statsJobs["Claude Code"]?.isActive == true) return
         val generation = claudeGeneration.current()
+        val statsRevision = StatsBeta.revision(getApplication<Application>())
         statsState("Claude Code", loading = true)
         statsJobs["Claude Code"] = viewModelScope.launch(Dispatchers.IO) {
             try { claudeMutex.withLock {
                 require(raw.toByteArray().size <= 1_048_576)
                 val report = StatsParser.claudeFile(raw, Instant.now().epochSecond)
-                if (!claudeGeneration.isCurrent(generation) || !state.value.claudeConnected) return@withLock
-                val next = claudeStore.readStats().merge(report)
-                claudeStore.writeStats(next); statsState("Claude Code", bundle = next)
+                StatsBeta.ifCurrent(getApplication<Application>(), statsRevision) {
+                    if (claudeGeneration.isCurrent(generation) && state.value.claudeConnected) {
+                        val next = claudeStore.readStats().merge(report)
+                        claudeStore.writeStats(next); statsState("Claude Code", bundle = next)
+                    }
+                }
             } } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { if (claudeGeneration.isCurrent(generation)) statsState("Claude Code", error = "Die Datei ist kein lesbarer Claude-Code-Statistikbericht (maximal 1 MiB).") }
-            finally { if (claudeGeneration.isCurrent(generation)) statsState("Claude Code", loading = false, error = state.value.claudeStatsError) }
+            catch (_: Exception) { if (StatsBeta.isCurrent(getApplication<Application>(), statsRevision) && claudeGeneration.isCurrent(generation)) statsState("Claude Code", error = "Die Datei ist kein lesbarer Claude-Code-Statistikbericht (maximal 1 MiB).") }
+            finally { if (StatsBeta.isCurrent(getApplication<Application>(), statsRevision) && claudeGeneration.isCurrent(generation)) statsState("Claude Code", loading = false, error = state.value.claudeStatsError) }
         }
     }
     fun connectAnalytics(provider: String, raw: String) {
+        if (!state.value.statsBetaEnabled) return
         if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
         if (getApplication<Application>().getSharedPreferences("stats-refresh", 0).getLong("retry.$provider", 0) > Instant.now().epochSecond) {
             statsState(provider, error = "Der Anbieter hat eine Wartezeit für Statistiken gesetzt."); return
@@ -218,24 +229,27 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             statsState(provider, error = "Hier wird ein separater Admin-API-Key benötigt, kein persönlicher Abo-Token."); return
         }
         val generation = if (provider == "Codex") session.current() else claudeGeneration.current()
-        fun current() = if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected
+        val statsRevision = StatsBeta.revision(getApplication<Application>())
+        fun current() = StatsBeta.isCurrent(getApplication<Application>(), statsRevision) && (if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected)
         statsState(provider, loading = true)
         statsJobs[provider] = viewModelScope.launch(Dispatchers.IO) {
             val lock = if (provider == "Codex") quotaMutex else claudeMutex
             val target = if (provider == "Codex") store else claudeStore
             try { lock.withLock {
+                if (!current()) return@withLock
                 val repository = ApiStatsRepository(http)
                 val report = withTimeout(15_000) { repository.fetch(provider, key, false, Instant.now().epochSecond) }
                 currentCoroutineContext().ensureActive()
                 if (current()) {
-                    target.writeAnalyticsKey(key)
+                    StatsBeta.ifCurrent(getApplication<Application>(), statsRevision) { if (current()) target.writeAnalyticsKey(key) }
+                    if (!current()) return@withLock
                     var next = target.readStats().merge(report)
                     val costs = try { withTimeout(8_000) { repository.fetch(provider, key, true, Instant.now().epochSecond) } }
                     catch (_: TimeoutCancellationException) { StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = "Kostenabruf hat zu lange gedauert.") }
                     catch (e: CancellationException) { throw e }
                     catch (e: Exception) { statsBackoff(provider, e); StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = safeError(e)) }
                     next = next.merge(costs)
-                    if (current()) { target.writeStats(next); statsState(provider, bundle = next, api = true) }
+                    StatsBeta.ifCurrent(getApplication<Application>(), statsRevision) { if (current()) { target.writeStats(next); statsState(provider, bundle = next, api = true) } }
                 }
             } } catch (e: TimeoutCancellationException) { if (current()) statsState(provider, error = "API-Prüfung hat zu lange gedauert.") }
             catch (e: CancellationException) { throw e }
@@ -605,6 +619,37 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun foregroundRefresh() { if (!state.value.initializing && !state.value.claudeInitializing) refresh() }
+    fun setStatsBeta(enabled: Boolean) {
+        if (enabled == state.value.statsBetaEnabled) return
+        StatsBeta.setEnabled(getApplication<Application>(), enabled)
+        statsJobs.values.forEach { it.cancel() }
+        statsJobs.clear()
+        mutable.update { it.copy(statsBetaEnabled = enabled, stats = StatsBundle(), claudeStats = StatsBundle(),
+            statsLoading = false, claudeStatsLoading = false, statsError = null, claudeStatsError = null,
+            apiConnected = false, claudeApiConnected = false) }
+        if (!enabled) return
+        val revision = StatsBeta.revision(getApplication<Application>())
+        val codexGeneration = session.current()
+        val claudeSession = claudeGeneration.current()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                for (provider in listOf("Codex", "Claude Code")) {
+                    val lock = if (provider == "Codex") quotaMutex else claudeMutex
+                    val target = if (provider == "Codex") store else claudeStore
+                    lock.withLock {
+                        val connected = if (provider == "Codex") state.value.connected && session.isCurrent(codexGeneration)
+                            else state.value.claudeConnected && claudeGeneration.isCurrent(claudeSession)
+                        if (connected && StatsBeta.isCurrent(getApplication<Application>(), revision)) {
+                            val bundle = runCatching { target.readStats() }.getOrDefault(StatsBundle())
+                            val api = runCatching { target.readAnalyticsKey() != null }.getOrDefault(false)
+                            StatsBeta.ifCurrent(getApplication<Application>(), revision) { statsState(provider, bundle = bundle, api = api) }
+                        }
+                    }
+                }
+            }
+            if (StatsBeta.isCurrent(getApplication<Application>(), revision)) refreshStats("Codex", profileOnly = true)
+        }
+    }
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }
     fun setDynamic(enabled: Boolean) { prefs.edit { putBoolean("dynamic", enabled) }; mutable.update { it.copy(dynamicColor = enabled) } }
     fun setAmoled(enabled: Boolean) { prefs.edit { putBoolean("amoled", enabled) }; mutable.update { it.copy(amoled = enabled) } }

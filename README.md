@@ -1,9 +1,11 @@
 # AI Usage Android
 
-0.5.0: a minimal rounded AniSync-inspired interface, consistent provider cards,
-recognizable Codex/Claude marks, and a per-horizon source consensus with centered
-probability bars. Sources/calculation/history live on separate titled subpages.
-See [design and calculation](docs/DESIGN-0.5.md).
+0.7.1: Nutzungsstatistiken und Kalender sind eine standardmäßig ausgeschaltete
+Beta. Aktivierung unter Einstellungen → Beta-Funktionen. Persönliche Limits,
+Reset-Hinweise und Forecasts bleiben verfügbar. Die AniSync-Oberfläche verwendet
+gemeinsame Karten, Anbieterlogos und einzelne Forecast-Ringe.
+Siehe [Beta-Verhalten](docs/USAGE-0.7.1.md), [Datenquellen](docs/USAGE-0.7.md)
+und [Design](docs/DESIGN-0.5.md).
 
 # AI Usage für Android
 

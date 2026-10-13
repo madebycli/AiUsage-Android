@@ -39,6 +39,7 @@ import java.util.Locale
 
 @Composable
 internal fun UsageStatsScreen(provider: String, state: UiState, model: UsageViewModel, now: Long) {
+    if (!state.statsBetaEnabled) return
     val stats = if (provider == "Codex") state.stats else state.claudeStats
     val loading = if (provider == "Codex") state.statsLoading else state.claudeStatsLoading
     val error = if (provider == "Codex") state.statsError else state.claudeStatsError

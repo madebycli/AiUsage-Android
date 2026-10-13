@@ -86,7 +86,8 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     val accounts = !anyConnected || page == 3
     val detail = selectedProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
     val resetDetail = resetPage?.takeIf { if (it.startsWith("Codex:")) state.connected else state.claudeConnected }
-    val statsDetail = statsProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
+    val statsDetail = statsProvider?.takeIf { state.statsBetaEnabled && (if (it == "Codex") state.connected else state.claudeConnected) }
+    LaunchedEffect(state.statsBetaEnabled) { if (!state.statsBetaEnabled) statsProvider = null }
     val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
     BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null || resetDetail != null || statsDetail != null))) {
@@ -218,7 +219,7 @@ private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit, stats
     LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.connected) item { ProviderBanner("Codex", state.usage, state.usageError, state.refreshing, now) { open("Codex") } }
         if (state.claudeConnected) item { ProviderBanner("Claude Code", state.claudeUsage, state.claudeError, state.claudeRefreshing, now) { open("Claude Code") } }
-        if (active != null) {
+        if (state.statsBetaEnabled && active != null) {
             item { SectionTitle("Aktivitätsverlauf") }
             if (names.size > 1) item { ProviderTabs(names, active, { calendarProvider = it }, inset = false) }
             val actual = reportedActivity(if (active == "Codex") state.stats else state.claudeStats, active)
@@ -237,7 +238,7 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String, stats
         item {
             Text(usage?.plan?.replaceFirstChar { it.titlecase() } ?: "Verbunden", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        item { SoftCard(contentPadding = PaddingValues(0.dp)) { MenuRow("Statistiken", Icons.Rounded.BarChart, stats) } }
+        if (state.statsBetaEnabled) item { SoftCard(contentPadding = PaddingValues(0.dp)) { MenuRow("Statistiken", Icons.Rounded.BarChart, stats) } }
         error?.let { item { Notice(it, true) } }
         if (active == "Codex") state.storageWarning?.let { item { Notice(it) } }
         if (usage == null) item { SoftCard {
@@ -569,6 +570,10 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -
         }
         Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow) { MenuRow("Benachrichtigungen & Aktualisierung", Icons.Rounded.Notifications, notifications) }
         SoftCard {
+            Text("Beta-Funktionen", style = MaterialTheme.typography.titleMedium)
+            SwitchRow("Nutzungsstatistiken (Beta)", "Kalender und zusätzliche Berichte für Codex und Claude. Verfügbarkeit je Account.", state.statsBetaEnabled, model::setStatsBeta)
+        }
+        SoftCard {
             Text("Darstellung", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Hell", ThemeMode.DARK to "Dunkel").forEach { (theme, label) -> FilterChip(state.theme == theme, { model.setTheme(theme) }, label = { Text(label) }) }
@@ -772,7 +777,7 @@ private fun StatusPill(text: String, icon: ImageVector) {
 internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.bodyLarge); Text(subtitle, style = MaterialTheme.typography.bodySmall) }
-        Switch(checked, onChange)
+        Switch(checked, onChange, modifier = Modifier.semantics { contentDescription = title })
     }
 }
 @Composable

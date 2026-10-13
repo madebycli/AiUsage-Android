@@ -54,11 +54,13 @@ class DailyUsageWorker(context: Context, parameters: WorkerParameters) : Corouti
             if (store.readTokens() == null) null else {
                 val auth = CodexAuth(http, store)
                 val usage = UsageRepository(auth).fetch()
-                // One small profile read supplies genuine daily token buckets, not fetch counts.
+                // Detailed daily statistics are opt-in. Quotas and alerts remain independent.
+                val statsRevision = StatsBeta.revision(applicationContext)
+                if (!StatsBeta.isCurrent(applicationContext, statsRevision)) return@measure usage
                 try {
                     if (applicationContext.getSharedPreferences("stats-refresh", 0).getLong("retry.Codex", 0) > java.time.Instant.now().epochSecond) return@measure usage
                     val profile = kotlinx.coroutines.withTimeout(6_000) { CodexStatsRepository(auth).fetch(CodexReport.PROFILE, java.time.Instant.now().epochSecond) }
-                    store.writeStats(store.readStats().merge(profile))
+                    StatsBeta.ifCurrent(applicationContext, statsRevision) { store.writeStats(store.readStats().merge(profile)) }
                 } catch (_: kotlinx.coroutines.TimeoutCancellationException) { /* Quota remains valid. */ }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) {

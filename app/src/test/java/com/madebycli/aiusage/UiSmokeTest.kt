@@ -1,6 +1,8 @@
 package com.madebycli.aiusage
 
 import android.graphics.Bitmap
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
@@ -31,6 +33,7 @@ class UiSmokeTest {
     @get:Rule val compose = createComposeRule()
     private val models = ViewModelStore()
     @Before fun initializeBackgroundScheduler() {
+        ApplicationProvider.getApplicationContext<android.app.Application>().getSharedPreferences("features", 0).edit().clear().commit()
         WorkManagerTestInitHelper.initializeTestWorkManager(ApplicationProvider.getApplicationContext(),
             Configuration.Builder().setExecutor(SynchronousExecutor()).build())
     }
@@ -53,7 +56,7 @@ class UiSmokeTest {
         val now = Instant.now().epochSecond
         val usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 9800), UsageWindow(36.0, 604800, now + 330000)))), now, 1)
         val claude = UsageSnapshot("Max 5x", listOf(QuotaGroup("Claude Code", listOf(UsageWindow(42.0, 18000, now + 7600), UsageWindow(18.0, 604800, now + 230000)))), now)
-        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true, usage = usage))
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true, usage = usage, statsBetaEnabled = true))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = screen.value.theme == ThemeMode.DARK) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Claude Code").assertDoesNotExist()
         compose.onNodeWithText("5 Stunden").assertIsDisplayed()
@@ -172,7 +175,7 @@ class UiSmokeTest {
     @Test fun `notification tap is consumed once and does not override a later Claude login`() {
         val model = UsageViewModel(ApplicationProvider.getApplicationContext())
         models.put("usage", model)
-        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true))
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true, statsBetaEnabled = true))
         val event = mutableStateOf(1L)
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model, "Codex", event.value) } }
         compose.onNodeWithText("Codex").assertIsDisplayed()
@@ -195,7 +198,7 @@ class UiSmokeTest {
         val now = Instant.now().epochSecond
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
         val report = StatsParser.codex(CodexReport.PROFILE, """{"stats":{"lifetime_tokens":2150000000,"current_streak_days":2,"daily_usage_buckets":[{"start_date":"$today","tokens":250},{"start_date":"${today.minusDays(1)}","tokens":1750}]}}""", now)
-        val screen = UiState(initializing = false, claudeInitializing = false, connected = true,
+        val screen = UiState(initializing = false, claudeInitializing = false, connected = true, statsBetaEnabled = true,
             usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 1000)))), now), stats = StatsBundle(listOf(report)))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
         compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").performScrollTo().assertIsDisplayed()
@@ -217,6 +220,49 @@ class UiSmokeTest {
         compose.onNodeWithText("Admin-API-Key").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("AI Usage").assertIsDisplayed()
+    }
+    @Test fun `statistics are hidden by default and opt out leaves an open statistics route`() {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val model = UsageViewModel(context)
+        models.put("usage", model)
+        val now = Instant.now().epochSecond
+        val usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 1000), UsageWindow(36.0, 604800, now + 200000)))), now)
+        val fixture = UiState(initializing = false, claudeInitializing = false, connected = true, usage = usage,
+            claudeConnected = true, claudeUsage = usage.copy(plan = "Pro", groups = usage.groups.map { it.copy(name = "Claude Code") }))
+        compose.setContent {
+            val actual by model.state.collectAsState()
+            AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(fixture.copy(statsBetaEnabled = actual.statsBetaEnabled), model) }
+        }
+        compose.onNodeWithText("Aktivitätsverlauf").assertDoesNotExist()
+        compose.onNodeWithText("Statistiken").assertDoesNotExist()
+        compose.onAllNodesWithText("5 Stunden")[0].assertIsDisplayed()
+        screenshot("beta-off-main-dark")
+        compose.onNodeWithText("Codex").performClick()
+        compose.onNodeWithText("Statistiken").assertDoesNotExist()
+        compose.onNodeWithText("Wöchentlich").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithText("Claude Code").performClick()
+        compose.onNodeWithText("Statistiken").assertDoesNotExist()
+        compose.onNodeWithText("5 Stunden").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("Nutzungsstatistiken (Beta)").performScrollTo().assertIsOff()
+        screenshot("beta-settings-dark")
+        compose.onNodeWithContentDescription("Nutzungsstatistiken (Beta)").performClick().assertIsOn()
+        org.junit.Assert.assertTrue(StatsBeta.enabled(context))
+        compose.onNode(hasText("Verbrauch") and hasClickAction()).performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Aktivitätsverlauf"))
+        compose.onNodeWithText("Aktivitätsverlauf").assertIsDisplayed()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Statistiken"))
+        compose.onNodeWithText("Statistiken").performClick()
+        compose.onNodeWithText("Statistiken · Codex").assertIsDisplayed()
+        compose.runOnIdle { model.setStatsBeta(false) }
+        compose.onNodeWithText("Statistiken · Codex").assertDoesNotExist()
+        compose.onNodeWithText("Aktivitätsverlauf").assertDoesNotExist()
+        compose.onNodeWithText("AI Usage").assertIsDisplayed()
+        val reopened = UsageViewModel(context)
+        models.put("reopened", reopened)
+        org.junit.Assert.assertFalse(reopened.state.value.statsBetaEnabled)
     }
     private fun screenshot(name: String) {
         compose.waitForIdle()
