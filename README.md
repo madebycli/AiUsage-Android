@@ -1,3 +1,10 @@
+# AI Usage Android
+
+0.5.0: a minimal rounded AniSync-inspired interface, consistent provider cards,
+recognizable Codex/Claude marks, and a per-horizon source consensus with centered
+probability bars. Sources/calculation/history live on separate titled subpages.
+See [design and calculation](docs/DESIGN-0.5.md).
+
 # AI Usage für Android
 
 Native Codex- und Claude-Code-Verbrauchsanzeige auf Basis von

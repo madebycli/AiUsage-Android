@@ -70,6 +70,7 @@ fun DefaultScaffoldWithMediumTopAppBar(
     modifier: Modifier = Modifier,
     snackbarHost: @Composable () -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable (RowScope.() -> Unit) = {},
     scrollBehavior: TopAppBarScrollBehavior,
@@ -88,6 +89,7 @@ fun DefaultScaffoldWithMediumTopAppBar(
                 colors = topAppBarColors,
             )
         },
+        bottomBar = bottomBar,
         snackbarHost = snackbarHost,
         floatingActionButton = floatingActionButton,
         contentWindowInsets = contentWindowInsets,

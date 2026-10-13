@@ -19,7 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithLargeTopAppBar
+import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithMediumTopAppBar
 import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithSmallTopAppBar
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
@@ -27,6 +27,9 @@ import androidx.compose.ui.platform.LocalContext
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +47,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import com.madebycli.aiusage.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -65,16 +72,20 @@ private val cardShape = RoundedCornerShape(28.dp)
 fun UsageApp(state: UiState, model: UsageViewModel) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
+    var resetProvider by rememberSaveable { mutableStateOf("Codex") }
+    var resetPage by rememberSaveable { mutableStateOf<String?>(null) }
     val now = rememberNow()
     val uri = LocalUriHandler.current
     val context = LocalContext.current
     val anyConnected = state.connected || state.claudeConnected
     val accounts = !anyConnected || page == 3
     val detail = selectedProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
+    val resetDetail = resetPage?.takeIf { if (it.startsWith("Codex:")) state.connected else state.claudeConnected }
     val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
-    BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null))) {
+    BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null || resetDetail != null))) {
         if (state.claudeLoginOpen) model.cancelClaudeLogin()
+        else if (resetDetail != null) resetPage = null
         else if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
     }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
@@ -103,13 +114,20 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
             ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
             else Scaffold { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
         }
+        resetDetail != null -> DefaultScaffoldWithSmallTopAppBar(
+            title = "${resetDetail.substringAfter(':')} · ${resetDetail.substringBefore(':')}", scrollBehavior = detailScroll,
+            navigationIcon = { IconButton(onClick = { resetPage = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
+            actions = refreshAction
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+            ResetDetailsScreen(state, now, model, resetDetail.substringBefore(':'), resetDetail.substringAfter(':'))
+        } }
         detail != null -> DefaultScaffoldWithSmallTopAppBar(
             title = detail, scrollBehavior = detailScroll,
             modifier = Modifier.nestedScroll(detailScroll.nestedScrollConnection),
             navigationIcon = { IconButton(onClick = { selectedProvider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
             actions = refreshAction
         ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ProviderUsageScreen(state, now, detail) } }
-        else -> DefaultScaffoldWithLargeTopAppBar(
+        else -> DefaultScaffoldWithMediumTopAppBar(
             title = when (page) { 1 -> "Resets"; 2 -> "Einstellungen"; else -> "AI Usage" },
             modifier = Modifier.nestedScroll(mainScroll.nestedScrollConnection),
             scrollBehavior = mainScroll, actions = refreshAction,
@@ -124,7 +142,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
                 when (page) {
-                    1 -> ResetScreen(state, now, model)
+                    1 -> ResetScreen(state, now, resetProvider, { resetProvider = it }) { provider, destination -> resetPage = "$provider:$destination" }
                     2 -> SettingsScreen(state, model) { page = 3 }
                     else -> UsageScreen(state, now) { selectedProvider = it }
                 }
@@ -203,9 +221,7 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
             snapshot.extraUsage?.let { extra -> item { ExtraUsageCard(extra) } }
             item { Text("${if (refreshing) "Aktualisiert… · " else ""}${age(now - snapshot.fetchedAt)} · ${date(snapshot.fetchedAt, true)}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            item { Disclosure("Wie wird gemessen?") {
-                Text("Jeder Refresh fragt den Anbieter neu ab. Serverwerte können verzögert sein. Zeit und Verbrauch laufen unabhängig. Alte Werte bleiben bei Fehlern sichtbar.", style = MaterialTheme.typography.bodySmall)
-            } }
+
         }
     }
 }
@@ -213,38 +229,34 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
 @Composable
 private fun WindowCard(window: UsageWindow, now: Long, primary: Boolean) {
     val colors = MaterialTheme.colorScheme
-    val exhausted = window.usedPercent >= 100
-    val background = when { exhausted -> colors.errorContainer; primary -> colors.primaryContainer; else -> colors.surfaceContainer }
-    val foreground = when { exhausted -> colors.onErrorContainer; primary -> colors.onPrimaryContainer; else -> colors.onSurface }
+    val accent = if (window.usedPercent >= 100) colors.error else if (primary) colors.primary else colors.tertiary
     val animated by animateFloatAsState((window.usedPercent / 100).toFloat().coerceIn(0f, 1f), label = "usage")
-    Surface(shape = cardShape, color = background, contentColor = foreground, modifier = Modifier.fillMaxWidth().animateContentSize()) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(window.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Icon(if (primary) Icons.Rounded.Bolt else Icons.Rounded.NightsStay, null, Modifier.size(22.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Box(Modifier.size(106.dp).semantics { contentDescription = "${window.title}: ${percent(window.usedPercent)} Prozent verbraucht" }, contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.fillMaxSize()) {
-                        drawArc(foreground.copy(alpha = 0.12f), 140f, 260f, false, topLeft = Offset(7.dp.toPx(), 7.dp.toPx()), size = Size(size.width - 14.dp.toPx(), size.height - 14.dp.toPx()), style = Stroke(9.dp.toPx(), cap = StrokeCap.Round))
-                        if (animated > 0) drawArc(foreground, 140f, 260f * animated, false, topLeft = Offset(7.dp.toPx(), 7.dp.toPx()), size = Size(size.width - 14.dp.toPx(), size.height - 14.dp.toPx()), style = Stroke(9.dp.toPx(), cap = StrokeCap.Round))
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("${percent(window.usedPercent)}%", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Text("genutzt", style = MaterialTheme.typography.labelSmall)
-                    }
+    SoftCard {
+        Text(window.title, style = MaterialTheme.typography.titleMedium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Box(Modifier.size(112.dp).semantics { contentDescription = "${window.title}: ${percent(window.usedPercent)} Prozent verbraucht" }, contentAlignment = Alignment.Center) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val inset = 8.dp.toPx()
+                    val bounds = Size(size.width - inset * 2, size.height - inset * 2)
+                    drawArc(accent.copy(alpha = .12f), 140f, 260f, false, Offset(inset, inset), bounds, style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
+                    if (animated > 0) drawArc(accent, 140f, 260f * animated, false, Offset(inset, inset), bounds, style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
                 }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(if (exhausted) "Pause fürs Budget" else "${percent((100 - window.usedPercent).coerceAtLeast(0.0))}% frei", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(window.resetAt?.let { if (it <= now) "Reset fällig · aktualisieren" else "Reset in ${countdown(it - now)}" } ?: "Reset nicht gemeldet", style = MaterialTheme.typography.bodySmall)
-                    window.resetAt?.let { Text(date(it), style = MaterialTheme.typography.labelSmall, color = foreground.copy(alpha = .7f)) }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    Text("genutzt", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
             }
-            window.elapsed(now)?.let { elapsed ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LinearProgressIndicator(progress = { elapsed }, modifier = Modifier.weight(1f).height(4.dp), color = foreground.copy(alpha = .5f), trackColor = foreground.copy(alpha = .1f))
-                    Text("${(elapsed * 100).toInt()}% Zeit", style = MaterialTheme.typography.labelSmall)
-                }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("Nächster Reset", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text(window.resetAt?.let { if (it <= now) "Fällig" else countdown(it - now) } ?: "Nicht gemeldet",
+                    style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium)
+                window.resetAt?.let { Text(date(it), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant) }
+            }
+        }
+        window.elapsed(now)?.let { elapsed ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                UsageTrack(elapsed.toFloat(), colors.onSurfaceVariant.copy(alpha = .6f), Modifier.weight(1f).height(3.dp))
+                Text("${percent(elapsed.toDouble() * 100)}% Zeit", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
             }
         }
     }
@@ -266,7 +278,6 @@ private fun BankedCard(usage: UsageSnapshot, now: Long, loading: Boolean) {
                 credit.expiresAt?.let { Text("Bis ${date(it)}${if (it <= now) " · Ablauf erreicht" else ""}", style = MaterialTheme.typography.bodySmall) }
             }
             usage.creditsWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-            Text("Persönliche Account-Daten. Keine automatische Einlösung.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -283,197 +294,231 @@ private fun ExtraUsageCard(extra: ExtraUsage) {
     }
 }
 @Composable
-private fun CodexResetScreen(state: UiState, now: Long, model: UsageViewModel) {
-    val uri = LocalUriHandler.current
-    LazyColumn(Modifier.widthIn(max = 760.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+private fun BrandIcon(provider: String, modifier: Modifier = Modifier.size(28.dp)) {
+    Icon(painterResource(if (provider == "Codex") R.drawable.ic_brand_codex else R.drawable.ic_brand_claude),
+        contentDescription = null, modifier = modifier,
+        tint = if (provider == "Codex") MaterialTheme.colorScheme.onSurface else Color(0xFFD58C70))
+}
 
-        item { SectionTitle("Forecast"); Text("Chance auf einen außerplanmäßigen Codex-Reset", style = MaterialTheme.typography.bodySmall) }
-        ResetSource.entries.forEach { source -> item(key = "forecast:${source.name}") { ForecastCard(source, state.forecasts[source], state.forecastLoading, now) } }
-        item { CommunityCard(CommunitySource.VERCEL_CODEX, state.community[CommunitySource.VERCEL_CODEX], state.forecastLoading, now) }
-        state.usage?.let { usage ->
-            item { SectionTitle("Dein Account"); Spacer(Modifier.height(8.dp)); BankedCard(usage, now, state.creditsLoading) }
-            items(usage.resetCredits.filter { it.grantedAt != null || it.status != "available" }) { credit ->
-                SoftCard {
-                    Text(credit.title, style = MaterialTheme.typography.titleSmall)
-                    Text(when (credit.status) {
-                        "available" -> "Verfügbar"; "redeemed" -> "Eingelöst"; "expired" -> "Abgelaufen"; else -> "Status: ${credit.status}"
-                    }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                    credit.grantedAt?.let { Text("Vergeben: ${date(it)}", style = MaterialTheme.typography.bodySmall) }
-                    if (credit.status == "redeemed") Text("Einlösezeitpunkt vom Anbieter nicht gemeldet.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        item {
-            SectionTitle("Öffentlicher Verlauf")
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ResetSource.entries.forEach { source -> FilterChip(selected = state.source == source, onClick = { model.setSource(source) }, label = { Text(source.label) }) }
-            }
-        }
-        item {
-            SoftCard {
-                val latest = state.feed?.events?.firstOrNull { it.kind == "Globaler Reset" }
-                Text(if (state.source == ResetSource.CODEX_RESET) "Letzte globale Reset-Meldung" else "Letztes Ledger-Ereignis", style = MaterialTheme.typography.labelLarge)
-                val event = if (state.source == ResetSource.CODEX_RESET) latest else state.feed?.events?.firstOrNull()
-                Text(event?.let { date(it.at) } ?: "Noch keine Meldung geladen", style = MaterialTheme.typography.headlineSmall)
-                Text("Community-Daten. Ob dein Account zurückgesetzt wurde, prüfst du über deinen Verbrauch.", style = MaterialTheme.typography.bodySmall)
-                if (state.source == ResetSource.LUNARWERX) Text("Dieses Ledger enthält auch Banked-Vergaben; Ereignisse werden hier nicht als persönliche oder globale Resets bestätigt.", style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { uri.openUri(state.source.site) }, contentPadding = PaddingValues(0.dp)) {
-                    Text("Daten: ${state.source.label}"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.size(16.dp))
-                }
-                state.feed?.let { feed ->
-                    Text("Quellenstand: ${feed.publishedAt?.let { date(it, true) } ?: "nicht gemeldet"}\nAbgerufen: ${date(feed.fetchedAt, true)}",
-                        style = MaterialTheme.typography.labelSmall)
-                    if (feed.publishedAt != null && now - feed.publishedAt > 600) Text("Quellenstand älter als 10 Minuten", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-        state.feedError?.let { item { Notice("Öffentliche Quelle: $it", true) } }
-        item {
-            FilledTonalButton(onClick = model::refresh, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shapes = ButtonDefaults.shapes()) {
-                Icon(Icons.Rounded.Refresh, null); Spacer(Modifier.width(8.dp)); Text("Aktualisieren")
-            }
-
-        }
-        if (state.feedLoading && state.feed == null) item { LoadingIndicator(Modifier.fillMaxWidth()) }
-        if (state.feed != null && state.feed.events.isEmpty()) item { Notice("Keine passenden Reset-Meldungen in dieser Quelle.") }
-        items(state.feed?.events.orEmpty(), key = { it.id }) { event ->
-            SoftCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(if (event.kind.startsWith("Banked")) Icons.Rounded.ConfirmationNumber else Icons.Rounded.RestartAlt,
-                        null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(event.kind, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                        Text(date(event.at), style = MaterialTheme.typography.labelSmall)
-                    }
-                    event.url?.let { link -> IconButton(onClick = { uri.openUri(link) }) { Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Originalquelle öffnen") } }
-                }
-                Text(event.summary, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        if (state.observations.isNotEmpty()) item { SectionTitle("Auf deinem Gerät beobachtet") }
-        items(state.observations) { observation -> SoftCard {
-            Text("${observation.windowTitle} · Verbrauch gesunken", style = MaterialTheme.typography.titleSmall)
-            Text("${percent(observation.before)} % → ${percent(observation.after)} %", style = MaterialTheme.typography.bodyMedium)
-            Text("Beobachtet: ${date(observation.detectedAt, true)}", style = MaterialTheme.typography.bodySmall)
-        } }
+@Composable
+private fun UsageTrack(progress: Float, accent: Color, modifier: Modifier = Modifier.fillMaxWidth().height(8.dp)) {
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val animated by animateFloatAsState(progress.coerceIn(0f, 1f), label = "track")
+    Canvas(modifier) {
+        drawLine(track, Offset(size.height / 2, center.y), Offset(size.width - size.height / 2, center.y), size.height, StrokeCap.Round)
+        if (animated > 0f) drawLine(accent, Offset(size.height / 2, center.y),
+            Offset((size.width - size.height) * animated + size.height / 2, center.y), size.height, StrokeCap.Round)
     }
 }
 
 @Composable
 private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, loading: Boolean, now: Long, open: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val background = if (name == "Codex") colors.primaryContainer else colors.tertiaryContainer
-    val foreground = if (name == "Codex") colors.onPrimaryContainer else colors.onTertiaryContainer
-    Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = cardShape, color = background, contentColor = foreground) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = cardShape, color = colors.surfaceContainerLow) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(if (name == "Codex") Icons.Rounded.Terminal else Icons.Rounded.AutoAwesome, null, Modifier.size(28.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(usage?.plan?.replaceFirstChar { it.titlecase() } ?: "Verbunden", style = MaterialTheme.typography.labelMedium)
-                }
+                BrandIcon(name, Modifier.size(32.dp))
+                Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                usage?.plan?.let { Surface(shape = RoundedCornerShape(50), color = colors.surfaceContainerHigh) {
+                    Text(it.replaceFirstChar { char -> char.titlecase() }, style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(10.dp, 6.dp))
+                } }
             }
             val windows = usage?.groups?.firstOrNull { it.name == name }?.windows.orEmpty()
             windows.forEach { window ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(window.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                    Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(" genutzt", style = MaterialTheme.typography.labelSmall)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(window.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), color = colors.onSurfaceVariant)
+                        Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    }
+                    UsageTrack((window.usedPercent / 100).toFloat(), if (window.usedPercent >= 100) colors.error else if (window.seconds == 18000L) colors.primary else colors.tertiary)
+                    window.resetAt?.let { Text(if (it > now) "Reset in ${countdown(it - now)}" else "Reset fällig", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant) }
                 }
-                LinearProgressIndicator(progress = { (window.usedPercent / 100).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp), color = foreground, trackColor = foreground.copy(alpha = .12f))
-                window.resetAt?.let { Text(if (it > now) "Reset in ${countdown(it - now)}" else "Reset fällig · aktualisieren", style = MaterialTheme.typography.labelSmall) }
             }
             if (usage == null || windows.isEmpty()) Text(if (loading) "Verbrauch wird geladen…" else "Keine Zeitfenster gemeldet", style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (error != null) "Letzter Abruf fehlgeschlagen" else if (loading) "Wird aktualisiert…" else usage?.let { age(now - it.fetchedAt) } ?: "Noch keine Messung", style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
-                Text("Mehr Details", style = MaterialTheme.typography.labelLarge)
+                Text(if (error != null) "Abruf fehlgeschlagen" else if (loading) "Aktualisiert…" else usage?.let { age(now - it.fetchedAt) } ?: "Noch keine Messung",
+                    color = if (error != null) colors.error else colors.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Text("Details", style = MaterialTheme.typography.labelLarge, color = colors.primary)
             }
         }
     }
 }
 
 @Composable
-private fun ResetScreen(state: UiState, now: Long, model: UsageViewModel) {
-    var provider by rememberSaveable { mutableStateOf("Codex") }
+private fun ProviderTabs(names: List<String>, active: String, select: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(20.dp, 4.dp, 20.dp, 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        names.forEach { name ->
+            Surface(onClick = { select(name) }, shape = RoundedCornerShape(50),
+                color = if (active == name) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.weight(1f).semantics { selected = active == name; role = Role.Tab }) {
+                Row(Modifier.padding(14.dp, 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BrandIcon(name, Modifier.size(22.dp))
+                    Text(name, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResetScreen(state: UiState, now: Long, provider: String, select: (String) -> Unit, open: (String, String) -> Unit) {
     val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
-    Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = names.indexOf(active)) {
-            names.forEach { name -> Tab(selected = active == name, onClick = { provider = name }, text = { Text(name) }) }
-        }
-        if (active == "Codex") CodexResetScreen(state, now, model)
-        else LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(24.dp, 8.dp, 24.dp, 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { SectionTitle("Claude Forecast"); Text("Öffentliche Schätzungen, getrennt von deinem Account", style = MaterialTheme.typography.bodySmall) }
-            CommunitySource.entries.filter { it.provider == "Claude Code" }.forEach { source -> item(key = source.name) { CommunityCard(source, state.community[source], state.forecastLoading, now) } }
-            state.claudeUsage?.takeIf { it.availableResets != null || it.resetCredits.isNotEmpty() }?.let { usage -> item { SectionTitle("Dein Reset-Vorrat"); BankedCard(usage, now, false) } }
-            item { FilledTonalButton(onClick = model::refresh, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Rounded.Refresh, null); Text("Aktualisieren") } }
+    val consensus = ForecastConsensus.combine(active, state.forecasts, state.community, now)
+    val usage = if (active == "Codex") state.usage else state.claudeUsage
+    Column(Modifier.widthIn(max = 680.dp).fillMaxSize()) {
+        if (names.size > 1) ProviderTabs(names, active, select)
+        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item { SectionTitle("Reset-Chance") }
+            item {
+                SoftCard {
+                    if (consensus.isEmpty()) {
+                        if (state.forecastLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text(if (state.forecastLoading) "Schätzungen werden geladen…" else "Keine aktuelle Schätzung", style = MaterialTheme.typography.titleMedium)
+                    } else consensus.forEachIndexed { index, chance ->
+                        if (index > 0) Spacer(Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(horizon(chance.hours), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            Text("${chance.sources.size} ${if (chance.sources.size == 1) "Quelle" else "Quellen"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        ProbabilityBar(chance.percent, Modifier.semantics { contentDescription = "${horizon(chance.hours)}: ${percent(chance.percent)} Prozent Reset-Chance, ${chance.sources.size} Quellen" })
+                    }
+                    Text("Öffentliche Schätzung", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
+                }
+            }
+            item {
+                Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Column {
+                        MenuRow("Quellen & Berechnung", Icons.Rounded.QueryStats) { open(active, "Quellen") }
+                        HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+                        MenuRow("Reset-Verlauf", Icons.Rounded.History) { open(active, "Verlauf") }
+                    }
+                }
+            }
+            usage?.takeIf { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null }?.let { snapshot ->
+                item { SectionTitle("Dein Vorrat") }
+                item { BankedCard(snapshot, now, active == "Codex" && state.creditsLoading) }
+            }
         }
     }
 }
+
+private fun horizon(hours: Int) = if (hours % 24 == 0 && hours > 48) "in ${hours / 24} Tagen" else "in $hours Stunden"
+
 @Composable
-private fun CommunityCard(source: CommunitySource, result: CommunityResult?, loading: Boolean, now: Long) {
-    val uri = LocalUriHandler.current
-    SoftCard {
-        Text(source.label, style = MaterialTheme.typography.titleMedium)
-        val report = result?.report
-        if (report == null) Text(if (loading) "Quelle wird geladen…" else result?.error ?: "Noch keine Daten", style = MaterialTheme.typography.bodySmall)
-        else {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("${percent(report.chance.percent)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Text(if (report.chance.hours == 168) "in 7 Tagen" else "in ${report.chance.hours} Stunden", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(bottom = 5.dp))
-            }
-            Text("Community-Schätzung · kein Reset-Versprechen", style = MaterialTheme.typography.bodySmall)
-            if (result.error != null) Text("Letzter Abruf fehlgeschlagen", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-            Text(report.publishedAt?.let { "Quellenstand ${date(it)}${if (now - it > source.minimumSeconds * 2) " · veraltet" else ""}" } ?: "Quellenstand nicht angegeben", style = MaterialTheme.typography.labelSmall)
-            Disclosure("Verlauf & Details") {
-                report.expectedAt?.let { Text("Geschätzter Termin: ${date(it)}${if (it < now) " · bereits vergangen" else ""}", style = MaterialTheme.typography.bodySmall) }
-                Text("Abgerufen ${date(report.fetchedAt, true)}", style = MaterialTheme.typography.labelSmall)
-                report.events.take(14).forEach { event ->
-                    Text("${date(event.at)} · ${event.kind}", style = MaterialTheme.typography.labelLarge)
-                    Text(event.summary, style = MaterialTheme.typography.bodySmall)
-                    event.url?.let { url -> TextButton(onClick = { uri.openUri(url) }) { Text("Originalmeldung") } }
-                }
-                if (report.events.isEmpty()) Text("Kein Verlauf aus dieser Quelle gelesen.", style = MaterialTheme.typography.bodySmall)
-                Text("Aus der öffentlichen Webseite gelesen. Änderungen der Seite können den Abruf unterbrechen.", style = MaterialTheme.typography.bodySmall)
-            }
+private fun ProbabilityBar(value: Double, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val animated by animateFloatAsState((value / 100).toFloat().coerceIn(0f, 1f), label = "probability")
+    Box(modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val corner = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
+            drawRoundRect(colors.surfaceContainerHigh, cornerRadius = corner)
+            if (animated > 0) drawRoundRect(colors.primary.copy(alpha = .18f), size = Size(size.width * animated, size.height), cornerRadius = corner)
+            val y = size.height - 5.dp.toPx()
+            drawLine(colors.primary.copy(alpha = .12f), Offset(16.dp.toPx(), y), Offset(size.width - 16.dp.toPx(), y), 2.dp.toPx(), StrokeCap.Round)
+            if (animated > 0) drawLine(colors.primary, Offset(16.dp.toPx(), y), Offset(16.dp.toPx() + (size.width - 32.dp.toPx()) * animated, y), 2.dp.toPx(), StrokeCap.Round)
         }
-        TextButton(onClick = { uri.openUri(source.site) }, contentPadding = PaddingValues(0.dp)) { Text("Daten: ${source.label}"); Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 6.dp).size(14.dp)) }
+        Text("${percent(value)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-private fun ForecastCard(source: ResetSource, result: ForecastResult?, loading: Boolean, now: Long) {
-    val uri = LocalUriHandler.current
-    SoftCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(source.label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary)
+private fun MenuRow(title: String, icon: ImageVector, open: () -> Unit) {
+    Surface(onClick = open, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(20.dp, 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val forecast = result?.forecast
-        if (forecast == null) Text(if (loading) "Forecast wird geladen…" else result?.error ?: "Noch kein Forecast geladen", style = MaterialTheme.typography.bodySmall)
-        else {
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                forecast.chances.forEach { chance -> Column(Modifier.weight(1f)) {
-                    Text("${percent(chance.percent)}%", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("in ${chance.hours} Stunden", style = MaterialTheme.typography.labelMedium)
-                    if (chance.low != null && chance.high != null) Text("${percent(chance.low)}–${percent(chance.high)}% Bereich", style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel, provider: String, destination: String) {
+    val uri = LocalUriHandler.current
+    LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (destination == "Quellen") {
+            item { SoftCard { Disclosure("So wird gerechnet") {
+                Text("Pro Zeitraum zählt jede aktuelle Quelle einmal. Der angezeigte Wert ist ihr einfacher Durchschnitt, keine Addition und keine kalibrierte Wahrscheinlichkeit. Zeiträume und Anbieter bleiben getrennt.", style = MaterialTheme.typography.bodySmall)
+                Text("Fehlgeschlagene Abrufe und Werte mit Abruf- oder Quellenstand älter als 2 Stunden zählen nicht. Ohne Quellenstand gilt der Abrufzeitpunkt; das Alter des Modells bleibt unbekannt.", style = MaterialTheme.typography.bodySmall)
+            } } }
+            if (provider == "Codex") ResetSource.entries.forEach { source -> item(key = source.name) {
+                val result = state.forecasts[source]
+                val forecast = result?.forecast
+                SourceCard(source.label, source.site, forecast?.chances.orEmpty(), forecast?.fetchedAt, forecast?.publishedAt, result?.error, now, state.forecastLoading) {
+                    forecast?.confidence?.let { Text("Vertrauen: $it", style = MaterialTheme.typography.bodySmall) }
+                    forecast?.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    forecast?.accuracy?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+            } }
+            CommunitySource.entries.filter { it.provider == provider }.forEach { source -> item(key = source.name) {
+                val result = state.community[source]
+                val report = result?.report
+                SourceCard(source.label, source.site, report?.let { listOf(it.chance) }.orEmpty(), report?.fetchedAt, report?.publishedAt, result?.error, now, state.forecastLoading) {
+                    report?.expectedAt?.let { Text("Geschätzter Termin: ${date(it)}${if (it < now) " · vergangen" else ""}", style = MaterialTheme.typography.bodySmall) }
+                }
+            } }
+        } else {
+            if (provider == "Codex") item {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ResetSource.entries.forEach { source -> FilterChip(selected = state.source == source, onClick = { model.setSource(source) }, label = { Text(source.label) }) }
+                }
+                state.feedError?.let { Notice(it, true) }
+                if (state.feedLoading && state.feed == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            val events = buildList {
+                if (provider == "Codex") state.feed?.events?.forEach { add(state.source.label to it) }
+                CommunitySource.entries.filter { it.provider == provider }.forEach { source ->
+                    state.community[source]?.report?.events?.forEach { add(source.label to it) }
+                }
+            }.distinctBy { it.first to it.second.id }.sortedByDescending { it.second.at }.take(40)
+            if (events.isEmpty()) item { SoftCard { Text("Noch keine Meldungen", style = MaterialTheme.typography.titleMedium) } }
+            items(events, key = { "${it.first}:${it.second.id}" }) { (source, event) -> SoftCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(event.kind, style = MaterialTheme.typography.titleSmall)
+                        Text(date(event.at), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    event.url?.let { link -> IconButton(onClick = { uri.openUri(link) }) { Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Originalquelle öffnen") } }
+                }
+                if (event.summary.isNotBlank()) Disclosure("Meldung") { Text(event.summary, style = MaterialTheme.typography.bodySmall) }
+                Text(source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } }
+            if (provider == "Codex" && state.observations.isNotEmpty()) {
+                item { SectionTitle("Auf deinem Gerät") }
+                items(state.observations) { observation -> SoftCard {
+                    Text("${observation.windowTitle} · Verbrauch gesunken", style = MaterialTheme.typography.titleSmall)
+                    Text("${percent(observation.before)}% → ${percent(observation.after)}%", style = MaterialTheme.typography.headlineSmall)
+                    Text(date(observation.detectedAt), style = MaterialTheme.typography.labelSmall)
                 } }
             }
-            Text("Schätzung · kein angekündigter Reset", style = MaterialTheme.typography.bodySmall)
-            result.error?.let { Text("Letzter Abruf fehlgeschlagen", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error) }
-            forecast.publishedAt?.let { Text("Stand ${date(it)}${if (now - it > source.minimumSeconds * 2) " · veraltet" else ""}", style = MaterialTheme.typography.labelSmall) }
-            Disclosure("Einordnung") {
-                forecast.confidence?.let { Text("Vertrauen: ${when (it) { "low" -> "niedrig"; "medium" -> "mittel"; "high" -> "hoch"; else -> it }}", style = MaterialTheme.typography.bodySmall) }
-                forecast.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                forecast.accuracy?.let { Text(it, style = MaterialTheme.typography.labelSmall) }
-                forecast.lastReset?.let { Text("Letzter Reset: ${date(it)}", style = MaterialTheme.typography.bodySmall) }
-                Text("Abgerufen ${date(forecast.fetchedAt, true)}", style = MaterialTheme.typography.labelSmall)
-            }
         }
-        TextButton(onClick = { uri.openUri(source.site) }, contentPadding = PaddingValues(0.dp)) {
-            Text("Daten: ${source.label}"); Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.padding(start = 6.dp).size(14.dp))
+    }
+}
+
+@Composable
+private fun SourceCard(label: String, url: String, chances: List<ForecastChance>, fetched: Long?, published: Long?, error: String?, now: Long, loading: Boolean,
+    details: @Composable ColumnScope.() -> Unit) {
+    val uri = LocalUriHandler.current
+    val fresh = fetched != null && error == null && ForecastConsensus.isFresh(fetched, published, now)
+    SoftCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            IconButton(onClick = { uri.openUri(url) }) { Icon(Icons.AutoMirrored.Rounded.OpenInNew, "${label} öffnen", Modifier.size(20.dp)) }
+        }
+        Text(when { error != null -> "Abruf fehlgeschlagen · nicht eingerechnet"; fetched == null -> if (loading) "Wird geladen…" else "Noch keine Daten"; !fresh -> "Veraltet · nicht eingerechnet"; published == null -> "Eingerechnet · Modellstand unbekannt"; else -> "Eingerechnet" },
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        chances.forEach { chance -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(horizon(chance.hours), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text("${percent(chance.percent)}%", style = MaterialTheme.typography.titleMedium)
+        } }
+        Disclosure("Details") {
+            error?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            Text("Quellenstand: ${published?.let { date(it, true) } ?: "unbekannt"}", style = MaterialTheme.typography.labelSmall)
+            fetched?.let { Text("Abgerufen: ${date(it, true)}", style = MaterialTheme.typography.labelSmall) }
+            chances.forEach { chance -> if (chance.low != null && chance.high != null) Text("${horizon(chance.hours)}: ${percent(chance.low)}–${percent(chance.high)}% Quellenintervall", style = MaterialTheme.typography.labelSmall) }
+            details()
         }
     }
 }
@@ -497,9 +542,11 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -
             SwitchRow("Tiefschwarz", "Für den dunklen Modus", state.amoled, model::setAmoled)
         }
         Disclosure("Über AI Usage · ${BuildConfig.VERSION_NAME}") {
-            Text("Kotlin · Compose · Material 3 Expressive. Basis: AniHyou von axiel7, GPL-3.0. Eigenes Design inspiriert von ArchiveTune.", style = MaterialTheme.typography.bodySmall)
+            Text("Basis: AniHyou, GPL-3.0. Designreferenz: AniSync. Google Sans Flex: OFL-1.1. Anbieterlogos kennzeichnen die verbundenen Dienste.", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { uri.openUri("https://github.com/madebycli/AiUsage-Android") }) { Text("Quellcode") }
-            Text("Inoffizielle Account-Anzeige. Anbieter-Endpunkte können sich ändern.", style = MaterialTheme.typography.bodySmall)
+            Text("Inoffizielle App, unabhängig von OpenAI und Anthropic.", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { uri.openUri("https://github.com/Marco-9456/AniSync") }) { Text("AniSync") }
+            Text("Jede Aktualisierung fragt den Anbieter ab. Serverwerte können verzögert sein; bei Fehlern bleiben alte Messungen sichtbar.", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -537,10 +584,9 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
         Spacer(Modifier.height(18.dp))
         FlowerMark()
         Text("Wen verbinden\nwir heute?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Deine Tools. Dein Überblick.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SoftCard {
+                SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Rounded.Terminal, null, tint = MaterialTheme.colorScheme.primary)
+                BrandIcon("Codex")
                 Text("Codex", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 if (state.connected) Icon(Icons.Rounded.CheckCircle, "Verbunden", tint = MaterialTheme.colorScheme.primary)
             }
@@ -549,7 +595,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
         }
         SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Rounded.AutoAwesome, null, tint = MaterialTheme.colorScheme.tertiary)
+                BrandIcon("Claude Code")
                 Text("Claude Code", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 if (state.claudeConnected) Icon(Icons.Rounded.CheckCircle, "Verbunden", tint = MaterialTheme.colorScheme.tertiary)
             }
@@ -559,7 +605,6 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
             }
             FilledTonalButton(onClick = model::beginClaudeLogin, enabled = !state.claudeRefreshing && !state.claudeDisconnecting,
                 modifier = Modifier.fillMaxWidth()) { Text(if (state.claudeConnected) "Am Handy neu anmelden" else "Mit Claude Code verbinden") }
-            Text("Direkt am Handy anmelden.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             TextButton(onClick = { claudeForm = !claudeForm }, enabled = !state.claudeDisconnecting) { Text(if (claudeForm) "Import schließen" else "Vorhandene Anmeldung importieren") }
             if (claudeForm) {
                 Text("Importiere deine Claude-Code-Anmeldung vom Computer oder füge einen OAuth-Token ein.", style = MaterialTheme.typography.bodySmall)
@@ -579,7 +624,6 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
             state.claudeError?.takeIf { !state.claudeConnected }?.let { TextButton(onClick = model::disconnectClaude,
                 enabled = !state.claudeDisconnecting) { Text("Lokale Claude-Daten zurücksetzen") } }
         }
-        Text("Nur verbundene Tools erscheinen in deiner Übersicht.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.usageError?.takeIf { !state.connected }?.let { Notice(it, true); TextButton(onClick = model::disconnect) { Text("Lokale Codex-Daten zurücksetzen") } }
     }
     if (confirm != null) AlertDialog(onDismissRequest = { confirm = null }, title = { Text("$confirm trennen?") }, text = { Text("Die Anmeldung und Messungen dieses Anbieters werden auf dem Gerät gelöscht.") }, confirmButton = { TextButton(onClick = { if (confirm == "Codex") model.disconnect() else model.disconnectClaude(); confirm = null }) { Text("Trennen") } }, dismissButton = { TextButton(onClick = { confirm = null }) { Text("Abbrechen") } })
@@ -660,7 +704,12 @@ private fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 @Composable
-private fun SectionTitle(text: String) { Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)) }
+private fun SectionTitle(text: String) {
+    Row(Modifier.padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Spacer(Modifier.size(4.dp, 22.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
+        Text(text, style = MaterialTheme.typography.titleLarge)
+    }
+}
 @Composable
 private fun Notice(text: String, error: Boolean = false) {
     Surface(shape = RoundedCornerShape(18.dp), color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,

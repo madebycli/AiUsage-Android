@@ -61,16 +61,30 @@ class UiSmokeTest {
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.runOnIdle { screen.value = screen.value.copy(forecasts = ResetSource.entries.associateWith { source -> ForecastResult(ResetForecast(source, if (source == ResetSource.CODEX_RESET) listOf(ForecastChance(24, 19.0), ForecastChance(48, 34.0)) else listOf(ForecastChance(6, 3.2, 1.1, 9.7), ForecastChance(24, 27.0, 13.6, 45.2)), now, now, now - 86400)) }) }
         compose.onNode(hasText("Resets") and hasClickAction()).performClick()
-        compose.onNodeWithText("Forecast").assertIsDisplayed()
+        compose.onNodeWithText("Reset-Chance").assertIsDisplayed()
+        compose.onNodeWithText("23%").assertIsDisplayed()
+        compose.onNodeWithText("codex-reset.com").assertDoesNotExist()
+        compose.onNodeWithText("Quellen & Berechnung").performClick()
+        compose.onNodeWithText("Quellen · Codex").assertIsDisplayed()
+        compose.onNodeWithText("Resets").assertDoesNotExist()
+        compose.onNodeWithText("So wird gerechnet").performClick()
+        screenshot("sources-light")
+        compose.onNodeWithContentDescription("Zurück").performClick()
         screenshot("forecast-light")
         compose.runOnIdle { screen.value = screen.value.copy(community = CommunitySource.entries.filter { it.provider == "Claude Code" }.associateWith { source ->
             CommunityResult(CommunityReport(source, ForecastChance(if (source == CommunitySource.CLAUDE_RESETS) 168 else 48, if (source == CommunitySource.CLAUDE_RESETS) 80.0 else 42.0), null, now, null, emptyList()))
         }) }
         compose.onNodeWithText("Claude Code").performClick()
-        compose.onNodeWithText("Claude Forecast").assertIsDisplayed()
+        compose.onNodeWithText("Reset-Chance").assertIsDisplayed()
         compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
         compose.onNodeWithText("in 48 Stunden").assertIsDisplayed()
         screenshot("claude-forecast-light")
+        compose.onNodeWithText("Quellen & Berechnung").performClick()
+        compose.onNodeWithText("Quellen · Claude Code").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
+        compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
+        screenshot("claude-forecast-dark")
         compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
         compose.onNodeWithText("Anmeldungen verwalten").performClick()
         compose.onNodeWithText("Wen verbinden\nwir heute?").assertIsDisplayed()
@@ -78,6 +92,10 @@ class UiSmokeTest {
         compose.onNodeWithText("Verbrauch", useUnmergedTree = true).performClick()
         compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
         screenshot("usage-dark")
+        compose.onNodeWithText("Claude Code").performClick()
+        compose.onNodeWithText("Wie wird gemessen?").assertDoesNotExist()
+        screenshot("claude-dark")
+        compose.onNodeWithContentDescription("Zurück").performClick()
         compose.runOnIdle { screen.value = screen.value.copy(connected = false) }
         compose.onNode(hasText("Resets") and hasClickAction()).assertIsDisplayed()
         compose.onNodeWithText("Codex").assertDoesNotExist()
