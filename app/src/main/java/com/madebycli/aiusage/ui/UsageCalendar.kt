@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
@@ -23,6 +24,7 @@ import com.madebycli.aiusage.data.UsageDay
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** AniSync/GitHub contribution layout; cells represent measured quota, not inferred daily tokens. */
 @Composable
@@ -44,18 +46,19 @@ internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
         if (period == "Monat") {
             val first = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).minusWeeks(19)
             BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val cell = ((maxWidth - 28.dp - 4.dp * 19) / 20).coerceAtMost(24.dp)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(Modifier.padding(start = 28.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                val density = LocalDensity.current
+                val cellPixels = ((maxWidth.value * density.density - (4 * density.density).roundToInt() * 19) / 20).toInt().coerceAtLeast(1)
+                val cell = (cellPixels / density.density).dp.coerceAtMost(24.dp)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         repeat(20) { week ->
                             val date = first.plusWeeks(week.toLong())
                             val label = if (week == 0 || date.month != date.minusWeeks(1).month) date.format(DateTimeFormatter.ofPattern("MMM", Locale.GERMAN)).removeSuffix(".") else ""
-                            Box(Modifier.width(cell).height(18.dp)) { Text(label, fontSize = 9.sp, softWrap = false, color = colors.onSurfaceVariant) }
+                            Box(Modifier.width(cell).height(18.dp)) { Text(label, modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true), fontSize = 10.sp, lineHeight = 12.sp, softWrap = false, color = colors.onSurfaceVariant) }
                         }
                     }
                     repeat(7) { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(if (row in listOf(0, 2, 4)) listOf("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")[row] else "", fontSize = 9.sp, color = colors.onSurfaceVariant, modifier = Modifier.width(24.dp))
                             repeat(20) { week ->
                                 val date = first.plusDays(week * 7L + row)
                                 val record = records[date]
