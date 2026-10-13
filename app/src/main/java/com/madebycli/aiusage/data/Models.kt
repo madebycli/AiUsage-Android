@@ -28,7 +28,7 @@ data class ExtraUsage(val enabled: Boolean?, val used: Double?, val limit: Doubl
 @Serializable
 data class ResetObservation(val detectedAt: Long, val windowTitle: String, val before: Double, val after: Double)
 @Serializable
-data class PersonalRecord(val usage: UsageSnapshot? = null, val observations: List<ResetObservation> = emptyList())
+data class PersonalRecord(val usage: UsageSnapshot? = null, val observations: List<ResetObservation> = emptyList(), val days: List<UsageDay> = emptyList())
 @Serializable
 data class ResetEvent(val id: String, val at: Long, val kind: String, val summary: String, val url: String?)
 @Serializable

@@ -52,7 +52,7 @@ class UiSmokeTest {
         screenshot("usage-light")
         compose.runOnIdle { screen.value = screen.value.copy(claudeConnected = true, claudeUsage = claude) }
         screenshot("overview-both")
-        compose.onNodeWithText("Claude Code").performClick()
+        compose.onAllNodesWithText("Claude Code")[0].performClick()
         compose.onNodeWithText("Max 5x").assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
@@ -74,7 +74,7 @@ class UiSmokeTest {
         compose.runOnIdle { screen.value = screen.value.copy(community = CommunitySource.entries.filter { it.provider == "Claude Code" }.associateWith { source ->
             CommunityResult(CommunityReport(source, ForecastChance(if (source == CommunitySource.CLAUDE_RESETS) 168 else 48, if (source == CommunitySource.CLAUDE_RESETS) 80.0 else 42.0), null, now, null, emptyList()))
         }) }
-        compose.onNodeWithText("Claude Code").performClick()
+        compose.onAllNodesWithText("Claude Code")[0].performClick()
         compose.onNodeWithText("Reset-Chance").assertIsDisplayed()
         compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
         compose.onNodeWithText("in 48 Stunden").assertIsDisplayed()
@@ -87,12 +87,19 @@ class UiSmokeTest {
         screenshot("claude-forecast-dark")
         compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
         compose.onNodeWithText("Anmeldungen verwalten").performClick()
-        compose.onNodeWithText("Wen verbinden\nwir heute?").assertIsDisplayed()
+        compose.onNodeWithText("Anmeldungen").assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("Verbrauch", useUnmergedTree = true).performClick()
-        compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
+        compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK,
+            days = (0..50).map { day -> UsageDay(java.time.LocalDate.now().minusDays(day.toLong()).toString(), (day * 11 % 100).toDouble(), 2, now - day * 86400L) }) }
         screenshot("usage-dark")
-        compose.onNodeWithText("Claude Code").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Aktivitätsverlauf"))
+        compose.onNodeWithText("Monat").assertIsDisplayed()
+        screenshot("calendar-dark")
+        compose.onNodeWithText("Woche").performClick()
+        screenshot("calendar-week-dark")
+        compose.onNode(hasScrollAction()).performScrollToIndex(0)
+        compose.onAllNodesWithText("Claude Code")[0].performClick()
         compose.onNodeWithText("Wie wird gemessen?").assertDoesNotExist()
         screenshot("claude-dark")
         compose.onNodeWithContentDescription("Zurück").performClick()
@@ -121,6 +128,37 @@ class UiSmokeTest {
         compose.onNodeWithText("Neue Anmeldung starten").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Anmeldecode").assertDoesNotExist()
     }
+    @Test fun `history has real source filters and notification settings cover both providers`() {
+        val model = UsageViewModel(ApplicationProvider.getApplicationContext())
+        models.put("usage", model)
+        val now = Instant.now().epochSecond
+        val feed = ResetFeed(ResetSource.CODEX_RESET, listOf(ResetEvent("api", now, "API-Meldung", "Only API", null)), null, now)
+        val report = CommunityReport(CommunitySource.VERCEL_CODEX, ForecastChance(48, 20.0), null, now, null,
+            listOf(ResetEvent("tracker", now, "Tracker-Meldung", "Only tracker", null)))
+        val screen = mutableStateOf(UiState(initializing = false, claudeInitializing = false, connected = true, claudeConnected = true,
+            feed = feed, community = mapOf(CommunitySource.VERCEL_CODEX to CommunityResult(report))))
+        compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen.value, model) } }
+        compose.onNode(hasText("Resets") and hasClickAction()).performClick()
+        compose.onNodeWithText("Reset-Verlauf").performClick()
+        compose.onNodeWithText("API-Meldung").assertIsDisplayed()
+        compose.onNodeWithText("Tracker-Meldung").assertDoesNotExist()
+        compose.onNodeWithText("LunarWerx").performClick()
+        compose.onNodeWithText("API-Meldung").assertDoesNotExist()
+        compose.onNodeWithText("Noch keine Meldungen").assertIsDisplayed()
+        compose.onNodeWithText("Codex Reset Tracker").performScrollTo().performClick()
+        compose.onNodeWithText("Tracker-Meldung").assertIsDisplayed()
+        compose.onNodeWithText("API-Meldung").assertDoesNotExist()
+        screenshot("history-filter-dark")
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
+        compose.onNodeWithText("Benachrichtigungen & Aktualisierung").performScrollTo().performClick()
+        compose.onNodeWithText("Benachrichtigungen").assertIsDisplayed()
+        compose.onNodeWithText("Tägliche Messung").assertIsDisplayed()
+        screenshot("notifications-dark")
+        compose.onNodeWithText("Claude Code").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithText("Anmeldungen verwalten").assertIsDisplayed()
+    }
     private fun screenshot(name: String) {
         compose.waitForIdle()
         val directory = File("build/screenshots").apply { mkdirs() }
@@ -137,7 +175,7 @@ class UiSmokeTest {
             claudeConnected = true, claudeLoginResult = 1, claudeRefreshing = true) }
         compose.onNodeWithText("Claude Code").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch wird geladen").assertIsDisplayed()
-        compose.onNodeWithText("Wen verbinden\nwir heute?").assertDoesNotExist()
+        compose.onNodeWithText("Dein Verbrauch.\nDein Überblick.").assertDoesNotExist()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
         compose.runOnIdle {
             screen.value = screen.value.copy(claudeRefreshing = false,

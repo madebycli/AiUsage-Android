@@ -1,6 +1,9 @@
 package com.madebycli.aiusage
 
 import android.os.Bundle
+import android.content.Intent
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,9 +17,13 @@ import com.axiel7.anihyou.core.ui.theme.AniHyouTheme
 import com.madebycli.aiusage.ui.UsageApp
 
 class MainActivity : ComponentActivity() {
+    private var notificationProvider by mutableStateOf<String?>(null)
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationProvider = intent.getStringExtra("provider") }
     private val model: UsageViewModel by viewModels()
+    override fun onResume() { super.onResume(); model.foregroundRefresh() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        notificationProvider = intent.getStringExtra("provider")
         enableEdgeToEdge()
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
@@ -28,7 +35,7 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             AniHyouTheme(darkTheme = dark, dynamicColor = state.dynamicColor, blackColors = state.amoled) {
-                UsageApp(state, model)
+                UsageApp(state, model, notificationProvider)
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.madebycli.aiusage.data
 
+import com.madebycli.aiusage.BuildConfig
+
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
@@ -36,7 +38,7 @@ class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
         return execute(request(url).post(form).build())
     }
     private fun request(url: String, headers: Map<String, String> = emptyMap()): Request.Builder = Request.Builder()
-        .url(url).header("User-Agent", "AiUsage-Android/0.4.1 (+https://github.com/madebycli/AiUsage-Android)")
+        .url(url).header("User-Agent", "AiUsage-Android/${BuildConfig.VERSION_NAME} (+https://github.com/madebycli/AiUsage-Android)")
         .header("Accept", "application/json").header("Cache-Control", "no-cache, no-store")
         .header("Pragma", "no-cache").apply { headers.forEach { (name, value) -> header(name, value) } }
 

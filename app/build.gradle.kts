@@ -11,8 +11,8 @@ android {
         applicationId = "com.madebycli.aiusage"
         minSdk = 26
         targetSdk = 37
-        versionCode = 6
-        versionName = "0.5.0"
+        versionCode = 7
+        versionName = "0.6.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Public test key, intentionally shared. Never use this key for a release.
@@ -46,6 +46,8 @@ android {
 dependencies {
     implementation(project(":core:ui"))
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
+    testImplementation("androidx.work:work-testing:2.11.2")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")

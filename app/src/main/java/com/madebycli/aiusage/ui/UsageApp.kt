@@ -47,6 +47,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.vector.vectorResource
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -69,7 +72,7 @@ import kotlinx.coroutines.withContext
 private val cardShape = RoundedCornerShape(28.dp)
 
 @Composable
-fun UsageApp(state: UiState, model: UsageViewModel) {
+fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String? = null) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
     var resetProvider by rememberSaveable { mutableStateOf("Codex") }
@@ -86,11 +89,17 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
     BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null || resetDetail != null))) {
         if (state.claudeLoginOpen) model.cancelClaudeLogin()
         else if (resetDetail != null) resetPage = null
-        else if (detail != null) selectedProvider = null else if (page == 3) page = 2 else page = 0
+        else if (detail != null) selectedProvider = null else if (page == 3 || page == 4) page = 2 else page = 0
     }
+    LaunchedEffect(state.connected, state.claudeConnected, state.initializing, state.claudeInitializing) { model.syncBackground() }
     LaunchedEffect(page, state.connected, state.claudeConnected) { if (page == 1 && anyConnected) model.loadCommunity() }
     LaunchedEffect(state.claudeLoginResult) {
         if (state.claudeLoginResult > 0 && state.claudeConnected) { page = 0; selectedProvider = "Claude Code" }
+    }
+    LaunchedEffect(notificationProvider, state.connected, state.claudeConnected) {
+        if (notificationProvider == "Codex" && state.connected || notificationProvider == "Claude Code" && state.claudeConnected) {
+            page = 0; selectedProvider = notificationProvider; resetPage = null
+        }
     }
     val refreshAction: @Composable RowScope.() -> Unit = {
         FilledTonalIconButton(onClick = model::refresh, modifier = Modifier.size(48.dp)) {
@@ -114,6 +123,10 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
             ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
             else Scaffold { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { LoginScreen(state, model, null) } }
         }
+        page == 4 -> DefaultScaffoldWithSmallTopAppBar(
+            title = "Benachrichtigungen", scrollBehavior = detailScroll,
+            navigationIcon = { IconButton(onClick = { page = 2 }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } }
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { NotificationSettings(state, model) } }
         resetDetail != null -> DefaultScaffoldWithSmallTopAppBar(
             title = "${resetDetail.substringAfter(':')} · ${resetDetail.substringBefore(':')}", scrollBehavior = detailScroll,
             navigationIcon = { IconButton(onClick = { resetPage = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
@@ -143,7 +156,7 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
                 when (page) {
                     1 -> ResetScreen(state, now, resetProvider, { resetProvider = it }) { provider, destination -> resetPage = "$provider:$destination" }
-                    2 -> SettingsScreen(state, model) { page = 3 }
+                    2 -> SettingsScreen(state, model, { page = 3 }, { page = 4 })
                     else -> UsageScreen(state, now) { selectedProvider = it }
                 }
             }
@@ -188,9 +201,17 @@ fun UsageApp(state: UiState, model: UsageViewModel) {
 
 @Composable
 private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit) {
+    var calendarProvider by rememberSaveable { mutableStateOf("Codex") }
+    val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
+    val active = calendarProvider.takeIf { it in names } ?: names.firstOrNull()
     LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.connected) item { ProviderBanner("Codex", state.usage, state.usageError, state.refreshing, now) { open("Codex") } }
         if (state.claudeConnected) item { ProviderBanner("Claude Code", state.claudeUsage, state.claudeError, state.claudeRefreshing, now) { open("Claude Code") } }
+        if (active != null) {
+            item { SectionTitle("Aktivitätsverlauf") }
+            if (names.size > 1) item { ProviderTabs(names, active, { calendarProvider = it }, inset = false) }
+            item { UsageCalendar(active, if (active == "Codex") state.days else state.claudeDays, now) }
+        }
     }
 }
 
@@ -301,7 +322,7 @@ private fun BrandIcon(provider: String, modifier: Modifier = Modifier.size(28.dp
 }
 
 @Composable
-private fun UsageTrack(progress: Float, accent: Color, modifier: Modifier = Modifier.fillMaxWidth().height(8.dp)) {
+internal fun UsageTrack(progress: Float, accent: Color, modifier: Modifier = Modifier.fillMaxWidth().height(8.dp)) {
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     val animated by animateFloatAsState(progress.coerceIn(0f, 1f), label = "track")
     Canvas(modifier) {
@@ -315,30 +336,24 @@ private fun UsageTrack(progress: Float, accent: Color, modifier: Modifier = Modi
 private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, loading: Boolean, now: Long, open: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Surface(onClick = open, modifier = Modifier.fillMaxWidth(), shape = cardShape, color = colors.surfaceContainerLow) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                BrandIcon(name, Modifier.size(32.dp))
+                BrandIcon(name, Modifier.size(28.dp))
                 Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                usage?.plan?.let { Surface(shape = RoundedCornerShape(50), color = colors.surfaceContainerHigh) {
-                    Text(it.replaceFirstChar { char -> char.titlecase() }, style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(10.dp, 6.dp))
-                } }
+                usage?.plan?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant) }
             }
             val windows = usage?.groups?.firstOrNull { it.name == name }?.windows.orEmpty()
-            windows.forEach { window ->
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(window.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), color = colors.onSurfaceVariant)
-                        Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    }
-                    UsageTrack((window.usedPercent / 100).toFloat(), if (window.usedPercent >= 100) colors.error else if (window.seconds == 18000L) colors.primary else colors.tertiary)
-                    window.resetAt?.let { Text(if (it > now) "Reset in ${countdown(it - now)}" else "Reset fällig", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant) }
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                windows.forEach { window -> Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text(window.title, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                    Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                    UsageTrack((window.usedPercent / 100).toFloat(), if (window.usedPercent >= 100) colors.error else if (window.seconds == 18000L) colors.primary else colors.tertiary, Modifier.fillMaxWidth().height(5.dp))
+                    Text(window.resetAt?.let { if (it > now) countdown(it - now) else "Reset fällig" } ?: "Termin unbekannt", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                } }
             }
-            if (usage == null || windows.isEmpty()) Text(if (loading) "Verbrauch wird geladen…" else "Keine Zeitfenster gemeldet", style = MaterialTheme.typography.bodySmall)
+            if (windows.isEmpty()) Text(if (loading) "Verbrauch wird geladen…" else "Keine Zeitfenster gemeldet", style = MaterialTheme.typography.bodySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (error != null) "Abruf fehlgeschlagen" else if (loading) "Aktualisiert…" else usage?.let { age(now - it.fetchedAt) } ?: "Noch keine Messung",
-                    color = if (error != null) colors.error else colors.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+                Text(if (error != null) "Abruf fehlgeschlagen" else if (loading) "Aktualisiert…" else usage?.let { "Genutzt · ${age(now - it.fetchedAt)}" } ?: "Noch keine Messung", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
                 Text("Details", style = MaterialTheme.typography.labelLarge, color = colors.primary)
             }
         }
@@ -346,19 +361,10 @@ private fun ProviderBanner(name: String, usage: UsageSnapshot?, error: String?, 
 }
 
 @Composable
-private fun ProviderTabs(names: List<String>, active: String, select: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(20.dp, 4.dp, 20.dp, 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        names.forEach { name ->
-            Surface(onClick = { select(name) }, shape = RoundedCornerShape(50),
-                color = if (active == name) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.weight(1f).semantics { selected = active == name; role = Role.Tab }) {
-                Row(Modifier.padding(14.dp, 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BrandIcon(name, Modifier.size(22.dp))
-                    Text(name, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-        }
-    }
+private fun ProviderTabs(names: List<String>, active: String, select: (String) -> Unit, inset: Boolean = true) {
+    SegmentedTabGroup(names, active, select, { it },
+        modifier = if (inset) Modifier.padding(20.dp, 4.dp, 20.dp, 12.dp) else Modifier,
+        fillEqually = true, icon = { ImageVector.vectorResource(if (it == "Codex") R.drawable.ic_brand_codex else R.drawable.ic_brand_claude) })
 }
 
 @Composable
@@ -410,11 +416,11 @@ private fun horizon(hours: Int) = if (hours % 24 == 0 && hours > 48) "in ${hours
 private fun ProbabilityBar(value: Double, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val animated by animateFloatAsState((value / 100).toFloat().coerceIn(0f, 1f), label = "probability")
-    Box(modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val corner = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
             drawRoundRect(colors.surfaceContainerHigh, cornerRadius = corner)
-            if (animated > 0) drawRoundRect(colors.primary.copy(alpha = .18f), size = Size(size.width * animated, size.height), cornerRadius = corner)
+            if (animated >= .04f) drawRoundRect(colors.primary.copy(alpha = .18f), size = Size(size.width * animated, size.height), cornerRadius = corner)
             val y = size.height - 5.dp.toPx()
             drawLine(colors.primary.copy(alpha = .12f), Offset(16.dp.toPx(), y), Offset(size.width - 16.dp.toPx(), y), 2.dp.toPx(), StrokeCap.Round)
             if (animated > 0) drawLine(colors.primary, Offset(16.dp.toPx(), y), Offset(16.dp.toPx() + (size.width - 32.dp.toPx()) * animated, y), 2.dp.toPx(), StrokeCap.Round)
@@ -437,6 +443,8 @@ private fun MenuRow(title: String, icon: ImageVector, open: () -> Unit) {
 @Composable
 private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel, provider: String, destination: String) {
     val uri = LocalUriHandler.current
+    val sources = historySources(provider)
+    var historySource by rememberSaveable(provider) { mutableStateOf(if (provider == "Codex") "api:${state.source.name}" else sources.firstOrNull()?.id.orEmpty()) }
     LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (destination == "Quellen") {
             item { SoftCard { Disclosure("So wird gerechnet") {
@@ -460,21 +468,20 @@ private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel,
                 }
             } }
         } else {
-            if (provider == "Codex") item {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ResetSource.entries.forEach { source -> FilterChip(selected = state.source == source, onClick = { model.setSource(source) }, label = { Text(source.label) }) }
+            item {
+                SegmentedTabGroup(sources, sources.firstOrNull { it.id == historySource } ?: sources.first(), { source ->
+                    historySource = source.id
+                    ResetSource.entries.firstOrNull { "api:${it.name}" == source.id }?.let(model::setSource)
+                }, { it.label })
+                if (historySource.startsWith("api:")) {
+                    state.feedError?.let { Notice(it, true) }
+                    if (state.feedLoading && state.feed?.source?.name != historySource.substringAfter(':')) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
-                state.feedError?.let { Notice(it, true) }
-                if (state.feedLoading && state.feed == null) LinearProgressIndicator(Modifier.fillMaxWidth())
             }
-            val events = buildList {
-                if (provider == "Codex") state.feed?.events?.forEach { add(state.source.label to it) }
-                CommunitySource.entries.filter { it.provider == provider }.forEach { source ->
-                    state.community[source]?.report?.events?.forEach { add(source.label to it) }
-                }
-            }.distinctBy { it.first to it.second.id }.sortedByDescending { it.second.at }.take(40)
+            val sourceLabel = sources.firstOrNull { it.id == historySource }?.label.orEmpty()
+            val events = historyEvents(provider, historySource, state.feed, state.community)
             if (events.isEmpty()) item { SoftCard { Text("Noch keine Meldungen", style = MaterialTheme.typography.titleMedium) } }
-            items(events, key = { "${it.first}:${it.second.id}" }) { (source, event) -> SoftCard {
+            items(events, key = { it.id + ":" + it.at }) { event -> SoftCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(event.kind, style = MaterialTheme.typography.titleSmall)
@@ -483,16 +490,9 @@ private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel,
                     event.url?.let { link -> IconButton(onClick = { uri.openUri(link) }) { Icon(Icons.AutoMirrored.Rounded.OpenInNew, "Originalquelle öffnen") } }
                 }
                 if (event.summary.isNotBlank()) Disclosure("Meldung") { Text(event.summary, style = MaterialTheme.typography.bodySmall) }
-                Text(source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(sourceLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } }
-            if (provider == "Codex" && state.observations.isNotEmpty()) {
-                item { SectionTitle("Auf deinem Gerät") }
-                items(state.observations) { observation -> SoftCard {
-                    Text("${observation.windowTitle} · Verbrauch gesunken", style = MaterialTheme.typography.titleSmall)
-                    Text("${percent(observation.before)}% → ${percent(observation.after)}%", style = MaterialTheme.typography.headlineSmall)
-                    Text(date(observation.detectedAt), style = MaterialTheme.typography.labelSmall)
-                } }
-            }
+
         }
     }
 }
@@ -524,7 +524,7 @@ private fun SourceCard(label: String, url: String, chances: List<ForecastChance>
 }
 
 @Composable
-private fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -> Unit) {
+private fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -> Unit, notifications: () -> Unit) {
     val uri = LocalUriHandler.current
     Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp, 8.dp, 24.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SoftCard {
@@ -533,8 +533,9 @@ private fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -
             if (state.claudeConnected) Text("Claude Code verbunden", style = MaterialTheme.typography.bodyMedium)
             FilledTonalButton(onClick = accounts) { Text("Anmeldungen verwalten") }
         }
+        Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow) { MenuRow("Benachrichtigungen & Aktualisierung", Icons.Rounded.Notifications, notifications) }
         SoftCard {
-            Text("Farben & Gefühl", style = MaterialTheme.typography.titleMedium)
+            Text("Darstellung", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Hell", ThemeMode.DARK to "Dunkel").forEach { (theme, label) -> FilterChip(state.theme == theme, { model.setTheme(theme) }, label = { Text(label) }) }
             }
@@ -581,9 +582,17 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
     }
     Column(Modifier.widthIn(max = 560.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
         if (close != null) TextButton(onClick = close) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, null); Text("Zurück") }
-        Spacer(Modifier.height(18.dp))
-        FlowerMark()
-        Text("Wen verbinden\nwir heute?", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        if (!state.connected && !state.claudeConnected) {
+            Spacer(Modifier.height(20.dp))
+            Text("AI Usage", style = MaterialTheme.typography.titleLarge, modifier = Modifier.align(Alignment.CenterHorizontally))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) { Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) { BrandIcon("Codex", Modifier.size(40.dp)) } }
+                Spacer(Modifier.width(16.dp))
+                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) { Box(Modifier.size(76.dp), contentAlignment = Alignment.Center) { BrandIcon("Claude Code", Modifier.size(40.dp)) } }
+            }
+            Text("Dein Verbrauch.\nDein Überblick.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            Text("Verbinde deine Tools. Alles bleibt auf deinem Gerät.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
                 SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BrandIcon("Codex")
@@ -591,7 +600,7 @@ private fun LoginScreen(state: UiState, model: UsageViewModel, close: (() -> Uni
                 if (state.connected) Icon(Icons.Rounded.CheckCircle, "Verbunden", tint = MaterialTheme.colorScheme.primary)
             }
             if (state.connected) TextButton(onClick = { confirm = "Codex" }) { Text("Verbindung trennen") }
-            else Button(onClick = model::connect, enabled = !state.loginLoading && !state.disconnecting, modifier = Modifier.fillMaxWidth()) { Text("Mit Codex verbinden") }
+            else FilledTonalButton(onClick = model::connect, enabled = !state.loginLoading && !state.disconnecting, modifier = Modifier.fillMaxWidth()) { Text("Mit Codex verbinden") }
         }
         SoftCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -698,13 +707,13 @@ private fun Disclosure(label: String, content: @Composable ColumnScope.() -> Uni
     }
 }
 @Composable
-private fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
     Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Row(Modifier.padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.size(4.dp, 22.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
         Text(text, style = MaterialTheme.typography.titleLarge)
@@ -726,7 +735,7 @@ private fun StatusPill(text: String, icon: ImageVector) {
     }
 }
 @Composable
-private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.bodyLarge); Text(subtitle, style = MaterialTheme.typography.bodySmall) }
         Switch(checked, onChange)

@@ -25,6 +25,7 @@ interface TokenStore {
 // All account data and tokens stay in noBackupFilesDir, encrypted by a device-bound key.
 class SecureStore(context: Context, private val namespace: String = "account") : TokenStore, ClaudeCredentialStore {
     private val directory = context.noBackupFilesDir
+    private val ioLock = locks.getOrPut(directory.absolutePath + "/" + namespace) { Any() }
     private val alias = "aiusage.$namespace.v1"
     private fun filename(name: String) = if (namespace == "account") name else "$namespace.$name"
     private fun key(): SecretKey {
@@ -35,22 +36,20 @@ class SecureStore(context: Context, private val namespace: String = "account") :
                 .setKeySize(256).build())
         }.generateKey()
     }
-    @Synchronized
-    private fun write(name: String, text: String) {
+    private fun write(name: String, text: String): Unit = synchronized(ioLock) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
         val bytes = byteArrayOf(cipher.iv.size.toByte()) + cipher.iv + cipher.doFinal(text.toByteArray())
         val file = AtomicFile(File(directory, filename(name)))
         val stream = file.startWrite()
         try { stream.write(bytes); file.finishWrite(stream) } catch (e: Exception) { file.failWrite(stream); throw e }
     }
-    @Synchronized
-    private fun read(name: String): String? {
+    private fun read(name: String): String? = synchronized(ioLock) {
         val file = AtomicFile(File(directory, filename(name)))
-        if (!file.baseFile.exists()) return null
+        if (!file.baseFile.exists()) return@synchronized null
         val bytes = file.readFully()
         val ivLength = bytes.first().toInt()
         require(ivLength in 12..16 && bytes.size > ivLength + 1)
-        return Cipher.getInstance("AES/GCM/NoPadding").run {
+        Cipher.getInstance("AES/GCM/NoPadding").run {
             init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes.copyOfRange(1, 1 + ivLength)))
             doFinal(bytes.copyOfRange(1 + ivLength, bytes.size)).toString(Charsets.UTF_8)
         }
@@ -59,14 +58,20 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun writeTokens(tokens: Tokens) = write("tokens.enc", appJson.encodeToString(tokens))
     fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString(it) } ?: PersonalRecord()
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
+    fun saveMeasurement(usage: UsageSnapshot, provider: String, observations: List<ResetObservation>? = null): PersonalRecord = synchronized(ioLock) {
+        val old = readRecord()
+        val next = recordMeasurement(old, usage, provider)
+        val result = if (observations != null && next.usage?.fetchedAt == usage.fetchedAt) next.copy(observations = observations) else next
+        writeRecord(result)
+        result
+    }
+    companion object { private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>() }
     override fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
     override fun writeClaude(value: ClaudeCredential) = write("tokens.enc", appJson.encodeToString(value))
     override fun readClaudeLogin(): ClaudePendingLogin? = read("login.enc")?.let { appJson.decodeFromString(it) }
     override fun writeClaudeLogin(value: ClaudePendingLogin) = write("login.enc", appJson.encodeToString(value))
-    @Synchronized
-    override fun clearClaudeLogin() { AtomicFile(File(directory, filename("login.enc"))).delete() }
-    @Synchronized
-    override fun clear() {
+    override fun clearClaudeLogin(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("login.enc"))).delete() }
+    override fun clear(): Unit = synchronized(ioLock) {
         AtomicFile(File(directory, filename("tokens.enc"))).delete()
         AtomicFile(File(directory, filename("usage.enc"))).delete()
         clearClaudeLogin()
