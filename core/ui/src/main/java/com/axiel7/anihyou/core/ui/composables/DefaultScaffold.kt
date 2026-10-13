@@ -7,6 +7,14 @@ import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -76,13 +84,19 @@ fun DefaultScaffoldWithMediumTopAppBar(
     scrollBehavior: TopAppBarScrollBehavior,
     topAppBarColors: TopAppBarColors = TopAppBarDefaults.topAppBarColors(),
     contentWindowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
+    accentTitle: Boolean = false,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
         modifier = modifier,
         topBar = {
             MediumTopAppBar(
-                title = { Text(text = title) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (accentTitle) Box(Modifier.size(4.dp, 26.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)))
+                        Text(text = title)
+                    }
+                },
                 navigationIcon = navigationIcon,
                 actions = actions,
                 scrollBehavior = scrollBehavior,

@@ -72,7 +72,7 @@ class UiSmokeTest {
         compose.onNodeWithText("Reset-Chance").assertIsDisplayed()
         compose.onNodeWithText("23%").assertIsDisplayed()
         compose.onNodeWithText("codex-reset.com").assertDoesNotExist()
-        compose.onNodeWithText("Quellen & Berechnung").performClick()
+        compose.onNodeWithText("Quellen & Berechnung").performScrollTo().performClick()
         compose.onNodeWithText("Quellen · Codex").assertIsDisplayed()
         compose.onNodeWithText("Resets").assertDoesNotExist()
         compose.onNodeWithText("So wird gerechnet").performClick()
@@ -87,7 +87,7 @@ class UiSmokeTest {
         compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
         compose.onNodeWithText("in 48 Stunden").assertIsDisplayed()
         screenshot("claude-forecast-light")
-        compose.onNodeWithText("Quellen & Berechnung").performClick()
+        compose.onNodeWithText("Quellen & Berechnung").performScrollTo().performClick()
         compose.onNodeWithText("Quellen · Claude Code").assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("in 7 Tagen").assertIsDisplayed()
@@ -163,7 +163,7 @@ class UiSmokeTest {
         compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
         compose.onNodeWithText("Benachrichtigungen & Aktualisierung").performScrollTo().performClick()
         compose.onNodeWithText("Benachrichtigungen").assertIsDisplayed()
-        compose.onNodeWithText("Tägliche Messung").assertIsDisplayed()
+        compose.onNodeWithText("Alle 4 Stunden").assertIsDisplayed()
         screenshot("notifications-dark")
         compose.onNodeWithText("Claude Code").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
@@ -183,6 +183,28 @@ class UiSmokeTest {
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
         compose.runOnIdle { event.value = 2L }
         compose.onNodeWithText("Codex").assertIsDisplayed()
+    }
+    @Test fun `provider daily tokens show real activity and detailed statistics without fetch counts`() {
+        val model = UsageViewModel(ApplicationProvider.getApplicationContext())
+        models.put("usage", model)
+        val now = Instant.now().epochSecond
+        val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        val report = StatsParser.codex(CodexReport.PROFILE, """{"stats":{"lifetime_tokens":2000,"current_streak_days":2,"daily_usage_buckets":[{"start_date":"$today","tokens":250},{"start_date":"${today.minusDays(1)}","tokens":1750}]}}""", now)
+        val screen = UiState(initializing = false, claudeInitializing = false, connected = true,
+            usage = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 1000)))), now), stats = StatsBundle(listOf(report)))
+        compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
+        compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("20×").assertDoesNotExist()
+        screenshot("real-activity-dark")
+        compose.onNodeWithText("Statistiken").performScrollTo().performClick()
+        compose.onNodeWithText("Statistiken · Codex").assertIsDisplayed()
+        compose.onNodeWithText("2.000").assertIsDisplayed()
+        compose.onNodeWithText("Verbrauch").assertDoesNotExist()
+        screenshot("stats-dark")
+        compose.onNodeWithText("Datenquellen").performScrollTo().performClick()
+        compose.onNodeWithText("Admin-API-Key").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithText("AI Usage").assertIsDisplayed()
     }
     private fun screenshot(name: String) {
         compose.waitForIdle()

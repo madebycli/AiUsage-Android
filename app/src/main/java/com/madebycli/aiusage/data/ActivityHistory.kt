@@ -5,7 +5,8 @@ import java.time.Instant
 import java.time.ZoneId
 
 @Serializable
-data class UsageDay(val date: String, val peak: Double?, val measurements: Int, val lastMeasuredAt: Long)
+data class UsageDay(val date: String, val peak: Double?, val measurements: Int = 0, val lastMeasuredAt: Long,
+    val actual: Double? = null, val unit: String? = null, val source: String? = null)
 
 /** Actual sampled five-hour quota, not token counts or an invented complete daily total. */
 fun recordMeasurement(record: PersonalRecord, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): PersonalRecord {
@@ -17,7 +18,8 @@ fun recordMeasurement(record: PersonalRecord, snapshot: UsageSnapshot, provider:
         ?.usedPercent?.takeIf { it.isFinite() && it in 0.0..100.0 }
     val old = record.days.firstOrNull { it.date == day }
     val peak = listOfNotNull(old?.peak, value).maxOrNull()
-    val updated = UsageDay(day, peak, (old?.measurements ?: 0) + 1, snapshot.fetchedAt)
+    // Legacy measurement counts were fetch counts, never usage. Stop incrementing them.
+    val updated = UsageDay(day, peak, 0, snapshot.fetchedAt)
     val days = (record.days.filter { it.date != day } + updated).sortedByDescending { it.date }.take(366)
     return record.copy(usage = snapshot, days = days)
 }

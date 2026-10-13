@@ -22,10 +22,14 @@ class BackgroundSettingsTest {
         context.getSharedPreferences("alerts", 0).edit().clear().commit()
         WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
     }
-    @Test fun `daily work is unique network constrained 24h and disabled removes it`() {
-        DailyRefresh.sync(context, true)
-        DailyRefresh.sync(context, true)
+    @Test fun `four hour work migrates old daily schedule is unique and disabled removes it`() {
         val work = WorkManager.getInstance(context)
+        work.enqueueUniquePeriodicWork("daily-account-measurement", ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<DailyUsageWorker>(24, java.util.concurrent.TimeUnit.HOURS).build())
+        DailyRefresh.sync(context, true)
+        DailyRefresh.sync(context, true)
+        assertTrue(work.getWorkInfosForUniqueWork("daily-account-measurement").get().all { it.state.isFinished })
+        assertEquals(java.util.concurrent.TimeUnit.HOURS.toMillis(4), DailyRefresh.request().workSpec.intervalDuration)
         val infos = work.getWorkInfosForUniqueWork(DailyRefresh.NAME).get().filter { !it.state.isFinished }
         assertEquals(1, infos.size)
         assertEquals(NetworkType.CONNECTED, infos.single().constraints.requiredNetworkType)

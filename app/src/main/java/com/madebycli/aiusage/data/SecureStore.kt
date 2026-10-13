@@ -58,6 +58,11 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun writeTokens(tokens: Tokens) = write("tokens.enc", appJson.encodeToString(tokens))
     fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString(it) } ?: PersonalRecord()
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
+    fun readStats(): StatsBundle = read("stats.enc")?.let { appJson.decodeFromString(it) } ?: StatsBundle()
+    fun writeStats(value: StatsBundle) = write("stats.enc", appJson.encodeToString(value))
+    fun readAnalyticsKey(): String? = read("analytics-key.enc")
+    fun writeAnalyticsKey(value: String) = write("analytics-key.enc", value)
+    fun clearAnalyticsKey(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("analytics-key.enc"))).delete() }
     fun saveMeasurement(usage: UsageSnapshot, provider: String, observations: List<ResetObservation>? = null): PersonalRecord = synchronized(ioLock) {
         val old = readRecord()
         val next = recordMeasurement(old, usage, provider)
@@ -74,6 +79,8 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun clear(): Unit = synchronized(ioLock) {
         AtomicFile(File(directory, filename("tokens.enc"))).delete()
         AtomicFile(File(directory, filename("usage.enc"))).delete()
+        AtomicFile(File(directory, filename("stats.enc"))).delete()
+        clearAnalyticsKey()
         clearClaudeLogin()
         KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) }
     }

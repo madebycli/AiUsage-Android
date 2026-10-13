@@ -22,6 +22,10 @@ data class UiState(
     val usage: UsageSnapshot? = null, val previous: UsageSnapshot? = null,
     val observations: List<ResetObservation> = emptyList(),
     val days: List<UsageDay> = emptyList(), val claudeDays: List<UsageDay> = emptyList(),
+    val stats: StatsBundle = StatsBundle(), val claudeStats: StatsBundle = StatsBundle(),
+    val statsLoading: Boolean = false, val claudeStatsLoading: Boolean = false,
+    val statsError: String? = null, val claudeStatsError: String? = null,
+    val apiConnected: Boolean = false, val claudeApiConnected: Boolean = false,
     val refreshing: Boolean = false, val creditsLoading: Boolean = false, val usageError: String? = null, val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
     val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
@@ -60,6 +64,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val usageRevision = AtomicLong()
     private val recordMutex = Mutex()
     private val quotaMutex = AccountAccess.codex
+    private val statsJobs = mutableMapOf<String, Job>()
     private val publicQueue = RefreshQueue(viewModelScope) { readFeed() }
     private var loginJob: Job? = null
     private val mutable = MutableStateFlow(UiState(
@@ -75,7 +80,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                 lock.withLock {
                     runCatching {
                         val record = (if (provider == "Codex") store else claudeStore).readRecord()
-                        mutable.update { if (provider == "Codex" && it.connected) it.copy(usage = record.usage, days = record.days)
+                        val reports = (if (provider == "Codex") store else claudeStore).readStats()
+                        mutable.update { if (provider == "Codex" && it.connected) it.copy(usage = record.usage, days = record.days, stats = reports)
                             else if (provider == "Claude Code" && it.claudeConnected) it.copy(claudeUsage = record.usage, claudeDays = record.days) else it }
                     }
                 }
@@ -93,7 +99,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     PersonalRecord()
                 } else PersonalRecord()
                 mutable.update { if (!session.isCurrent(generation)) it else it.copy(initializing = false,
-                    connected = tokens != null, usage = record.usage, observations = record.observations, days = record.days, storageWarning = recordWarning) }
+                    connected = tokens != null, usage = record.usage, observations = record.observations, days = record.days, storageWarning = recordWarning,
+                    stats = if (tokens != null) runCatching { store.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
+                    apiConnected = tokens != null && runCatching { store.readAnalyticsKey() != null }.getOrDefault(false)) }
                 if (tokens != null && session.isCurrent(generation)) privateQueue.request()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
@@ -108,10 +116,135 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     val record = if (credentials != null) runCatching { claudeStore.readRecord() }.getOrDefault(PersonalRecord()) else PersonalRecord()
                     val pendingUrl = claudeAuth.pendingUrl()
                     mutable.update { it.copy(claudeInitializing = false, claudeConnected = credentials != null, claudeUsage = record.usage, claudeDays = record.days,
+                        claudeStats = if (credentials != null) runCatching { claudeStore.readStats() }.getOrDefault(StatsBundle()) else StatsBundle(),
+                        claudeApiConnected = credentials != null && runCatching { claudeStore.readAnalyticsKey() != null }.getOrDefault(false),
                         claudeLoginOpen = pendingUrl != null, claudeLoginUrl = pendingUrl) }
                     if (credentials != null) claudeQueue.request()
                 } catch (e: CancellationException) { throw e }
                 catch (_: Exception) { mutable.update { it.copy(claudeInitializing = false, claudeError = "Claude-Anmeldung konnte nicht gelesen werden. Bitte neu verbinden.") } }
+            }
+        }
+    }
+    private fun statsState(provider: String, bundle: StatsBundle? = null, loading: Boolean? = null, error: String? = null, api: Boolean? = null) {
+        mutable.update { if (provider == "Codex") it.copy(stats = bundle ?: it.stats, statsLoading = loading ?: it.statsLoading,
+            statsError = error, apiConnected = api ?: it.apiConnected) else it.copy(claudeStats = bundle ?: it.claudeStats,
+            claudeStatsLoading = loading ?: it.claudeStatsLoading, claudeStatsError = error, claudeApiConnected = api ?: it.claudeApiConnected) }
+    }
+    fun refreshStats(provider: String, force: Boolean = false, profileOnly: Boolean = false) {
+        if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
+        val reports = if (provider == "Codex") state.value.stats else state.value.claudeStats
+        val now = Instant.now().epochSecond
+        val statsPrefs = getApplication<Application>().getSharedPreferences("stats-refresh", 0)
+        if (statsPrefs.getLong("retry.$provider", 0) > now) {
+            statsState(provider, error = "Der Anbieter hat eine Wartezeit für Statistiken gesetzt."); return
+        }
+        if (profileOnly && statsPrefs.getLong("profile.$provider", 0) > now) return
+        if (!force && reports.reports.any { (if (profileOnly) it.id == CodexReport.PROFILE.id else it.id.startsWith("codex.") && it.id != CodexReport.PROFILE.id) && now - it.fetchedAt < 14400 }) return
+        val generation = if (provider == "Codex") session.current() else claudeGeneration.current()
+        fun current() = if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected
+        val lock = if (provider == "Codex") quotaMutex else claudeMutex
+        val target = if (provider == "Codex") store else claudeStore
+        statsState(provider, loading = true)
+        statsJobs[provider] = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                var continueReports = true
+                suspend fun report(id: String, title: String, scope: String, action: suspend () -> StatsReport) {
+                    lock.withLock {
+                        if (!current()) return@withLock
+                        val previous = target.readStats()
+                        val result = try { withTimeout(8_000) { action() } }
+                        catch (e: TimeoutCancellationException) { (previous.reports.firstOrNull { it.id == id } ?: StatsReport(id, title, scope, 0)).copy(error = "Abruf hat zu lange gedauert.") }
+                        catch (e: CancellationException) { throw e }
+                        catch (e: Exception) {
+                            if (e is HttpFailure && e.status == 429) {
+                                statsPrefs.edit().putLong("retry.$provider", Instant.now().epochSecond + (e.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
+                                continueReports = false
+                            }
+                            val text = if (e is HttpFailure && e.status in listOf(403, 404)) "Für diesen Account nicht verfügbar (HTTP ${e.status})." else safeError(e)
+                            (previous.reports.firstOrNull { it.id == id } ?: StatsReport(id, title, scope, 0)).copy(error = text)
+                        }
+                        currentCoroutineContext().ensureActive()
+                        if (current()) { val next = previous.merge(result); target.writeStats(next); statsState(provider, bundle = next) }
+                    }
+                }
+                if (provider == "Codex") {
+                    val repository = CodexStatsRepository(auth)
+                    for (kind in if (profileOnly) listOf(CodexReport.PROFILE) else CodexReport.entries) {
+                        if (!continueReports) break
+                        report(kind.id, kind.title, "Account · UTC") { repository.fetch(kind, Instant.now().epochSecond) }
+                        if (kind == CodexReport.PROFILE && current()) statsPrefs.edit().putLong("profile.$provider", Instant.now().epochSecond + 14400).apply()
+                    }
+                }
+                val key = lock.withLock { if (current()) target.readAnalyticsKey() else null }
+                if (key != null && !profileOnly) for (cost in listOf(false, true)) {
+                    if (!continueReports) break
+                    report("api.${if (cost) "cost" else "usage"}", if (cost) "API-Kosten" else "API-Tokens", "API · gesamte Organisation · UTC") {
+                        ApiStatsRepository(http).fetch(provider, key, cost, Instant.now().epochSecond)
+                    }
+                }
+                if (key != null && provider == "Claude Code" && !profileOnly && continueReports) report("api.code", "Claude Code · heute", "Organisation · UTC · Tagesbericht") { ApiStatsRepository(http).claudeCode(key, Instant.now().epochSecond) }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { if (current()) statsState(provider, error = safeError(e)) }
+            finally { if (current()) statsState(provider, loading = false, error = if (provider == "Codex") state.value.statsError else state.value.claudeStatsError) }
+        }
+    }
+    fun importClaudeStats(raw: String) {
+        if (!state.value.claudeConnected || statsJobs["Claude Code"]?.isActive == true) return
+        val generation = claudeGeneration.current()
+        statsState("Claude Code", loading = true)
+        statsJobs["Claude Code"] = viewModelScope.launch(Dispatchers.IO) {
+            try { claudeMutex.withLock {
+                require(raw.toByteArray().size <= 1_048_576)
+                val report = StatsParser.claudeFile(raw, Instant.now().epochSecond)
+                if (!claudeGeneration.isCurrent(generation) || !state.value.claudeConnected) return@withLock
+                val next = claudeStore.readStats().merge(report)
+                claudeStore.writeStats(next); statsState("Claude Code", bundle = next)
+            } } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { if (claudeGeneration.isCurrent(generation)) statsState("Claude Code", error = "Die Datei ist kein lesbarer Claude-Code-Statistikbericht (maximal 1 MiB).") }
+            finally { if (claudeGeneration.isCurrent(generation)) statsState("Claude Code", loading = false, error = state.value.claudeStatsError) }
+        }
+    }
+    fun connectAnalytics(provider: String, raw: String) {
+        if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
+        val key = raw.trim()
+        if (!key.startsWith(if (provider == "Codex") "sk-admin-" else "sk-ant-admin") || key.length !in 20..512) {
+            statsState(provider, error = "Hier wird ein separater Admin-API-Key benötigt, kein persönlicher Abo-Token."); return
+        }
+        val generation = if (provider == "Codex") session.current() else claudeGeneration.current()
+        fun current() = if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected
+        statsState(provider, loading = true)
+        statsJobs[provider] = viewModelScope.launch(Dispatchers.IO) {
+            val lock = if (provider == "Codex") quotaMutex else claudeMutex
+            val target = if (provider == "Codex") store else claudeStore
+            try { lock.withLock {
+                val repository = ApiStatsRepository(http)
+                val report = withTimeout(15_000) { repository.fetch(provider, key, false, Instant.now().epochSecond) }
+                currentCoroutineContext().ensureActive()
+                if (current()) {
+                    target.writeAnalyticsKey(key)
+                    var next = target.readStats().merge(report)
+                    val costs = try { withTimeout(8_000) { repository.fetch(provider, key, true, Instant.now().epochSecond) } }
+                    catch (_: TimeoutCancellationException) { StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = "Kostenabruf hat zu lange gedauert.") }
+                    catch (e: CancellationException) { throw e }
+                    catch (e: Exception) { StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = safeError(e)) }
+                    next = next.merge(costs)
+                    if (current()) { target.writeStats(next); statsState(provider, bundle = next, api = true) }
+                }
+            } } catch (e: TimeoutCancellationException) { if (current()) statsState(provider, error = "API-Prüfung hat zu lange gedauert.") }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { if (current()) statsState(provider, error = safeError(e)) }
+            finally { if (current()) statsState(provider, loading = false, error = if (provider == "Codex") state.value.statsError else state.value.claudeStatsError) }
+        }
+    }
+    fun disconnectAnalytics(provider: String) {
+        val generation = if (provider == "Codex") session.current() else claudeGeneration.current()
+        statsJobs.remove(provider)?.cancel()
+        viewModelScope.launch(Dispatchers.IO) {
+            val lock = if (provider == "Codex") quotaMutex else claudeMutex
+            val target = if (provider == "Codex") store else claudeStore
+            lock.withLock {
+                if (!(if (provider == "Codex") session.isCurrent(generation) && state.value.connected else claudeGeneration.isCurrent(generation) && state.value.claudeConnected)) return@withLock
+                target.clearAnalyticsKey(); val old = target.readStats(); val next = old.copy(reports = old.reports.filterNot { it.id.startsWith("api.") }); target.writeStats(next); statsState(provider, next, loading = false, api = false)
             }
         }
     }
@@ -140,6 +273,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             if ((usage.availableResets ?: 0) > 0) creditsQueue.request()
             val warning = persist(generation, revision)
             mutable.update { if (!session.isCurrent(generation) || usageRevision.get() != revision) it else it.copy(storageWarning = warning) }
+            viewModelScope.launch { if (session.isCurrent(generation)) refreshStats("Codex", profileOnly = true) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             Log.w("AiUsage", diagnosticFailure("usage", e))
@@ -242,6 +376,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.disconnecting) return
         ResetAlerts.invalidate(getApplication(), "Codex")
         session.advance()
+        statsJobs.remove("Codex")?.cancel()
         usageRevision.incrementAndGet()
         loginJob?.cancel()
         mutable.update { it.copy(loginLoading = false, deviceCode = null, loginError = null) }
@@ -250,7 +385,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         val oldPersonalJob = personalScope.coroutineContext[Job]
         personalScope.cancel()
         mutable.update { it.copy(connected = false, disconnecting = true, usage = null, previous = null,
-            observations = emptyList(), days = emptyList(), refreshing = false, creditsLoading = false, usageError = null, storageWarning = null, forecasts = emptyMap(), feed = null, community = it.community.filterKeys { key -> key.provider != "Codex" }) }
+            observations = emptyList(), days = emptyList(), stats = StatsBundle(), statsLoading = false, statsError = null, apiConnected = false,
+            refreshing = false, creditsLoading = false, usageError = null, storageWarning = null, forecasts = emptyMap(), feed = null, community = it.community.filterKeys { key -> key.provider != "Codex" }) }
         viewModelScope.launch(Dispatchers.IO) {
             loginJob?.join()
             oldPersonalJob?.join()
@@ -361,8 +497,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                         // Clear old measurements before replacing the account.
                         ResetAlerts.invalidate(getApplication(), "Claude Code")
                         claudeStore.writeRecord(PersonalRecord())
+                        claudeStore.writeStats(StatsBundle()); claudeStore.clearAnalyticsKey()
                         claudeStore.writeClaude(credentials)
-                        mutable.update { it.copy(claudeConnected = true, claudeUsage = null, claudeDays = emptyList(), claudeError = null,
+                        mutable.update { it.copy(claudeConnected = true, claudeUsage = null, claudeDays = emptyList(), claudeStats = StatsBundle(), claudeApiConnected = false, claudeError = null,
                             claudeLoginOpen = false, claudeLoginUrl = null, claudeLoginResult = it.claudeLoginResult + 1) }
                     }
                 } catch (e: CancellationException) { throw e }
@@ -409,8 +546,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     if (!claudeGeneration.isCurrent(generation)) return@withLock
                     ResetAlerts.invalidate(getApplication(), "Claude Code")
                     claudeStore.writeRecord(PersonalRecord())
+                    claudeStore.writeStats(StatsBundle()); claudeStore.clearAnalyticsKey()
                     claudeStore.writeClaude(credentials)
-                    mutable.update { it.copy(claudeConnected = true, claudeUsage = usage, claudeError = null) }
+                    mutable.update { it.copy(claudeConnected = true, claudeUsage = usage, claudeStats = StatsBundle(), claudeApiConnected = false, claudeError = null) }
                     val warning = persistAccountRecord {
                         val record = claudeStore.saveMeasurement(usage, "Claude Code")
                         mutable.update { it.copy(claudeDays = record.days) }
@@ -427,10 +565,12 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         if (state.value.claudeDisconnecting) return
         ResetAlerts.invalidate(getApplication(), "Claude Code")
         claudeGeneration.advance()
+        statsJobs.remove("Claude Code")?.cancel()
         val previous = claudeLoginJob
         previous?.cancel()
         claudeQueue.cancel()
-        mutable.update { it.copy(claudeConnected = false, claudeUsage = null, claudeDays = emptyList(), claudeError = null, claudeRefreshing = false,
+        mutable.update { it.copy(claudeConnected = false, claudeUsage = null, claudeDays = emptyList(), claudeStats = StatsBundle(), claudeStatsError = null,
+            claudeStatsLoading = false, claudeApiConnected = false, claudeError = null, claudeRefreshing = false,
             claudeDisconnecting = true, claudeLoginOpen = false, claudeLoginBusy = false, claudeLoginUrl = null, claudeLoginError = null,
             community = it.community.filterKeys { key -> key.provider != "Claude Code" }) }
         viewModelScope.launch(Dispatchers.IO) { previous?.join(); claudeMutex.withLock {

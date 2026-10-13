@@ -8,16 +8,19 @@ import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 
 object DailyRefresh {
-    const val NAME = "daily-account-measurement"
+    const val NAME = "four-hour-account-refresh"
+    const val INTERVAL_HOURS = 4L
+    fun request() = PeriodicWorkRequestBuilder<DailyUsageWorker>(INTERVAL_HOURS, TimeUnit.HOURS)
+        .setInitialDelay(INTERVAL_HOURS, TimeUnit.HOURS)
+        .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+        .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES).build()
     fun sync(context: Context, connected: Boolean) {
         val work = WorkManager.getInstance(context)
+        // Migrate the previous 24h schedule; KEEP must not keep its old interval.
+        work.cancelUniqueWork("daily-account-measurement")
         val enabled = context.getSharedPreferences("alerts", 0).getBoolean("daily", true)
         if (!connected || !enabled) { work.cancelUniqueWork(NAME); return }
-        val request = PeriodicWorkRequestBuilder<DailyUsageWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(6, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES).build()
-        work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+        work.enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request())
     }
 }
 
@@ -48,7 +51,21 @@ class DailyUsageWorker(context: Context, parameters: WorkerParameters) : Corouti
             }
         }
         measure("Codex") { store ->
-            if (store.readTokens() == null) null else UsageRepository(CodexAuth(http, store)).fetch()
+            if (store.readTokens() == null) null else {
+                val auth = CodexAuth(http, store)
+                val usage = UsageRepository(auth).fetch()
+                // One small profile read supplies genuine daily token buckets, not fetch counts.
+                try {
+                    if (applicationContext.getSharedPreferences("stats-refresh", 0).getLong("retry.Codex", 0) > java.time.Instant.now().epochSecond) return@measure usage
+                    val profile = kotlinx.coroutines.withTimeout(6_000) { CodexStatsRepository(auth).fetch(CodexReport.PROFILE, java.time.Instant.now().epochSecond) }
+                    store.writeStats(store.readStats().merge(profile))
+                } catch (_: kotlinx.coroutines.TimeoutCancellationException) { /* Quota remains valid. */ }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) {
+                    if (e is HttpFailure && e.status == 429) applicationContext.getSharedPreferences("stats-refresh", 0).edit().putLong("retry.Codex", java.time.Instant.now().epochSecond + (e.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
+                }
+                usage
+            }
         }
         measure("Claude Code") { store ->
             if (store.readClaude() == null) null else {

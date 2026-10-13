@@ -11,7 +11,7 @@ enum class CommunitySource(val label: String, val provider: String, val site: St
     VERCEL_CLAUDE("Claude Reset Tracker", "Claude Code", "https://codexreset.vercel.app/en/claude", 1800)
 }
 data class CommunityReport(val source: CommunitySource, val chance: ForecastChance, val publishedAt: Long?, val fetchedAt: Long,
-    val expectedAt: Long?, val events: List<ResetEvent>)
+    val expectedAt: Long?, val events: List<ResetEvent>, val validUntil: Long? = null)
 data class CommunityResult(val report: CommunityReport?, val error: String? = null)
 object CommunityParser {
     fun parse(source: CommunitySource, html: String, fetchedAt: Long): CommunityReport {
@@ -42,6 +42,8 @@ object CommunityParser {
         val value = panel.selectFirst(".prob-value")?.text() ?: throw SchemaException()
         val published = doc.select(".timeline-sync-bar .sync-item").firstOrNull { it.text().startsWith("Last synced") }
             ?.selectFirst("time[datetime]")?.attr("datetime")?.let(::parseInstant)
+        val nextSync = doc.select(".timeline-sync-bar .sync-item").firstOrNull { it.text().startsWith("Next sync") }
+            ?.selectFirst("time[datetime]")?.attr("datetime")?.let(::parseInstant)
         val history = doc.selectFirst("section[aria-label=Reset history]") ?: throw SchemaException()
         val events = history.select("li").mapNotNull { row ->
             val time = row.selectFirst("time[datetime]") ?: return@mapNotNull null
@@ -50,7 +52,7 @@ object CommunityParser {
                 row.selectFirst("a[href]")?.absUrl("href")?.let(::link))
         }
         val expected = panel.selectFirst(".next-reset time[datetime]")?.attr("datetime")?.let(::parseInstant)
-        return CommunityReport(source, ForecastChance(48, percent(value)), published, fetchedAt, expected, events)
+        return CommunityReport(source, ForecastChance(48, percent(value)), published, fetchedAt, expected, events, nextSync)
     }
 }
 class CommunityRepository(private val http: HttpTransport) {

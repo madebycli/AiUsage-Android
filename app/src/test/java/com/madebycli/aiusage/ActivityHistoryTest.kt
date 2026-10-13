@@ -14,10 +14,17 @@ class ActivityHistoryTest {
         val a = recordMeasurement(PersonalRecord(), snapshot(10000, 21.0), "Codex", zone)
         val b = recordMeasurement(a, snapshot(11000, 4.0), "Codex", zone)
         assertEquals(21.0, b.days.single().peak!!, 0.0)
-        assertEquals(2, b.days.single().measurements)
+        assertEquals(0, b.days.single().measurements)
         val next = recordMeasurement(b, snapshot(200000, 0.0), "Codex", zone)
         assertEquals(2, next.days.size)
         assertEquals(0.0, next.days.first().peak!!, 0.0)
+    }
+    @Test fun `twenty refreshes cannot become twenty used limits`() {
+        var record = PersonalRecord()
+        repeat(20) { record = recordMeasurement(record, snapshot(10000L + it, 21.0), "Codex") }
+        assertEquals(21.0, record.days.single().peak!!, 0.0)
+        assertEquals(0, record.days.single().measurements)
+        assertNull(record.days.single().actual)
     }
     @Test fun `enrichment duplicates and old results never add phantom measurements`() {
         val a = recordMeasurement(PersonalRecord(), snapshot(10000, 21.0), "Codex")

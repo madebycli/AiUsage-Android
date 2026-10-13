@@ -78,6 +78,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     var selectedProvider by rememberSaveable { mutableStateOf<String?>(null) }
     var resetProvider by rememberSaveable { mutableStateOf("Codex") }
     var resetPage by rememberSaveable { mutableStateOf<String?>(null) }
+    var statsProvider by rememberSaveable { mutableStateOf<String?>(null) }
     val now = rememberNow()
     val uri = LocalUriHandler.current
     val context = LocalContext.current
@@ -85,10 +86,12 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     val accounts = !anyConnected || page == 3
     val detail = selectedProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
     val resetDetail = resetPage?.takeIf { if (it.startsWith("Codex:")) state.connected else state.claudeConnected }
+    val statsDetail = statsProvider?.takeIf { if (it == "Codex") state.connected else state.claudeConnected }
     val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
-    BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null || resetDetail != null))) {
+    BackHandler(enabled = state.claudeLoginOpen || (anyConnected && (page != 0 || detail != null || resetDetail != null || statsDetail != null))) {
         if (state.claudeLoginOpen) model.cancelClaudeLogin()
+        else if (statsDetail != null) statsProvider = null
         else if (resetDetail != null) resetPage = null
         else if (detail != null) selectedProvider = null else if (page == 3 || page == 4) page = 2 else page = 0
     }
@@ -136,14 +139,20 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
         ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
             ResetDetailsScreen(state, now, model, resetDetail.substringBefore(':'), resetDetail.substringAfter(':'))
         } }
+        statsDetail != null -> DefaultScaffoldWithSmallTopAppBar(
+            title = "Statistiken · $statsDetail", scrollBehavior = detailScroll,
+            navigationIcon = { IconButton(onClick = { statsProvider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
+            actions = { IconButton(onClick = { model.refreshStats(statsDetail, force = true) }) { Icon(Icons.Rounded.Refresh, "Statistiken aktualisieren") } }
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { UsageStatsScreen(statsDetail, state, model, now) } }
         detail != null -> DefaultScaffoldWithSmallTopAppBar(
             title = detail, scrollBehavior = detailScroll,
             modifier = Modifier.nestedScroll(detailScroll.nestedScrollConnection),
             navigationIcon = { IconButton(onClick = { selectedProvider = null }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
             actions = refreshAction
-        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ProviderUsageScreen(state, now, detail) } }
+        ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ProviderUsageScreen(state, now, detail) { statsProvider = detail } } }
         else -> DefaultScaffoldWithMediumTopAppBar(
             title = when (page) { 1 -> "Resets"; 2 -> "Einstellungen"; else -> "AI Usage" },
+            accentTitle = true,
             modifier = Modifier.nestedScroll(mainScroll.nestedScrollConnection),
             scrollBehavior = mainScroll, actions = refreshAction,
             bottomBar = {
@@ -159,7 +168,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
                 when (page) {
                     1 -> ResetScreen(state, now, resetProvider, { resetProvider = it }) { provider, destination -> resetPage = "$provider:$destination" }
                     2 -> SettingsScreen(state, model, { page = 3 }, { page = 4 })
-                    else -> UsageScreen(state, now) { selectedProvider = it }
+                    else -> UsageScreen(state, now, { selectedProvider = it }, { statsProvider = it })
                 }
             }
         }
@@ -202,7 +211,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
 }
 
 @Composable
-private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit) {
+private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit, stats: (String) -> Unit) {
     var calendarProvider by rememberSaveable { mutableStateOf("Codex") }
     val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
     val active = calendarProvider.takeIf { it in names } ?: names.firstOrNull()
@@ -212,13 +221,15 @@ private fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit) {
         if (active != null) {
             item { SectionTitle("Aktivitätsverlauf") }
             if (names.size > 1) item { ProviderTabs(names, active, { calendarProvider = it }, inset = false) }
-            item { UsageCalendar(active, if (active == "Codex") state.days else state.claudeDays, now) }
+            val actual = reportedActivity(if (active == "Codex") state.stats else state.claudeStats, active)
+            item { UsageCalendar(active, actual.ifEmpty { if (active == "Codex") state.days else state.claudeDays }, now) }
+            item { SoftCard(contentPadding = PaddingValues(0.dp)) { MenuRow("Statistiken", Icons.Rounded.BarChart) { stats(active) } } }
         }
     }
 }
 
 @Composable
-private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
+private fun ProviderUsageScreen(state: UiState, now: Long, active: String, stats: () -> Unit) {
     val usage = if (active == "Codex") state.usage else state.claudeUsage
     val error = if (active == "Codex") state.usageError else state.claudeError
     val refreshing = if (active == "Codex") state.refreshing else state.claudeRefreshing
@@ -226,6 +237,7 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String) {
         item {
             Text(usage?.plan?.replaceFirstChar { it.titlecase() } ?: "Verbunden", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        item { SoftCard(contentPadding = PaddingValues(0.dp)) { MenuRow("Statistiken", Icons.Rounded.BarChart, stats) } }
         error?.let { item { Notice(it, true) } }
         if (active == "Codex") state.storageWarning?.let { item { Notice(it) } }
         if (usage == null) item { SoftCard {
@@ -290,18 +302,22 @@ private fun BankedCard(usage: UsageSnapshot, now: Long, loading: Boolean) {
     SoftCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Icon(Icons.Rounded.ConfirmationNumber, null, tint = MaterialTheme.colorScheme.primary)
-            Text("Reset-Vorrat", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            StatusPill(usage.availableResets?.let { "$it verfügbar" } ?: "Nicht gemeldet", Icons.Rounded.AutoAwesome)
+            Text(usage.availableResets?.let { "$it ${if (it == 1) "Reset verfügbar" else "Resets verfügbar"}" } ?: "Resets", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
         }
         if (loading) Text("Details werden geladen…", style = MaterialTheme.typography.labelSmall)
-        if (usage.resetCredits.isNotEmpty() || usage.creditsWarning != null) Disclosure("Details ansehen") {
-            usage.resetCredits.forEach { credit ->
-                Text(credit.title, style = MaterialTheme.typography.labelLarge)
-                Text(when (credit.status) { "available" -> "Verfügbar"; "redeemed" -> "Eingelöst"; "paused" -> "Pausiert"; "expired" -> "Abgelaufen"; "unknown" -> "Verfügbarkeit nicht bestätigt"; else -> "Derzeit nicht verfügbar" }, style = MaterialTheme.typography.bodySmall)
-                credit.expiresAt?.let { Text("Bis ${date(it)}${if (it <= now) " · Ablauf erreicht" else ""}", style = MaterialTheme.typography.bodySmall) }
+        usage.resetCredits.distinctBy { listOf(it.status, it.grantedAt, it.expiresAt, it.title) }.forEachIndexed { index, credit ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = .12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.RestartAlt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(when (credit.status) { "available" -> "Reset"; "redeemed" -> "Reset · eingelöst"; "paused" -> "Reset · pausiert"; "expired" -> "Reset · abgelaufen"; "unknown" -> "Reset · Verfügbarkeit unbekannt"; else -> "Reset · derzeit nicht verfügbar" }, style = MaterialTheme.typography.labelLarge)
+                    credit.expiresAt?.let { Text("Ablauf ${date(it)}${if (it <= now && credit.status != "expired") " · erreicht" else ""}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
             }
-            usage.creditsWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
+        usage.creditsWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 @Composable
@@ -374,6 +390,7 @@ private fun ResetScreen(state: UiState, now: Long, provider: String, select: (St
     val names = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
     val consensus = ForecastConsensus.combine(active, state.forecasts, state.community, now)
+    val hours = if (active == "Codex") listOf(6, 24, 48) else listOf(48, 168)
     val usage = if (active == "Codex") state.usage else state.claudeUsage
     Column(Modifier.widthIn(max = 680.dp).fillMaxSize()) {
         if (names.size > 1) ProviderTabs(names, active, select)
@@ -384,13 +401,17 @@ private fun ResetScreen(state: UiState, now: Long, provider: String, select: (St
                     if (consensus.isEmpty()) {
                         if (state.forecastLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
                         Text(if (state.forecastLoading) "Schätzungen werden geladen…" else "Keine aktuelle Schätzung", style = MaterialTheme.typography.titleMedium)
-                    } else consensus.forEachIndexed { index, chance ->
-                        if (index > 0) Spacer(Modifier.height(6.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(horizon(chance.hours), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                            Text("${chance.sources.size} ${if (chance.sources.size == 1) "Quelle" else "Quellen"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    (hours + consensus.map { it.hours }).distinct().sorted().forEachIndexed { index, hour ->
+                        val chance = consensus.firstOrNull { it.hours == hour }
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .3f))
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                            ProbabilityDial(chance?.percent, Modifier.semantics { contentDescription = "${horizon(hour)}: ${chance?.let { "${percent(it.percent)} Prozent Reset-Chance" } ?: "Keine aktuelle Schätzung"}" })
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(horizon(hour), style = MaterialTheme.typography.titleMedium)
+                                Text(chance?.let { "${it.sources.size} ${if (it.sources.size == 1) "Quelle" else "Quellen"}" } ?: "Nicht aktuell verfügbar", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        ProbabilityBar(chance.percent, Modifier.semantics { contentDescription = "${horizon(chance.hours)}: ${percent(chance.percent)} Prozent Reset-Chance, ${chance.sources.size} Quellen" })
                     }
                     Text("Öffentliche Schätzung", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
                 }
@@ -415,19 +436,17 @@ private fun ResetScreen(state: UiState, now: Long, provider: String, select: (St
 private fun horizon(hours: Int) = if (hours % 24 == 0 && hours > 48) "in ${hours / 24} Tagen" else "in $hours Stunden"
 
 @Composable
-private fun ProbabilityBar(value: Double, modifier: Modifier = Modifier) {
+private fun ProbabilityDial(value: Double?, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
-    val animated by animateFloatAsState((value / 100).toFloat().coerceIn(0f, 1f), label = "probability")
-    Box(modifier.fillMaxWidth().height(58.dp).clip(RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
+    val animated by animateFloatAsState(((value ?: 0.0) / 100).toFloat().coerceIn(0f, 1f), label = "probability")
+    Box(modifier.size(128.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
-            val corner = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx())
-            drawRoundRect(colors.surfaceContainerHigh, cornerRadius = corner)
-            if (animated >= .04f) drawRoundRect(colors.primary.copy(alpha = .18f), size = Size(size.width * animated, size.height), cornerRadius = corner)
-            val y = size.height - 5.dp.toPx()
-            drawLine(colors.primary.copy(alpha = .12f), Offset(16.dp.toPx(), y), Offset(size.width - 16.dp.toPx(), y), 2.dp.toPx(), StrokeCap.Round)
-            if (animated > 0) drawLine(colors.primary, Offset(16.dp.toPx(), y), Offset(16.dp.toPx() + (size.width - 32.dp.toPx()) * animated, y), 2.dp.toPx(), StrokeCap.Round)
+            val inset = 10.dp.toPx()
+            val bounds = Size(size.width - inset * 2, size.height - inset * 2)
+            drawArc(colors.primary.copy(alpha = .12f), -90f, 360f, false, Offset(inset, inset), bounds, style = Stroke(10.dp.toPx()))
+            if (animated > 0) drawArc(colors.primary, -90f, 360f * animated, false, Offset(inset, inset), bounds, style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
         }
-        Text("${percent(value)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text(value?.let { "${percent(it)}%" } ?: "—", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -451,7 +470,7 @@ private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel,
         if (destination == "Quellen") {
             item { SoftCard { Disclosure("So wird gerechnet") {
                 Text("Pro Zeitraum zählt jede aktuelle Quelle einmal. Der angezeigte Wert ist ihr einfacher Durchschnitt, keine Addition und keine kalibrierte Wahrscheinlichkeit. Zeiträume und Anbieter bleiben getrennt.", style = MaterialTheme.typography.bodySmall)
-                Text("Fehlgeschlagene Abrufe und Werte mit Abruf- oder Quellenstand älter als 2 Stunden zählen nicht. Ohne Quellenstand gilt der Abrufzeitpunkt; das Alter des Modells bleibt unbekannt.", style = MaterialTheme.typography.bodySmall)
+                Text("Abrufe dürfen höchstens 2 Stunden alt sein. Quellenstände ebenso; beim Tracker gilt dessen gemeldeter nächster Sync, begrenzt auf 6 Stunden. Ohne Quellenstand bleibt das Modellalter unbekannt. Fehlgeschlagene Abrufe zählen nicht.", style = MaterialTheme.typography.bodySmall)
             } } }
             if (provider == "Codex") ResetSource.entries.forEach { source -> item(key = source.name) {
                 val result = state.forecasts[source]
