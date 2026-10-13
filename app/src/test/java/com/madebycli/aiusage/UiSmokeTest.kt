@@ -202,7 +202,7 @@ class UiSmokeTest {
         compose.onNodeWithText("2.000").assertIsDisplayed()
         compose.onNodeWithText("Verbrauch").assertDoesNotExist()
         screenshot("stats-dark")
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Datenquellen"))
+        compose.onNode(SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.ScrollToIndex)).performScrollToNode(hasText("Datenquellen"))
         compose.onNodeWithText("Datenquellen").performClick()
         compose.onNodeWithText("Admin-API-Key").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()

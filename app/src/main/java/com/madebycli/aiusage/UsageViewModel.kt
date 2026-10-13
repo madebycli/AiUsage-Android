@@ -130,6 +130,10 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
             statsError = error, apiConnected = api ?: it.apiConnected) else it.copy(claudeStats = bundle ?: it.claudeStats,
             claudeStatsLoading = loading ?: it.claudeStatsLoading, claudeStatsError = error, claudeApiConnected = api ?: it.claudeApiConnected) }
     }
+    private fun statsBackoff(provider: String, error: Exception) {
+        if (error is HttpFailure && error.status == 429) getApplication<Application>().getSharedPreferences("stats-refresh", 0).edit()
+            .putLong("retry.$provider", Instant.now().epochSecond + (error.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
+    }
     fun refreshStats(provider: String, force: Boolean = false, profileOnly: Boolean = false) {
         if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
         val reports = if (provider == "Codex") state.value.stats else state.value.claudeStats
@@ -157,7 +161,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                         catch (e: CancellationException) { throw e }
                         catch (e: Exception) {
                             if (e is HttpFailure && e.status == 429) {
-                                statsPrefs.edit().putLong("retry.$provider", Instant.now().epochSecond + (e.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
+                                statsBackoff(provider, e)
                                 continueReports = false
                             }
                             val text = if (e is HttpFailure && e.status in listOf(403, 404)) "Für diesen Account nicht verfügbar (HTTP ${e.status})." else safeError(e)
@@ -206,6 +210,9 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun connectAnalytics(provider: String, raw: String) {
         if (statsJobs[provider]?.isActive == true || !(if (provider == "Codex") state.value.connected else state.value.claudeConnected)) return
+        if (getApplication<Application>().getSharedPreferences("stats-refresh", 0).getLong("retry.$provider", 0) > Instant.now().epochSecond) {
+            statsState(provider, error = "Der Anbieter hat eine Wartezeit für Statistiken gesetzt."); return
+        }
         val key = raw.trim()
         if (!key.startsWith(if (provider == "Codex") "sk-admin-" else "sk-ant-admin") || key.length !in 20..512) {
             statsState(provider, error = "Hier wird ein separater Admin-API-Key benötigt, kein persönlicher Abo-Token."); return
@@ -226,13 +233,13 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
                     val costs = try { withTimeout(8_000) { repository.fetch(provider, key, true, Instant.now().epochSecond) } }
                     catch (_: TimeoutCancellationException) { StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = "Kostenabruf hat zu lange gedauert.") }
                     catch (e: CancellationException) { throw e }
-                    catch (e: Exception) { StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = safeError(e)) }
+                    catch (e: Exception) { statsBackoff(provider, e); StatsReport("api.cost", "API-Kosten", "API · gesamte Organisation · UTC", 0, error = safeError(e)) }
                     next = next.merge(costs)
                     if (current()) { target.writeStats(next); statsState(provider, bundle = next, api = true) }
                 }
             } } catch (e: TimeoutCancellationException) { if (current()) statsState(provider, error = "API-Prüfung hat zu lange gedauert.") }
             catch (e: CancellationException) { throw e }
-            catch (e: Exception) { if (current()) statsState(provider, error = safeError(e)) }
+            catch (e: Exception) { statsBackoff(provider, e); if (current()) statsState(provider, error = safeError(e)) }
             finally { if (current()) statsState(provider, loading = false, error = if (provider == "Codex") state.value.statsError else state.value.claudeStatsError) }
         }
     }
