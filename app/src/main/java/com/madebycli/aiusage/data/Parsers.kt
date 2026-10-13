@@ -26,7 +26,20 @@ object UsageParser {
             item.obj("rate_limit")?.let { groups += group(item.text("limit_name") ?: item.text("metered_feature") ?: "Zusätzliches Limit", it, fetchedAt) }
         }
         root.obj("code_review_rate_limit")?.let { groups += group("Code Review", it, fetchedAt) }
-        return UsageSnapshot(root.text("plan_type"), groups, fetchedAt, count(root.obj("rate_limit_reset_credits")))
+        val warnings = mutableListOf<String>()
+        fun amount(obj: JsonObject, key: String): Double? {
+            if (obj[key] == null || obj[key] == JsonNull) return null
+            return obj.number(key)?.takeIf { kotlin.math.abs(it) <= 9_007_199_254_740_991.0 }.also {
+                if (it == null) warnings += "Ein Zusatzwert konnte nicht gelesen werden."
+            }
+        }
+        val credits = root.obj("credits")?.let { block -> AccountCredits(
+            (block["has_credits"] as? JsonPrimitive)?.booleanOrNull, (block["unlimited"] as? JsonPrimitive)?.booleanOrNull, amount(block, "balance")) }
+        val spending = root.obj("spend_control")?.obj("individual_limit")?.let { block -> SpendingLimit(
+            amount(block, "limit"), amount(block, "used"), amount(block, "remaining_percent")?.takeIf { it in 0.0..100.0 },
+            block.integer("resets_at")?.takeIf { it in 1..253_402_300_799L }) }
+        return UsageSnapshot(root.text("plan_type"), groups, fetchedAt, count(root.obj("rate_limit_reset_credits")),
+            warnings = warnings.distinct(), accountCredits = credits, spending = spending)
     }
     fun credits(body: String): List<ResetCredit> {
         val root = appJson.parseToJsonElement(body) as? JsonObject ?: throw SchemaException()

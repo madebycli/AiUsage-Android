@@ -21,8 +21,13 @@ data class UsageSnapshot(
     val plan: String?, val groups: List<QuotaGroup>, val fetchedAt: Long,
     val availableResets: Int? = null, val resetCredits: List<ResetCredit> = emptyList(),
     val creditsWarning: String? = null, val creditsFetchedAt: Long? = null,
-    val extraUsage: ExtraUsage? = null, val warnings: List<String> = emptyList()
+    val extraUsage: ExtraUsage? = null, val warnings: List<String> = emptyList(),
+    val accountCredits: AccountCredits? = null, val spending: SpendingLimit? = null
 )
+@Serializable
+data class AccountCredits(val available: Boolean?, val unlimited: Boolean?, val balance: Double?)
+@Serializable
+data class SpendingLimit(val limit: Double?, val used: Double?, val remainingPercent: Double?, val resetAt: Long?)
 @Serializable
 data class ExtraUsage(val enabled: Boolean?, val used: Double?, val limit: Double?, val currency: String?, val decimals: Int?)
 @Serializable

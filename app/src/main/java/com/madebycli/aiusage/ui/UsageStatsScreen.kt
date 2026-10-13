@@ -167,13 +167,17 @@ private fun DailyStatsChart(values: List<Double?>) {
     val colors = MaterialTheme.colorScheme
     Canvas(Modifier.fillMaxWidth().height(164.dp).padding(top = 12.dp)) {
         val maximum = values.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(1.0) ?: 1.0
+        val signed = values.any { it != null && it < 0 }
+        val baseline = if (signed) size.height / 2 else size.height
+        val plotHeight = if (signed) size.height / 2 else size.height
+        if (signed) drawLine(colors.outlineVariant, Offset(0f, baseline), Offset(size.width, baseline), 1.dp.toPx())
         val gap = 4.dp.toPx()
         val width = ((size.width - gap * (values.size - 1)) / values.size.coerceAtLeast(1)).coerceAtLeast(1f)
         values.forEachIndexed { index, value ->
             if (value == null) return@forEachIndexed
-            val height = (kotlin.math.abs(value) / maximum * (size.height - 4.dp.toPx())).toFloat().coerceAtLeast(2.dp.toPx())
+            val height = (kotlin.math.abs(value) / maximum * (plotHeight - 4.dp.toPx())).toFloat().coerceAtLeast(2.dp.toPx())
             drawRoundRect(if (value < 0) colors.tertiary else colors.primary.copy(alpha = (.35 + .65 * kotlin.math.abs(value) / maximum).toFloat()),
-                Offset(index * (width + gap), size.height - height), Size(width, height), CornerRadius(width / 2, width / 2))
+                Offset(index * (width + gap), if (value < 0) baseline else baseline - height), Size(width, height), CornerRadius(width / 2, width / 2))
         }
     }
 }

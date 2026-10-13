@@ -254,6 +254,17 @@ private fun ProviderUsageScreen(state: UiState, now: Long, active: String, stats
             if (snapshot.groups.all { it.windows.isEmpty() }) item { Notice("Der Anbieter meldet aktuell keine Zeitfenster.") }
             if (snapshot.availableResets != null || snapshot.resetCredits.isNotEmpty() || snapshot.creditsWarning != null) item { BankedCard(snapshot, now, active == "Codex" && state.creditsLoading) }
             snapshot.extraUsage?.let { extra -> item { ExtraUsageCard(extra) } }
+            snapshot.accountCredits?.let { credits -> item { SoftCard {
+                Text("Credit-Guthaben", style = MaterialTheme.typography.titleMedium)
+                Text(if (credits.unlimited == true) "Unbegrenzt" else credits.balance?.let { "${java.text.NumberFormat.getNumberInstance(Locale.GERMANY).format(it)} Credits" } ?: "Nicht gemeldet", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                if (credits.available == false) Text("Derzeit nicht verfügbar", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } } }
+            snapshot.spending?.let { spending -> item { SoftCard {
+                Text("Zusätzliches Kontingent", style = MaterialTheme.typography.titleMedium)
+                spending.remainingPercent?.let { Text("${percent(it)}% frei", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold) }
+                Text("Verbrauch: ${spending.used?.let { java.text.NumberFormat.getNumberInstance(Locale.GERMANY).format(it) } ?: "Nicht gemeldet"} · Limit: ${spending.limit?.let { java.text.NumberFormat.getNumberInstance(Locale.GERMANY).format(it) } ?: "Nicht gemeldet"}", style = MaterialTheme.typography.bodySmall)
+                spending.resetAt?.let { Text("Reset ${date(it)}", style = MaterialTheme.typography.labelMedium) }
+            } } }
             item { Text("${if (refreshing) "Aktualisiert… · " else ""}${age(now - snapshot.fetchedAt)} · ${date(snapshot.fetchedAt, true)}",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
 
@@ -484,7 +495,8 @@ private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel,
             CommunitySource.entries.filter { it.provider == provider }.forEach { source -> item(key = source.name) {
                 val result = state.community[source]
                 val report = result?.report
-                SourceCard(source.label, source.site, report?.let { listOf(it.chance) }.orEmpty(), report?.fetchedAt, report?.publishedAt, result?.error, now, state.forecastLoading) {
+                SourceCard(source.label, source.site, report?.let { listOf(it.chance) }.orEmpty(), report?.fetchedAt, report?.publishedAt, result?.error, now, state.forecastLoading,
+                    freshOverride = report?.let { result?.error == null && ForecastConsensus.isCommunityFresh(it, now) }) {
                     report?.expectedAt?.let { Text("Geschätzter Termin: ${date(it)}${if (it < now) " · vergangen" else ""}", style = MaterialTheme.typography.bodySmall) }
                 }
             } }
@@ -519,10 +531,10 @@ private fun ResetDetailsScreen(state: UiState, now: Long, model: UsageViewModel,
 }
 
 @Composable
-private fun SourceCard(label: String, url: String, chances: List<ForecastChance>, fetched: Long?, published: Long?, error: String?, now: Long, loading: Boolean,
+private fun SourceCard(label: String, url: String, chances: List<ForecastChance>, fetched: Long?, published: Long?, error: String?, now: Long, loading: Boolean, freshOverride: Boolean? = null,
     details: @Composable ColumnScope.() -> Unit) {
     val uri = LocalUriHandler.current
-    val fresh = fetched != null && error == null && ForecastConsensus.isFresh(fetched, published, now)
+    val fresh = freshOverride ?: (fetched != null && error == null && ForecastConsensus.isFresh(fetched, published, now))
     SoftCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
@@ -728,9 +740,9 @@ private fun Disclosure(label: String, content: @Composable ColumnScope.() -> Uni
     }
 }
 @Composable
-internal fun SoftCard(content: @Composable ColumnScope.() -> Unit) {
+internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), content: @Composable ColumnScope.() -> Unit) {
     Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+        Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 @Composable

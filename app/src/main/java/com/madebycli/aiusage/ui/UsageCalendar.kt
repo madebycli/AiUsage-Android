@@ -29,14 +29,14 @@ import kotlin.math.roundToInt
 /** AniSync/GitHub contribution layout; cells represent measured quota, not inferred daily tokens. */
 @Composable
 internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
-    val today = Instant.ofEpochSecond(now).atZone(ZoneId.systemDefault()).toLocalDate()
+    val actual = days.any { it.actual != null }
+    val today = Instant.ofEpochSecond(now).atZone(if (actual && provider == "Codex") ZoneOffset.UTC else ZoneId.systemDefault()).toLocalDate()
     var period by rememberSaveable(provider) { mutableStateOf("Monat") }
     var selected by rememberSaveable(provider) { mutableStateOf(today.toString()) }
     var weekOffset by rememberSaveable(provider) { mutableIntStateOf(0) }
     var info by remember { mutableStateOf(false) }
     val records = remember(days) { days.mapNotNull { day -> runCatching { LocalDate.parse(day.date) to day }.getOrNull() }.toMap() }
     val colors = MaterialTheme.colorScheme
-    val actual = days.any { it.actual != null }
     fun amount(day: UsageDay?) = if (actual) day?.actual else day?.peak
     val scale = if (actual) days.mapNotNull { it.actual }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0 else 100.0
     val unit = days.firstOrNull { it.actual != null }?.unit ?: "5h-Spitze"

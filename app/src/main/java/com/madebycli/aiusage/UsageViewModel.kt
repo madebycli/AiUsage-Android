@@ -466,7 +466,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun beginClaudeLogin() {
         if (state.value.claudeInitializing || state.value.claudeDisconnecting || state.value.claudeRefreshing || state.value.claudeLoginBusy) return
         val generation = claudeGeneration.advance()
-        mutable.update { it.copy(claudeLoginOpen = true, claudeLoginBusy = true, claudeLoginUrl = null, claudeLoginError = null) }
+        statsJobs.remove("Claude Code")?.cancel()
+        mutable.update { it.copy(claudeStatsLoading = false, claudeLoginOpen = true, claudeLoginBusy = true, claudeLoginUrl = null, claudeLoginError = null) }
         val previous = claudeLoginJob
         claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
             previous?.join()
@@ -521,9 +522,10 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun cancelClaudeLogin() {
         claudeGeneration.advance()
+        statsJobs.remove("Claude Code")?.cancel()
         val previous = claudeLoginJob
         previous?.cancel()
-        mutable.update { it.copy(claudeLoginOpen = false, claudeLoginBusy = false, claudeLoginUrl = null, claudeLoginError = null, claudeRefreshing = false) }
+        mutable.update { it.copy(claudeStatsLoading = false, claudeLoginOpen = false, claudeLoginBusy = false, claudeLoginUrl = null, claudeLoginError = null, claudeRefreshing = false) }
         claudeLoginJob = viewModelScope.launch(Dispatchers.IO) {
             previous?.join()
             claudeMutex.withLock {
@@ -535,7 +537,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun importClaude(raw: String) {
         if (state.value.claudeRefreshing || state.value.claudeInitializing || state.value.claudeDisconnecting || state.value.claudeLoginOpen || state.value.claudeLoginBusy) return
         val generation = claudeGeneration.advance()
-        mutable.update { it.copy(claudeRefreshing = true, claudeError = null) }
+        statsJobs.remove("Claude Code")?.cancel()
+        mutable.update { it.copy(claudeStatsLoading = false, claudeRefreshing = true, claudeError = null) }
         viewModelScope.launch(Dispatchers.IO) {
             claudeMutex.withLock {
                 try {
