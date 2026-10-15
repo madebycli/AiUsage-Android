@@ -69,11 +69,9 @@ class ClaudeAuth(
         // Consume before sending. A failed/uncertain exchange must not replay a
         // one-time code, including after process death.
         store.clearClaudeLogin()
-        val credentials = token(mapOf("grant_type" to "authorization_code", "code" to parts[0],
+        token(mapOf("grant_type" to "authorization_code", "code" to parts[0],
             "redirect_uri" to REDIRECT_URI, "client_id" to CLIENT_ID,
             "code_verifier" to pending.verifier, "state" to pending.state), null)
-        // The caller commits only while its login generation is still current.
-        credentials
     }
 
     suspend fun credential(forceRefresh: Boolean = false): ClaudeCredential = mutex.withLock {

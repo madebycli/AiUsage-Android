@@ -64,7 +64,6 @@ class ClaudeRepository(private val http: HttpTransport, private val endpoint: St
         try {
             val body = http.get(endpoint, mapOf("Authorization" to "Bearer ${credential.access}",
                 "anthropic-beta" to "oauth-2025-04-20",
-                // Compatibility marker from the reference; retain our explicit app identity.
                 "User-Agent" to "claude-cli/2.1.281 (external, cli) AiUsage-Android/${BuildConfig.VERSION_NAME} (+https://github.com/madebycli/AiUsage-Android)"))
             return ClaudeParser.parse(body, Instant.now().epochSecond, credential.plan)
         } catch (e: HttpFailure) { if (e.status == 429) backoff.defer(e.retrySeconds ?: 60); throw e }

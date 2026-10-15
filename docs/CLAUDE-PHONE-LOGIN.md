@@ -1,13 +1,11 @@
-# Claude-Anmeldung am Handy · 0.4.0
+# Claude-Anmeldung am Handy
 
-Die bisherige Claude-Import-Anmeldung bekommt einen zusätzlichen Browser-Weg.
-Kein Computer oder Export einer Desktop-Credential-Datei erforderlich.
+Browser-Freigabe ohne Computer. Optional lassen sich Zugangsdaten vom Computer einfügen.
 
 ## Auf dem Handy
 
-1. AI Usage öffnen, auf der Anmeldeseite **Mit Claude Code verbinden** wählen.
-   Bei bereits verbundenen Accounts: Einstellungen → Anmeldungen verwalten →
-   **Am Handy neu anmelden**.
+1. AI Usage öffnen, **Mit Claude Code verbinden** wählen. Bei bereits verbundenem
+   Account: Einstellungen → Anmeldungen → **Neu anmelden**.
 2. **Claude im Browser öffnen**. Bei Claude mit Google oder E-Mail anmelden
    und die angezeigte Freigabe bestätigen.
 3. Den vollständigen einmaligen Code von Claudes Rückgabeseite kopieren,
@@ -72,17 +70,11 @@ respektiert die Wartezeit. Der bisherige Import bleibt als optionale Alternative
 - Abbruch/Trennen invalidiert die Sessiongeneration. Neue Accounts werden
   zusammen mit leerem Verlauf atomar gegen eine inzwischen abgebrochene
   Session geschützt; ein alter Account-Verlauf wird nicht übernommen.
-- Nur verbundene Anbieter erscheinen. Farben, runde Karten, untere Tab-Leiste
-  und AniHyou-Unterseiten bleiben wie in 0.3.0.
 
 ## Prüfung
 
 MockWebServer-Tests prüfen PKCE/State, Teilcodes/fremde States, Ablauf,
 Wiederaufnahme, einmaligen Austausch, Fehler ohne Replay, parallele Rotation,
 Legacy-Imports ohne Refresh, abgelehnte Refresh-Ketten und 429-Backoff.
-Robolectric prüft die eigene Login-Unterseite mit Zurück-Pfeil, Eingabefeld,
-gesperrten Aktionen während Austausch und Neustart nach Fehler und erzeugt
-einen nativen Screenshot. Diese Tests ersetzen keinen echten Gerätelogin.
-
-0.4.0 nutzt denselben öffentlichen Debug-Testschlüssel wie 0.3.0 und kann
-darüber installiert werden. Debug-Code 4; Android 8.0+, SDK 37.
+Robolectric prüft die Login-Seite mit Zurück-Pfeil, Eingabefeld, gesperrten
+Aktionen während des Austauschs und Neustart nach Fehler. Diese Tests ersetzen keinen echten Gerätelogin.

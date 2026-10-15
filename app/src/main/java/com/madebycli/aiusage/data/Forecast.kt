@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
 import java.time.Instant
 
-// Reset probability is community data, unrelated to a personal quota or Claude.
 data class ForecastChance(val hours: Int, val percent: Double, val low: Double? = null, val high: Double? = null)
 data class ResetForecast(val source: ResetSource, val chances: List<ForecastChance>, val publishedAt: Long?, val fetchedAt: Long,
     val lastReset: Long?, val confidence: String? = null, val note: String? = null, val accuracy: String? = null)

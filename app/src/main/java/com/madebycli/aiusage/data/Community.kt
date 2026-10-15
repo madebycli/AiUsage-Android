@@ -4,7 +4,6 @@ import org.jsoup.Jsoup
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 
-// Public pages, not an undocumented API. Missing/changed selectors fail closed.
 enum class CommunitySource(val label: String, val provider: String, val site: String, val minimumSeconds: Long) {
     CLAUDE_RESETS("claude-resets.net", "Claude Code", "https://claude-resets.net/", 1800),
     VERCEL_CODEX("Codex Reset Tracker", "Codex", "https://codexreset.vercel.app/en", 1800),
