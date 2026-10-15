@@ -133,7 +133,7 @@ class UiSmokeTest {
         compose.onNodeWithText("42%").assertIsDisplayed()
         compose.onNodeWithText("Reset-Details konnten nicht gelesen werden.").assertIsDisplayed()
         screenshot("claude-partial-usage")
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Zusatzverbrauch"))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Zusatzverbrauch"))
         compose.onNodeWithText("4,34 EUR").assertIsDisplayed()
     }
 
@@ -193,7 +193,7 @@ class UiSmokeTest {
         compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
         compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").assertIsDisplayed()
         screenshot("stats-codex-dark")
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Heute (UTC)"))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Heute (UTC)"))
         compose.onNodeWithText("Heute (UTC)").assertIsDisplayed()
         compose.onNodeWithText("Summe der letzten 30 Tage").assertIsDisplayed()
         compose.onAllNodesWithText("Profil")[0].assertExists()
@@ -205,10 +205,10 @@ class UiSmokeTest {
         val screen = ui(claude = account(true, claudeUsage()).copy(days = listOf(UsageDay(day, 42.0, 0, now, weekly = 18.0))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
         compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Aktuelle Limits"))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Aktuelle Limits"))
         compose.onNodeWithText("Aktuelle Limits").assertIsDisplayed()
         screenshot("stats-claude-dark")
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("5 Std. 42% · Woche 18%"))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("5 Std. 42% · Woche 18%"))
         compose.onNodeWithText("5 Std. 42% · Woche 18%").assertIsDisplayed()
     }
 }
