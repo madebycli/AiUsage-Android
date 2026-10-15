@@ -53,15 +53,59 @@ class BackgroundSettingsTest {
         assertFalse(context.noBackupFilesDir.resolve("claude.usage.enc").exists())
     }
 
-    @Test fun `alerts match the reported provider window and tolerate jitter or a rolled over window`() {
+    @Test fun `a firing reminder follows the providers newest report`() {
         val rule = ResetAlerts.rules.first { it.provider == "Codex" && it.seconds == 18000L }
-        assertTrue(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 15000), 15000, 15000))
-        assertTrue(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 15001), 15000, 15000))
-        assertTrue(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 33000), 15000, 15100))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, "Claude Code", 15000), 15000, 15000))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 14000), 15000, 15000))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 15000), 15000, 36601))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = null), 15000, 15000))
+        fun report(reset: Long?) = snapshot(10000, 10.0, reset = reset)
+        // ahead of the reset
+        assertEquals(Decision.ANNOUNCE, ResetAlerts.decide(rule, report(15000), true, 15000, 14000))
+        assertEquals(Decision.ANNOUNCE, ResetAlerts.decide(rule, null, false, 15000, 14000))
+        assertEquals(Decision.RESCHEDULE, ResetAlerts.decide(rule, report(20000), true, 15000, 14000))
+        // at or after the reset
+        assertEquals(Decision.UNVERIFIED, ResetAlerts.decide(rule, null, false, 15000, 15000))
+        assertEquals(Decision.RESET, ResetAlerts.decide(rule, report(33000), true, 15000, 15010))
+        assertEquals(Decision.RESET, ResetAlerts.decide(rule, report(null), true, 15000, 15010))
+        assertEquals(Decision.RESET, ResetAlerts.decide(rule, UsageSnapshot(null, emptyList(), 1), true, 15000, 15010))
+        assertEquals(Decision.RECHECK, ResetAlerts.decide(rule, report(15001), true, 15000, 15010))
+        assertEquals(Decision.OVERDUE, ResetAlerts.decide(rule, report(15001), true, 15000, 15000 + ResetAlerts.RECHECK_SECONDS + 1))
+        // another provider's window never counts
+        assertEquals(Decision.RESET, ResetAlerts.decide(rule, snapshot(10000, 10.0, "Claude Code", 15000), true, 15000, 15010))
+    }
+
+    private fun claudeUsage(reset: Long) = UsageSnapshot(null, listOf(QuotaGroup("Claude Code", listOf(UsageWindow(40.0, 18000, reset)))), 1)
+
+    @Test fun `scheduling arms one alarm at the reminder time and follows a moved reset`() {
+        val prefs = ResetAlerts.prefs(context)
+        val rule = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 18000L }
+        val reset = java.time.Instant.now().epochSecond + 100_000
+        prefs.edit().putBoolean("enabled", true).putString("generation.Claude Code", "g").putInt("lead.${rule.key}", 15).commit()
+        org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val alarms = org.robolectric.Shadows.shadowOf(context.getSystemService(android.app.AlarmManager::class.java))
+        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset))
+        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        assertTrue(ResetAlarms.isArmed(context, rule))
+        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 1))
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 5000))
+        assertEquals(1, alarms.scheduledAlarms.size)
+        assertEquals((reset + 5000 - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        assertNotNull(ResetAlerts.nextReminder(context, rule))
+    }
+
+    @Test fun `alarms come back after a reboot and disappear with the account`() {
+        val prefs = ResetAlerts.prefs(context)
+        val rule = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 18000L }
+        val reset = java.time.Instant.now().epochSecond + 50_000
+        prefs.edit().putBoolean("enabled", true).putString("generation.Claude Code", "g").commit()
+        org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset))
+        ResetAlarms.cancel(context, rule)
+        assertFalse(ResetAlarms.isArmed(context, rule))
+        ResetAlerts.rearm(context)
+        assertTrue(ResetAlarms.isArmed(context, rule))
+        ResetAlerts.invalidate(context, "Claude Code")
+        assertFalse(ResetAlarms.isArmed(context, rule))
+        assertNull(ResetAlerts.nextReminder(context, rule))
     }
 
     @Test fun `notification workers ignore disabled stale account generations`() = runBlocking {
@@ -72,7 +116,6 @@ class BackgroundSettingsTest {
             .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
         assertNull(prefs.getString("delivered.${rule.key}", null))
-        assertNull(prefs.getString("scheduled.${rule.key}", null))
         ResetAlerts.invalidate(context, "Codex")
         assertNotEquals("new", prefs.getString("generation.Codex", null))
         assertNull(prefs.getString("generation.Claude Code", null))

@@ -3,25 +3,37 @@ package com.madebycli.aiusage.background
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
-import com.madebycli.aiusage.MainActivity
 import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.data.*
-import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 data class AlertRule(val provider: String, val seconds: Long, val title: String) {
     val key get() = "${if (provider == Providers.CODEX) "codex" else "claude"}.$seconds"
     val channel get() = "reset.$key"
+}
+
+/** What to do when a reminder fires, given the provider's newest report. */
+enum class Decision {
+    /** Ahead of the reset and the provider still reports this deadline: send the heads-up. */
+    ANNOUNCE,
+    /** The provider reports a different deadline than planned: plan again instead of sending. */
+    RESCHEDULE,
+    /** The window is gone or reports a later deadline: the reset happened. */
+    RESET,
+    /** The reset time passed but the provider still reports the old deadline: look again shortly. */
+    RECHECK,
+    /** The provider kept reporting the old deadline for too long: send the reminder anyway. */
+    OVERDUE,
+    /** No fresh report is available: send what the provider announced earlier. */
+    UNVERIFIED
 }
 
 object ResetAlerts {
@@ -29,6 +41,9 @@ object ResetAlerts {
     const val TOLERANCE_SECONDS = 120L
     /** A reminder is still useful for this long after the reset it announces. */
     const val GRACE_SECONDS = 6 * 3600L
+    /** How long to wait for a provider that still reports the old deadline after the reset time. */
+    const val RECHECK_SECONDS = 15 * 60L
+    const val RECHECK_DELAY_SECONDS = 120L
 
     internal val deliveryLock = Any()
     val rules = Providers.all.flatMap { provider ->
@@ -41,7 +56,7 @@ object ResetAlerts {
 
     fun channels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        rules.forEach { manager.createNotificationChannel(NotificationChannel(it.channel, "${it.provider} · ${it.title}", NotificationManager.IMPORTANCE_DEFAULT)) }
+        rules.forEach { manager.createNotificationChannel(NotificationChannel(it.channel, "${it.provider} · ${it.title}", NotificationManager.IMPORTANCE_HIGH)) }
     }
 
     fun invalidate(context: Context, provider: String): Unit = synchronized(deliveryLock) {
@@ -49,12 +64,32 @@ object ResetAlerts {
         rules.filter { it.provider == provider }.forEach {
             WorkManager.getInstance(context).cancelUniqueWork(it.channel)
             WorkManager.getInstance(context).cancelUniqueWork(lateName(it))
+            ResetAlarms.cancel(context, it)
             NotificationManagerCompat.from(context).cancel(it.channel.hashCode())
-            prefs(context).edit().remove("scheduled.${it.key}").remove("target.${it.key}").apply()
+            prefs(context).edit().remove("scheduled.${it.key}").remove("target.${it.key}").remove("exact.${it.key}").apply()
         }
     }
 
-    private fun lateName(rule: AlertRule) = rule.channel + ".late"
+    internal fun lateName(rule: AlertRule) = rule.channel + ".late"
+
+    /** Pure decision for a firing reminder; see [Decision]. */
+    fun decide(rule: AlertRule, snapshot: UsageSnapshot?, fresh: Boolean, target: Long, now: Long): Decision {
+        val reported = snapshot?.windows(rule.provider)?.firstOrNull { it.seconds == rule.seconds }?.resetAt
+        val sameDeadline = reported != null && abs(reported - target) <= TOLERANCE_SECONDS
+        if (now < target - 60) return if (!fresh || sameDeadline) Decision.ANNOUNCE else Decision.RESCHEDULE
+        if (!fresh) return Decision.UNVERIFIED
+        val window = snapshot?.windows(rule.provider)?.firstOrNull { it.seconds == rule.seconds }
+        if (window == null || reported == null || reported > target + TOLERANCE_SECONDS) return Decision.RESET
+        return if (now - target < RECHECK_SECONDS) Decision.RECHECK else Decision.OVERDUE
+    }
+
+    /** Epoch second at which the next reminder for [rule] is due, from the stored plan. */
+    fun nextReminder(context: Context, rule: AlertRule): Long? {
+        val plan = prefs(context).getString("scheduled.${rule.key}", null)?.split(':')?.takeIf { it.size == 3 } ?: return null
+        val reset = plan[1].toLongOrNull() ?: return null
+        val at = reset - (plan[2].toLongOrNull() ?: 0) * 60
+        return at.takeIf { it > Instant.now().epochSecond }
+    }
 
     fun schedule(context: Context, provider: String, usage: UsageSnapshot) {
         val prefs = prefs(context)
@@ -67,81 +102,57 @@ object ResetAlerts {
             val reset = window?.resetAt
             val lead = prefs.getInt("lead.${rule.key}", 0).coerceIn(0, 1440)
             val previous = prefs.getLong("target.${rule.key}", 0)
-            val sameReset = previous > 0 && reset != null && kotlin.math.abs(reset - previous) <= TOLERANCE_SECONDS
-            // The announced reset passed while the job was still pending: deliver it now instead of dropping it.
-            if (previous in (now - GRACE_SECONDS)..now && !sameReset) {
-                val data = workDataOf("rule" to rule.key, "reset" to previous, "generation" to generation, "late" to true)
-                work.enqueueUniqueWork(lateName(rule), ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<ResetAlertWorker>().setInputData(data).build())
-            }
+            val sameReset = previous > 0 && reset != null && abs(reset - previous) <= TOLERANCE_SECONDS
+            val undelivered = prefs.getString("delivered.${rule.key}", null) != "$generation:$previous"
+            // The announced reset passed while its reminder was still pending: deliver it now instead of dropping it.
+            if (previous in (now - GRACE_SECONDS)..now && !sameReset && undelivered) enqueueFallback(context,
+                Delivery(rule, previous, generation, null, late = true))
             val eligible = prefs.getBoolean("enabled", false) && prefs.getBoolean("rule.${rule.key}", true) && permitted(context) &&
                 reset != null && reset > now && (!prefs.getBoolean("usedOnly", true) || (window?.usedPercent ?: 0.0) > 0)
             if (!eligible || reset == null) {
-                if (previous !in (now - GRACE_SECONDS)..now) work.cancelUniqueWork(rule.channel)
+                val waiting = previous in (now - GRACE_SECONDS)..now && undelivered
+                if (!waiting) { work.cancelUniqueWork(rule.channel); ResetAlarms.cancel(context, rule) }
                 prefs.edit().remove("scheduled.${rule.key}").also { if (previous < now) it.remove("target.${rule.key}") }.apply()
                 return@forEach
             }
+            val exactNow = ResetAlarms.canScheduleExact(context)
             val scheduled = prefs.getString("scheduled.${rule.key}", null)?.split(':')
-            if (scheduled?.size == 3 && scheduled[0] == generation && scheduled[2] == lead.toString() &&
-                scheduled[1].toLongOrNull()?.let { kotlin.math.abs(it - reset) <= TOLERANCE_SECONDS } == true) return@forEach
-            val signature = "$generation:$reset:$lead"
-            val request = OneTimeWorkRequestBuilder<ResetAlertWorker>()
-                .setInputData(workDataOf("rule" to rule.key, "reset" to reset, "generation" to generation, "scheduled" to signature))
-                .setInitialDelay((reset - lead * 60L - now).coerceAtLeast(0), TimeUnit.SECONDS).build()
-            work.enqueueUniqueWork(rule.channel, ExistingWorkPolicy.REPLACE, request)
-            prefs.edit().putString("scheduled.${rule.key}", signature).putLong("target.${rule.key}", reset).apply()
+            val unchanged = scheduled?.size == 3 && scheduled[0] == generation && scheduled[2] == lead.toString() &&
+                scheduled[1].toLongOrNull()?.let { abs(it - reset) <= TOLERANCE_SECONDS } == true
+            if (unchanged && ResetAlarms.isArmed(context, rule) && prefs.getBoolean("exact.${rule.key}", false) == exactNow) return@forEach
+            val signature = if (unchanged) scheduled!!.joinToString(":") else "$generation:$reset:$lead"
+            val delivery = Delivery(rule, reset, generation, signature, late = false)
+            val at = reset - lead * 60L
+            val exact = ResetAlarms.arm(context, rule, at, delivery)
+            work.enqueueUniqueWork(rule.channel, ExistingWorkPolicy.REPLACE, workRequest(delivery, (at - now).coerceAtLeast(0)))
+            prefs.edit().putString("scheduled.${rule.key}", signature).putLong("target.${rule.key}", reset).putBoolean("exact.${rule.key}", exact).apply()
         }
     }
 
-    /** The stored measurement still reports this reset, or already a later one because the window rolled over. */
-    fun valid(rule: AlertRule, snapshot: UsageSnapshot?, target: Long, now: Long): Boolean {
-        if (now - target > GRACE_SECONDS) return false
-        val reported = snapshot?.windows(rule.provider)?.firstOrNull { it.seconds == rule.seconds }?.resetAt ?: return false
-        return reported >= target - TOLERANCE_SECONDS
-    }
-}
-
-class ResetAlertWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    @android.annotation.SuppressLint("MissingPermission") // The runtime permission is checked before posting.
-    override suspend fun doWork(): Result {
-        val rule = ResetAlerts.rules.firstOrNull { it.key == inputData.getString("rule") } ?: return Result.success()
-        val prefs = ResetAlerts.prefs(applicationContext)
-        val target = inputData.getLong("reset", 0)
-        val generation = inputData.getString("generation") ?: return Result.success()
-        val late = inputData.getBoolean("late", false)
-        val planned = inputData.getString("scheduled")
-        if (!late && planned == null) return Result.success()
-        var delivered = false
-        val lock = if (rule.provider == Providers.CODEX) AccountAccess.codex else AccountAccess.claude
-        try { lock.withLock {
-            if (!late && prefs.getString("scheduled.${rule.key}", null) != planned) return@withLock
-            if (!prefs.getBoolean("enabled", false) || !prefs.getBoolean("rule.${rule.key}", true) ||
-                prefs.getString("generation.${rule.provider}", null) != generation || !ResetAlerts.permitted(applicationContext)) return@withLock
-            val store = SecureStore(applicationContext, if (rule.provider == Providers.CODEX) "account" else "claude")
-            val connected = if (rule.provider == Providers.CODEX) store.readTokens() != null else store.readClaude() != null
-            val usage = if (connected) store.readRecord().usage else null
-            val now = Instant.now().epochSecond
-            if (!ResetAlerts.valid(rule, usage, target, now)) return@withLock
-            if (prefs.getString("delivered.${rule.key}", null) == "$generation:$target") { delivered = true; return@withLock }
-            ResetAlerts.channels(applicationContext)
-            val intent = Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("provider", rule.provider)
-            val content = PendingIntent.getActivity(applicationContext, rule.key.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            val remaining = target - now
-            val message = if (remaining > 60) "Laut Anbieter Reset in ${(remaining + 59) / 60} Minuten." else "Das ${rule.title}-Limit wurde zurückgesetzt."
-            synchronized(ResetAlerts.deliveryLock) {
-                if (prefs.getString("generation.${rule.provider}", null) != generation || !prefs.getBoolean("enabled", false)) return@synchronized
-                if (!late && prefs.getString("scheduled.${rule.key}", null) != planned) return@synchronized
-                NotificationManagerCompat.from(applicationContext).notify(rule.channel.hashCode(), NotificationCompat.Builder(applicationContext, rule.channel)
-                    .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${rule.provider} · ${rule.title}")
-                    .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
-                    .setAutoCancel(true).setOnlyAlertOnce(true).build())
-                prefs.edit().putString("delivered.${rule.key}", "$generation:$target").apply()
-                delivered = true
-            }
-        } } finally {
-            synchronized(ResetAlerts.deliveryLock) {
-                if (!late && !delivered && prefs.getString("scheduled.${rule.key}", null) == planned) prefs.edit().remove("scheduled.${rule.key}").apply()
-            }
+    /** Restores alarms from the stored plan after a reboot or an app update. */
+    fun rearm(context: Context) {
+        val prefs = prefs(context)
+        val now = Instant.now().epochSecond
+        rules.forEach { rule ->
+            val generation = prefs.getString("generation.${rule.provider}", null) ?: return@forEach
+            val plan = prefs.getString("scheduled.${rule.key}", null)?.split(':')?.takeIf { it.size == 3 } ?: return@forEach
+            val reset = plan[1].toLongOrNull() ?: return@forEach
+            val at = reset - (plan[2].toLongOrNull() ?: 0) * 60
+            val delivery = Delivery(rule, reset, generation, plan.joinToString(":"), late = false)
+            if (at > now) prefs.edit().putBoolean("exact.${rule.key}", ResetAlarms.arm(context, rule, at, delivery)).apply()
+            else if (now - reset <= GRACE_SECONDS && prefs.getString("delivered.${rule.key}", null) != "$generation:$reset")
+                enqueueFallback(context, delivery.copy(late = true))
         }
-        return Result.success()
+    }
+
+    internal fun workRequest(delivery: Delivery, delaySeconds: Long): OneTimeWorkRequest = OneTimeWorkRequestBuilder<ResetAlertWorker>()
+        .setInputData(workDataOf("rule" to delivery.rule.key, "reset" to delivery.target, "generation" to delivery.generation,
+            "scheduled" to delivery.planned, "late" to delivery.late))
+        .setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+        .setConstraints(Constraints.NONE).build()
+
+    /** Runs the delivery through WorkManager, for when the alarm path could not finish. */
+    fun enqueueFallback(context: Context, delivery: Delivery) {
+        WorkManager.getInstance(context).enqueueUniqueWork(lateName(delivery.rule), ExistingWorkPolicy.KEEP, workRequest(delivery, 0))
     }
 }

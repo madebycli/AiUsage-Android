@@ -26,7 +26,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.UsageViewModel
+import com.madebycli.aiusage.background.ResetAlarms
 import com.madebycli.aiusage.background.ResetAlerts
+import com.madebycli.aiusage.background.ResetNotifier
 
 @Composable
 internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
@@ -70,6 +72,19 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
             SwitchRow("Nur bei Nutzung", "Nicht für Zeitfenster ohne Verbrauch", checked("usedOnly", true)) { update("usedOnly", it) }
             TextButton(onClick = { notificationSettings() }) { Text("Android-Freigabe & Kanäle") }
         }
+        SectionTitle("Genauigkeit")
+        SoftCard {
+            val exact = ResetAlarms.canScheduleExact(context)
+            Text(if (exact) "Exakte Alarme erlaubt" else "Exakte Alarme nicht erlaubt", style = MaterialTheme.typography.titleSmall)
+            Text(if (exact) "Reset-Hinweise kommen zur gemeldeten Minute, auch wenn das Handy im Ruhemodus ist."
+                else "Android darf Hinweise im Ruhemodus um einige Minuten verschieben. Mit der Erlaubnis kommen sie pünktlich.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) FilledTonalButton(onClick = {
+                try { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) }
+                catch (_: android.content.ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
+            }) { Text("Exakte Alarme erlauben") }
+            TextButton(onClick = { ResetNotifier.sendTest(context) }, enabled = allowed) { Text("Testbenachrichtigung senden") }
+        }
         state.connectedProviders.forEach { provider ->
             SectionTitle(provider)
             SoftCard {
@@ -81,6 +96,9 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
                     SegmentedTabGroup(listOf(0, 5, 15, 30, 60), lead, { selected ->
                         prefs.edit().putInt("lead.${rule.key}", selected).apply(); revision++; model.rescheduleAlerts()
                     }, { if (it == 0) "Zum Reset" else "$it min vorher" })
+                    val next = ResetAlerts.nextReminder(context, rule)
+                    Text(next?.let { "Nächster Hinweis: ${date(it)}" } ?: "Kein Hinweis geplant. Er wird mit dem nächsten Abruf gesetzt.",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = {
                         ResetAlerts.channels(context)
                         context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, rule.channel))

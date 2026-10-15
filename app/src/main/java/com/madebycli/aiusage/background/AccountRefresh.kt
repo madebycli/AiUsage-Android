@@ -6,7 +6,6 @@ import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.data.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.withLock
-import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 object AccountRefresh {
@@ -35,37 +34,20 @@ class AccountRefreshWorker(context: Context, parameters: WorkerParameters) : Cor
         if (!AccountRefresh.enabled(applicationContext)) return Result.success()
         val http = HttpTransport()
         var retry = false
-        suspend fun measure(provider: String, read: suspend (SecureStore) -> UsageSnapshot?) {
+        for (provider in Providers.all) {
             val lock = if (provider == Providers.CODEX) AccountAccess.codex else AccountAccess.claude
-            val prefs = applicationContext.getSharedPreferences("alerts", 0)
             try {
                 lock.withLock {
-                    if (prefs.getLong("retry.$provider", 0) > Instant.now().epochSecond) { retry = true; return@withLock }
                     val store = SecureStore(applicationContext, if (provider == Providers.CODEX) "account" else "claude")
-                    val snapshot = read(store) ?: return@withLock
+                    val snapshot = UsageReader.read(applicationContext, http, provider, store) ?: return@withLock
                     store.saveMeasurement(snapshot, provider)
                     ResetAlerts.schedule(applicationContext, provider, snapshot)
                     AccountAccess.changes.tryEmit(provider)
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (e is HttpFailure && e.status == 429) prefs.edit()
-                    .putLong("retry.$provider", Instant.now().epochSecond + (e.retrySeconds ?: 1800).coerceIn(1, 604800)).apply()
+                // A rejected login will not recover by retrying; everything else might.
                 retry = retry || e !is HttpFailure || e.status !in listOf(400, 401, 403)
-            }
-        }
-        measure(Providers.CODEX) { store ->
-            if (store.readTokens() == null) null else UsageRepository(CodexAuth(http, store)).fetch()
-        }
-        measure(Providers.CLAUDE) { store ->
-            if (store.readClaude() == null) null else {
-                val auth = ClaudeAuth(http, store)
-                val repository = ClaudeRepository(http)
-                val credential = auth.credential()
-                try { repository.fetch(credential) } catch (e: HttpFailure) {
-                    if (e.status != 401 || !credential.phoneLogin || credential.refresh == null) throw e
-                    repository.fetch(auth.credential(forceRefresh = true))
-                }
             }
         }
         return if (retry && runAttemptCount < 3) Result.retry() else Result.success()
