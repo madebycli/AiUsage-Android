@@ -50,10 +50,8 @@ internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewMod
         login.hint?.let { Notice(it) }
         login.error?.let { Notice(it, true) }
         browserError?.let { Notice(it, true) }
-        if (login.error != null && !login.busy && login.url == null)
-            FilledTonalButton(onClick = { model.connect(provider) }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (provider == Providers.CODEX) "Neuen Code anfordern" else "Neue Anmeldung starten")
-            }
+        if (provider == Providers.CODEX && login.error != null && !login.busy && login.url == null)
+            FilledTonalButton(onClick = { model.connect(provider) }, modifier = Modifier.fillMaxWidth()) { Text("Neuen Code anfordern") }
         if (provider == Providers.CLAUDE) ClaudeImport(login, model)
         TextButton(onClick = { model.cancelLogin(provider) }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Abbrechen") }
     }

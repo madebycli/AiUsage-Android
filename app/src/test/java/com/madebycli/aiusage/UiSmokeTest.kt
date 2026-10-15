@@ -39,6 +39,8 @@ class UiSmokeTest {
     @After fun clearModels() = models.clear()
 
     private fun model(): UsageViewModel = UsageViewModel(ApplicationProvider.getApplicationContext()).also { models.put("usage", it) }
+    private fun ui(codex: ProviderState = account(), claude: ProviderState = account(), feed: ResetFeed? = null,
+        community: Map<CommunitySource, CommunityResult> = emptyMap()) = UiState(codex = codex, claude = claude, feed = feed, community = community)
     private fun account(connected: Boolean = false, usage: UsageSnapshot? = null, login: LoginState = LoginState(), error: String? = null) =
         ProviderState(connected = connected, initializing = false, usage = usage, login = login, error = error)
     private fun codexUsage() = UsageSnapshot("Plus", listOf(QuotaGroup("Codex", listOf(UsageWindow(21.0, 18000, now + 9800), UsageWindow(36.0, 604800, now + 330000)))), now, 1)
@@ -51,7 +53,7 @@ class UiSmokeTest {
 
     @Test fun `signed out screen offers both providers and no navigation or data`() {
         val model = model()
-        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(UiState(codex = account(), claude = account()), model) } }
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex = account(), claude = account()), model) } }
         compose.onNodeWithText("Mit Codex verbinden").assertIsDisplayed()
         compose.onNodeWithText("Mit Claude Code verbinden").assertIsDisplayed()
         compose.onNodeWithText("Resets").assertDoesNotExist()
@@ -61,7 +63,7 @@ class UiSmokeTest {
 
     @Test fun `connected providers open details, resets and the account page`() {
         val model = model()
-        val screen = mutableStateOf(UiState(codex = account(true, codexUsage())))
+        val screen = mutableStateOf(ui(codex = account(true, codexUsage())))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = screen.value.theme == ThemeMode.DARK) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Claude Code").assertDoesNotExist()
         compose.onNodeWithText("5 Stunden").assertIsDisplayed()
@@ -91,7 +93,7 @@ class UiSmokeTest {
     @Test fun `Codex and Claude sign in with the same page structure`() {
         val model = model()
         val codex = LoginState(open = true, busy = true, phase = LoginPhase.WAITING, url = "https://auth.openai.com/codex/device", deviceCode = "ABCD-1234")
-        val screen = mutableStateOf(UiState(codex = account(login = codex), claude = account()))
+        val screen = mutableStateOf(ui(codex = account(login = codex), claude = account()))
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Codex verbinden").assertIsDisplayed()
         compose.onNodeWithText("ABCD-1234").assertIsDisplayed()
@@ -105,7 +107,7 @@ class UiSmokeTest {
         compose.runOnIdle { screen.value = screen.value.copy(codex = account(login = LoginState(open = true, error = "Der Anmeldecode ist abgelaufen. Bitte einen neuen anfordern."))) }
         compose.onNodeWithText("Der Anmeldecode ist abgelaufen. Bitte einen neuen anfordern.").assertIsDisplayed()
         compose.onNodeWithText("Neuen Code anfordern").assertIsDisplayed()
-        compose.runOnIdle { screen.value = UiState(codex = account(), claude = account(login = LoginState(open = true, url = "https://claude.com/cai/oauth/authorize"))) }
+        compose.runOnIdle { screen.value = ui(codex = account(), claude = account(login = LoginState(open = true, url = "https://claude.com/cai/oauth/authorize"))) }
         compose.onNodeWithText("Claude Code verbinden").assertIsDisplayed()
         compose.onNodeWithText("Claude im Browser öffnen").assertIsDisplayed()
         compose.onNodeWithText("Anmeldecode").performScrollTo().performTextInput("code#state")
@@ -120,7 +122,7 @@ class UiSmokeTest {
 
     @Test fun `a finished sign in opens the new account instead of leaving the page`() {
         val model = model()
-        val screen = mutableStateOf(UiState(codex = account(true, codexUsage()), claude = account(login = LoginState(open = true, url = "https://claude.com/cai/oauth/authorize"))))
+        val screen = mutableStateOf(ui(codex = account(true, codexUsage()), claude = account(login = LoginState(open = true, url = "https://claude.com/cai/oauth/authorize"))))
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
         compose.onNodeWithText("Claude Code verbinden").assertIsDisplayed()
         compose.runOnIdle { screen.value = screen.value.copy(claude = account(true, null).copy(refreshing = true, loginResult = 1)) }
@@ -140,7 +142,7 @@ class UiSmokeTest {
         val feed = ResetFeed(ResetSource.CODEX_RESET, listOf(ResetEvent("api", now, "API-Meldung", "Only API", null)), null, now)
         val report = CommunityReport(CommunitySource.VERCEL_CODEX, ForecastChance(48, 20.0), null, now, null,
             listOf(ResetEvent("tracker", now, "Tracker-Meldung", "Only tracker", null)))
-        val screen = mutableStateOf(UiState(codex = account(true), claude = account(true), feed = feed,
+        val screen = mutableStateOf(ui(codex = account(true), claude = account(true), feed = feed,
             community = mapOf(CommunitySource.VERCEL_CODEX to CommunityResult(report))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen.value, model) } }
         compose.onNode(hasText("Resets") and hasClickAction()).performClick()
@@ -161,7 +163,7 @@ class UiSmokeTest {
 
     @Test fun `notification tap is consumed once and does not override a later sign in`() {
         val model = model()
-        val screen = mutableStateOf(UiState(codex = account(true, codexUsage()), claude = account()))
+        val screen = mutableStateOf(ui(codex = account(true, codexUsage()), claude = account()))
         val event = mutableStateOf(1L)
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model, "Codex", event.value) } }
         compose.onNodeWithText("Wöchentlich").assertIsDisplayed()
@@ -172,7 +174,7 @@ class UiSmokeTest {
 
     @Test fun `statistics are the second tab and can be switched off`() {
         val model = model()
-        val screen = mutableStateOf(UiState(codex = account(true, codexUsage())))
+        val screen = mutableStateOf(ui(codex = account(true, codexUsage())))
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
         compose.onAllNodes(hasClickAction() and (hasText("Verbrauch") or hasText("Statistiken") or hasText("Resets")))
             .assertCountEquals(3)
@@ -186,7 +188,7 @@ class UiSmokeTest {
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
         val profile = StatsParser.codex(CodexReport.PROFILE, """{"stats":{"lifetime_tokens":2150000000,"current_streak_days":2,"daily_usage_buckets":[{"start_date":"$today","tokens":250},{"start_date":"${today.minusDays(1)}","tokens":1750}]}}""", now)
         val credits = StatsParser.codex(CodexReport.CREDITS, """{"data":[]}""", now)
-        val screen = UiState(codex = account(true, codexUsage()).copy(stats = StatsBundle(listOf(credits, profile))))
+        val screen = ui(codex = account(true, codexUsage()).copy(stats = StatsBundle(listOf(credits, profile))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
         compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
         compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").assertIsDisplayed()
@@ -200,7 +202,7 @@ class UiSmokeTest {
     @Test fun `Claude statistics use only the limits and values Claude reported`() {
         val model = model()
         val day = java.time.LocalDate.now().toString()
-        val screen = UiState(claude = account(true, claudeUsage()).copy(days = listOf(UsageDay(day, 42.0, 0, now, weekly = 18.0))))
+        val screen = ui(claude = account(true, claudeUsage()).copy(days = listOf(UsageDay(day, 42.0, 0, now, weekly = 18.0))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
         compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("Aktuelle Limits"))
