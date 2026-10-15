@@ -7,14 +7,24 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import java.time.Instant
 import java.io.IOException
 import java.util.Base64
 
+@Serializable
 data class DeviceCode(val id: String, val code: String, val interval: Long)
 
-// Device-code and refresh protocol follows openai/codex, not a WebView/cookie scraper.
+/** A device code that survives process death until OpenAI expires it. */
+@Serializable
+class PendingDeviceLogin(val device: DeviceCode, val expiresAt: Long) {
+    override fun toString() = "PendingDeviceLogin(redacted)"
+}
+
+const val DEVICE_CODE_LIFETIME_SECONDS = 15 * 60L
+
+/** Device-code and refresh flow as implemented in openai/codex. */
 class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
     private val issuer: String = "https://auth.openai.com") {
     private val mutex = Mutex()
@@ -25,7 +35,8 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
             (result.text("user_code") ?: result.text("usercode"))?.takeIf { it.isNotBlank() } ?: throw SchemaException(),
             result.integer("interval")?.coerceIn(1, 60) ?: 5)
     }
-    suspend fun complete(device: DeviceCode, onRetry: (Exception) -> Unit = {}, onPhase: (LoginPhase) -> Unit = {}): Unit = withTimeout(15 * 60_000L) {
+    suspend fun complete(device: DeviceCode, timeoutMillis: Long = DEVICE_CODE_LIFETIME_SECONDS * 1000,
+        onRetry: (Exception) -> Unit = {}, onPhase: (LoginPhase) -> Unit = {}): Unit = withTimeout(timeoutMillis) {
         while (true) {
             delay(device.interval * 1000)
             val response = try {

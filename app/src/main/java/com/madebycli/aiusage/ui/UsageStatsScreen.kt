@@ -1,17 +1,12 @@
 package com.madebycli.aiusage.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.*
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.QueryStats
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -20,198 +15,229 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.UsageViewModel
 import com.madebycli.aiusage.data.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.text.NumberFormat
 import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.time.ZoneOffset
-import java.util.Locale
 
 @Composable
 internal fun UsageStatsScreen(provider: String, state: UiState, model: UsageViewModel, now: Long) {
-    if (!state.statsBetaEnabled) return
-    val stats = if (provider == "Codex") state.stats else state.claudeStats
-    val loading = if (provider == "Codex") state.statsLoading else state.claudeStatsLoading
-    val error = if (provider == "Codex") state.statsError else state.claudeStatsError
-    val connected = if (provider == "Codex") state.apiConnected else state.claudeApiConnected
-    var selectedReport by rememberSaveable(provider) { mutableStateOf(if (provider == "Codex") CodexReport.PROFILE.id else "claude.file") }
-    var period by rememberSaveable(provider) { mutableIntStateOf(30) }
-    var metricKey by rememberSaveable(provider, selectedReport) { mutableStateOf("") }
-    var series by rememberSaveable(provider, selectedReport, metricKey) { mutableStateOf("") }
-    var sources by rememberSaveable(provider) { mutableStateOf(false) }
-    var key by remember { mutableStateOf("") } // Never save credentials in saved-instance state.
-    val context = LocalContext.current
-    val uri = LocalUriHandler.current
-    val coroutine = rememberCoroutineScope()
-    var fileError by remember { mutableStateOf<String?>(null) }
-    val fileImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { document ->
-        if (document != null) coroutine.launch {
-            try {
-                val body = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(document)?.use { stream ->
-                    val output = java.io.ByteArrayOutputStream()
-                    val buffer = ByteArray(8192)
-                    while (true) { val count = stream.read(buffer); if (count < 0) break; require(output.size() + count <= 1_048_576); output.write(buffer, 0, count) }
-                    output.toString("UTF-8")
-                } ?: throw IllegalArgumentException("Datei unlesbar") }
-                fileError = null; model.importClaudeStats(body)
-            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
-            catch (_: Exception) { fileError = "Datei konnte nicht gelesen werden (maximal 1 MiB)." }
-        }
-    }
     LaunchedEffect(provider) { model.refreshStats(provider) }
-    val report = stats.reports.firstOrNull { it.id == selectedReport } ?: stats.reports.firstOrNull { it.points.isNotEmpty() } ?: stats.reports.firstOrNull()
+    if (provider == Providers.CODEX) CodexStats(state, now) else ClaudeStats(state, now)
+}
+
+@Composable
+private fun CodexStats(state: UiState, now: Long) {
+    val account = state.codex
+    val uri = LocalUriHandler.current
+    val reports = account.stats.ordered()
+    var selectedReport by rememberSaveable { mutableStateOf(CodexReport.PROFILE.id) }
+    var period by rememberSaveable { mutableIntStateOf(30) }
+    var metricKey by rememberSaveable(selectedReport) { mutableStateOf("") }
+    var series by rememberSaveable(selectedReport, metricKey) { mutableStateOf("") }
+    val report = reports.firstOrNull { it.id == selectedReport } ?: reports.firstOrNull { it.points.isNotEmpty() } ?: reports.firstOrNull()
     val metrics = report?.points.orEmpty().map { it.metric to it.unit }.distinct()
-    val metric = metrics.firstOrNull { "${it.first}|${it.second}" == metricKey } ?: metrics.firstOrNull { it.first == "tokens" || it.first == "Nachrichten" } ?: metrics.firstOrNull()
+    val metric = metrics.firstOrNull { "${it.first}|${it.second}" == metricKey } ?: metrics.firstOrNull { it.first == "tokens" } ?: metrics.firstOrNull()
     val candidates = report?.points.orEmpty().filter { it.metric == metric?.first && it.unit == metric?.second }
     val labels = candidates.map { it.label }.distinct().sorted()
     val label = series.takeIf { it in labels } ?: labels.firstOrNull { it == "Gesamt" } ?: labels.firstOrNull()
     val end = Instant.ofEpochSecond(now).atZone(ZoneOffset.UTC).toLocalDate()
     val points = candidates.filter { it.label == label && (it.day == null || it.day >= end.minusDays((period - 1).toLong()).toString()) }
     val daily = points.filter { it.day != null && it.day <= end.toString() }.groupBy { it.day!! }.mapValues { (_, values) -> values.sumOf { it.value } }.toSortedMap()
-    LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxWidth(), contentPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            SegmentedTabGroup(stats.reports.map { it.id }, report?.id.orEmpty(), { selectedReport = it }, { id -> stats.reports.first { it.id == id }.title })
-        }
-        if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        error?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
-        fileError?.let { item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) } }
-        if (report != null) {
+    LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        if (reports.size > 1) item { SegmentedTabGroup(reports.map { it.id }, report?.id.orEmpty(), { selectedReport = it }, { id -> reports.first { it.id == id }.title }) }
+        if (account.statsLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        account.statsError?.let { item { Notice(it, true) } }
+        if (report == null) item { SoftCard {
+            Icon(Icons.Rounded.QueryStats, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+            Text(if (account.statsLoading) "Berichte werden geladen" else "Noch keine Statistiken", style = MaterialTheme.typography.headlineSmall)
+            Text("Die Werte kommen direkt von OpenAI, sobald der Anbieter sie für deinen Account freigibt.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } } else {
             item { SectionTitle(report.title) }
             item { SoftCard {
-                Text(report.scope, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${report.scope} · von OpenAI gemeldet", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 report.error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                 report.notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (metric != null) {
-                    MetricPicker("Messwert", metrics.map { "${it.first}|${it.second}" }, "${metric.first}|${metric.second}", { metricKey = it }, { metricLabel(it.substringBefore('|')) })
-                    MetricPicker("Produkt / Modell / Kategorie", labels, label.orEmpty(), { series = it }, { it })
+                    if (metrics.size > 1) Picker("Messwert", metrics.map { "${it.first}|${it.second}" }, "${metric.first}|${metric.second}", { metricKey = it }, { metricLabel(it.substringBefore('|')) })
+                    if (labels.size > 1) Picker("Kategorie", labels, label.orEmpty(), { series = it }, { it })
                     if (daily.isNotEmpty()) {
                         SegmentedTabGroup(listOf(7, 30), period, { period = it }, { "$it Tage" }, fillEqually = true)
-                        BigStatNumber(daily.values.sum())
-                        Text(metric.second, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val today = daily[end.toString()]
+                        if (today != null) {
+                            Text("Heute (UTC)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            BigStatNumber(today, metric.second)
+                        }
+                        Text("Summe der letzten $period Tage", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (today != null) Text("${formatLarge(daily.values.sum())} ${metric.second}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        else BigStatNumber(daily.values.sum(), metric.second)
                         DailyStatsChart(List(period) { index -> daily[end.minusDays((period - index - 1).toLong()).toString()] })
                         Text("${daily.keys.first()} – ${daily.keys.last()} · ${daily.count { it.value > 0 }} aktive Tage", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else points.firstOrNull()?.let { point ->
-                        BigStatNumber(point.value)
-                        Text("${point.unit} · Gesamtzeitraum des Berichts", style = MaterialTheme.typography.labelMedium)
+                        BigStatNumber(point.value, point.unit)
+                        Text("Gesamtzeitraum des Berichts", style = MaterialTheme.typography.labelMedium)
                     }
-                } else Text(if (report.error != null) "Keine lesbaren Werte" else "Der Anbieter meldet keine Werte für diesen Bericht.", style = MaterialTheme.typography.bodyMedium)
-                if (report.fetchedAt > 0) Text("Abgerufen ${statsDate(report.fetchedAt)}${report.publishedAt?.let { " · Quellenstand ${statsDate(it)}" }.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else Text(if (report.error != null) "Keine lesbaren Werte" else "OpenAI meldet keine Werte für diesen Bericht.", style = MaterialTheme.typography.bodyMedium)
+                if (report.fetchedAt > 0) Text("Abgerufen ${date(report.fetchedAt)}${report.publishedAt?.let { " · Stand ${date(it)}" }.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } }
             val undated = report.points.filter { it.day == null }
             if (undated.isNotEmpty()) {
                 item { SectionTitle("Gesamtzeitraum") }
-                item { SoftCard {
-                    undated.take(80).forEachIndexed { index, point ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
-                        StatLine("${point.label} · ${metricLabel(point.metric)}", "${statsNumber(point.value)} ${point.unit}")
-                    }
-                } }
+                item { SoftCard { undated.take(80).forEachIndexed { index, point ->
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                    StatLine("${point.label} · ${metricLabel(point.metric)}", "${formatLarge(point.value)} ${point.unit}")
+                } } }
             }
             if (daily.isNotEmpty()) {
                 item { SectionTitle("Tageswerte") }
-                item { SoftCard {
-                    daily.entries.reversed().forEachIndexed { index, entry ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
-                        StatLine(entry.key, "${statsNumber(entry.value)} ${metric?.second.orEmpty()}")
-                    }
-                } }
+                item { SoftCard { daily.entries.reversed().forEachIndexed { index, entry ->
+                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                    StatLine(entry.key, "${formatLarge(entry.value)} ${metric?.second.orEmpty()}")
+                } } }
             }
-        } else item { SoftCard {
-            Icon(Icons.Rounded.QueryStats, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
-            Text(if (loading) "Berichte werden geladen" else "Deine Statistiken", style = MaterialTheme.typography.headlineSmall)
-            Text(if (provider == "Codex") "Tageswerte werden mit deinem Account abgerufen, sofern OpenAI sie freigibt." else "Claude meldet über die persönliche Anmeldung Limits und Zusatzverbrauch. Für Nachrichten, Sitzungen und Modell-Tokens einen Claude-Code-Bericht importieren; API-Abrechnung separat verbinden.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item { TextButton(onClick = { uri.openUri("https://chatgpt.com/codex/settings/usage") }) {
+            Text("Nutzung bei OpenAI öffnen"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.size(18.dp))
         } }
+    }
+}
+
+/** Claude reports quota percentages only. The history lists exactly what Claude returned at each read. */
+@Composable
+private fun ClaudeStats(state: UiState, now: Long) {
+    val account = state.claude
+    val uri = LocalUriHandler.current
+    var period by rememberSaveable { mutableIntStateOf(30) }
+    val today = Instant.ofEpochSecond(now).atZone(ZoneId.systemDefault()).toLocalDate()
+    val byDay = account.days.associateBy { it.date }
+    val range = List(period) { today.minusDays((period - it - 1).toLong()) }
+    val usage = account.usage
+    LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        account.error?.let { item { Notice(it, true) } }
+        item { SectionTitle("Aktuelle Limits") }
         item { SoftCard {
-            TextButton(onClick = { sources = !sources }) { Icon(Icons.Rounded.Storage, null); Spacer(Modifier.width(8.dp)); Text("Datenquellen") }
-            if (sources) {
-                if (provider == "Claude Code") {
-                    Text("Claude Code · lokale Statistiken", style = MaterialTheme.typography.titleSmall)
-                    Text("stats-cache.json aus deinem Claude-Code-Verzeichnis wählen. Erneutes Importieren ersetzt den Bericht; es wird nichts doppelt addiert.", style = MaterialTheme.typography.bodySmall)
-                    FilledTonalButton(onClick = { fileImport.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !loading) { Text("Claude-Code-Bericht importieren") }
-                }
-                Text("API · Organisation", style = MaterialTheme.typography.titleSmall)
-                Text("Optional: separater Admin-API-Key für 30 Tage Organisationsverbrauch und Kosten. Das ist keine Abrechnung deines ChatGPT-/Claude-Abos. Der Key bleibt verschlüsselt auf diesem Gerät; die App nutzt nur Berichts-GETs und ruft keine Modelle auf.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (connected) TextButton(onClick = { model.disconnectAnalytics(provider) }) { Text("API-Verbindung trennen") }
-                else {
-                    OutlinedTextField(key, { key = it }, label = { Text("Admin-API-Key") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
-                    FilledTonalButton(onClick = { model.connectAnalytics(provider, key); key = "" }, enabled = !loading && key.isNotBlank()) { Text("API verbinden und prüfen") }
-                }
-                TextButton(onClick = { uri.openUri(if (provider == "Codex") "https://chatgpt.com/codex/settings/usage" else "https://claude.ai/settings/usage") }) { Text("Nutzung beim Anbieter öffnen"); Spacer(Modifier.width(8.dp)); Icon(Icons.Rounded.OpenInNew, null, Modifier.size(18.dp)) }
-                Text("API-Berichte sind getrennte Datenquellen. Nicht freigegebene Cowork-/ChatGPT-Analysen werden nicht aus Abo-Prozenten geschätzt.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val groups = usage?.groups.orEmpty().filter { it.windows.isNotEmpty() }
+            if (groups.isEmpty()) Text(if (account.refreshing) "Wird geladen…" else "Claude hat noch keine Limits gemeldet.", style = MaterialTheme.typography.bodyMedium)
+            groups.forEachIndexed { index, group ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                group.windows.forEach { window -> LimitRow(if (group.name == Providers.CLAUDE) window.title else "${group.name} · ${window.title}", window, now) }
             }
+            usage?.extraUsage?.takeIf { it.enabled == true }?.let { extra ->
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                StatLine("Zusatzverbrauch", "${extraAmountText(extra.used, extra.currency, extra.decimals)} von ${extraAmountText(extra.limit, extra.currency, extra.decimals)}")
+            }
+        } }
+        item { SectionTitle("Verlauf") }
+        item { SoftCard {
+            SegmentedTabGroup(listOf(7, 30), period, { period = it }, { "$it Tage" }, fillEqually = true)
+            Text("Höchster 5-Stunden-Wert pro Tag", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DailyStatsChart(range.map { byDay[it.toString()]?.peak }, maximum = 100.0)
+            Text("Wochenlimit, letzter Wert pro Tag", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            DailyStatsChart(range.map { byDay[it.toString()]?.weekly }, maximum = 100.0)
+            Text("Werte so, wie Claude sie bei der Aktualisierung gemeldet hat. Tage ohne Aktualisierung bleiben leer.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } }
+        val recorded = range.reversed().mapNotNull { day -> byDay[day.toString()]?.takeIf { it.peak != null || it.weekly != null } }
+        if (recorded.isNotEmpty()) {
+            item { SectionTitle("Tageswerte") }
+            item { SoftCard { recorded.forEachIndexed { index, day ->
+                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                StatLine(day.date, listOfNotNull(day.peak?.let { "5 Std. ${percent(it)}%" }, day.weekly?.let { "Woche ${percent(it)}%" }).joinToString(" · "))
+            } } }
+        }
+        item { Notice("Claude liefert über die Anmeldung Limits, Resets und Zusatzverbrauch, aber keine Token- oder Nachrichtenzahlen.") }
+        item { TextButton(onClick = { uri.openUri("https://claude.ai/settings/usage") }) {
+            Text("Nutzung bei Claude öffnen"); Spacer(Modifier.width(8.dp)); Icon(Icons.AutoMirrored.Rounded.OpenInNew, null, Modifier.size(18.dp))
         } }
     }
 }
 
 @Composable
-private fun BigStatNumber(value: Double) {
-    val headline = when {
-        kotlin.math.abs(value) >= 1e12 -> "${statsNumber(value / 1e12)} Bio."
-        kotlin.math.abs(value) >= 1e9 -> "${statsNumber(value / 1e9)} Mrd."
-        kotlin.math.abs(value) >= 1e6 -> "${statsNumber(value / 1e6)} Mio."
-        else -> statsNumber(value)
+private fun LimitRow(title: String, window: UsageWindow, now: Long) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Text("${percent(window.usedPercent)}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        UsageTrack((window.usedPercent / 100).toFloat(), if (window.usedPercent >= 100) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, Modifier.fillMaxWidth().height(6.dp))
+        window.resetAt?.let { Text(if (it > now) "Reset in ${countdown(it - now)} · ${date(it)}" else "Reset fällig", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
-    Text(headline, style = MaterialTheme.typography.displayLarge.copy(fontSize = 56.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-    if (headline != statsNumber(value)) Text(statsNumber(value), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
+
 @Composable
-private fun MetricPicker(title: String, options: List<String>, selected: String, select: (String) -> Unit, label: (String) -> String) {
+private fun BigStatNumber(value: Double, unit: String) {
+    Text(formatLarge(value), style = MaterialTheme.typography.displayMedium.copy(fontSize = 44.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+    Text(unit, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun Picker(title: String, options: List<String>, selected: String, select: (String) -> Unit, label: (String) -> String) {
     var open by remember { mutableStateOf(false) }
     Box {
-        TextButton(onClick = { open = true }) { Text("$title: ${label(selected)}", modifier = Modifier.weight(1f)); Icon(Icons.Rounded.ExpandMore, null) }
+        TextButton(onClick = { open = true }) { Text("$title: ${label(selected)}"); Icon(Icons.Rounded.ExpandMore, null) }
         DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = 320.dp)) {
             options.forEach { option -> DropdownMenuItem(text = { Text(label(option)) }, onClick = { select(option); open = false }) }
         }
     }
 }
+
 @Composable
-private fun DailyStatsChart(values: List<Double?>) {
+private fun DailyStatsChart(values: List<Double?>, maximum: Double? = null) {
     val colors = MaterialTheme.colorScheme
-    Canvas(Modifier.fillMaxWidth().height(164.dp).padding(top = 12.dp)) {
-        val maximum = values.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(1.0) ?: 1.0
+    Canvas(Modifier.fillMaxWidth().height(120.dp).padding(top = 8.dp)) {
+        val top = maximum ?: values.filterNotNull().maxOfOrNull { kotlin.math.abs(it) }?.coerceAtLeast(1.0) ?: 1.0
         val signed = values.any { it != null && it < 0 }
         val baseline = if (signed) size.height / 2 else size.height
         val plotHeight = if (signed) size.height / 2 else size.height
         if (signed) drawLine(colors.outlineVariant, Offset(0f, baseline), Offset(size.width, baseline), 1.dp.toPx())
-        val gap = 4.dp.toPx()
+        val gap = 3.dp.toPx()
         val width = ((size.width - gap * (values.size - 1)) / values.size.coerceAtLeast(1)).coerceAtLeast(1f)
         values.forEachIndexed { index, value ->
-            if (value == null) return@forEachIndexed
-            val height = (kotlin.math.abs(value) / maximum * (plotHeight - 4.dp.toPx())).toFloat().coerceAtLeast(2.dp.toPx())
-            drawRoundRect(if (value < 0) colors.tertiary else colors.primary.copy(alpha = (.35 + .65 * kotlin.math.abs(value) / maximum).toFloat()),
-                Offset(index * (width + gap), if (value < 0) baseline else baseline - height), Size(width, height), CornerRadius(width / 2, width / 2))
+            val bar = value ?: run {
+                drawRoundRect(colors.surfaceContainerHighest, Offset(index * (width + gap), baseline - 2.dp.toPx()), Size(width, 2.dp.toPx()), CornerRadius(1f, 1f))
+                return@forEachIndexed
+            }
+            val height = (kotlin.math.abs(bar) / top * (plotHeight - 4.dp.toPx())).toFloat().coerceIn(2.dp.toPx(), plotHeight)
+            drawRoundRect(if (bar < 0) colors.tertiary else colors.primary.copy(alpha = (.35 + .65 * (kotlin.math.abs(bar) / top).coerceIn(0.0, 1.0)).toFloat()),
+                Offset(index * (width + gap), if (bar < 0) baseline else baseline - height), Size(width, height), CornerRadius(width / 2, width / 2))
         }
     }
 }
+
 @Composable
 private fun StatLine(title: String, value: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Icon(Icons.Rounded.Circle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(8.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        }
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
 }
-private fun statsNumber(value: Double) = NumberFormat.getNumberInstance(Locale.GERMANY).apply { maximumFractionDigits = if (kotlin.math.abs(value) < 1) 6 else 2 }.format(value)
-private fun statsDate(at: Long) = Instant.ofEpochSecond(at).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM. · HH:mm"))
+
+/** German short scale: Mio. 10^6, Mrd. 10^9, Bio. 10^12, Brd. 10^15; the exact value stays in the list rows. */
+internal fun formatLarge(value: Double): String {
+    val magnitude = kotlin.math.abs(value)
+    return when {
+        magnitude >= 1e15 -> "${number(value / 1e15)} Brd."
+        magnitude >= 1e12 -> "${number(value / 1e12)} Bio."
+        magnitude >= 1e9 -> "${number(value / 1e9)} Mrd."
+        magnitude >= 1e6 -> "${number(value / 1e6)} Mio."
+        else -> number(value, if (magnitude < 1) 6 else 2)
+    }
+}
+
 private fun metricLabel(key: String): String = when (key) {
     "lifetime_tokens" -> "Tokens insgesamt"; "peak_daily_tokens" -> "Stärkster Tag · Tokens"; "tokens" -> "Tokens"
     "current_streak_days" -> "Aktuelle Serie"; "longest_streak_days" -> "Längste Serie"; "longest_running_turn_sec" -> "Längster Turn"
     "total_threads" -> "Chats"; "total_skills_used" -> "Skill-Aufrufe"; "unique_skills_used" -> "Verschiedene Skills"
-    "input_tokens", "inputTokens", "uncached_input_tokens", "uncached_text_input_tokens" -> "Input-Tokens"
-    "output_tokens", "outputTokens", "text_output_tokens" -> "Output-Tokens"
-    "input_cached_tokens", "cache_read_input_tokens", "cacheReadInputTokens", "cached_text_input_tokens" -> "Cache-Tokens"
-    "totalMessages" -> "Nachrichten"; "totalSessions" -> "Sitzungen"; "threads" -> "Chats"; "turns" -> "Turns"
+    "input_tokens", "uncached_input_tokens", "uncached_text_input_tokens" -> "Input-Tokens"
+    "output_tokens", "text_output_tokens" -> "Output-Tokens"
+    "input_cached_tokens", "cached_text_input_tokens" -> "Cache-Tokens"
+    "turns" -> "Turns"; "threads" -> "Chats"
     else -> key.replace('_', ' ').replaceFirstChar(Char::titlecase)
 }

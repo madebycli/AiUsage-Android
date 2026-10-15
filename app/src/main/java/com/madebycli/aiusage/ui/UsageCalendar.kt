@@ -26,7 +26,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** AniSync/GitHub contribution layout; cells represent measured quota, not inferred daily tokens. */
+/** Contribution-style calendar of provider-reported values: daily tokens (Codex) or the highest 5-hour quota read (Claude). */
 @Composable
 internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
     val actual = days.any { it.actual != null }
@@ -40,12 +40,13 @@ internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
     fun amount(day: UsageDay?) = if (actual) day?.actual else day?.peak
     val scale = if (actual) days.mapNotNull { it.actual }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0 else 100.0
     val unit = days.firstOrNull { it.actual != null }?.unit ?: "5h-Spitze"
+    fun fmt(value: Double) = if (actual) formatLarge(value) else formatPeak(value)
     SoftCard {
         SegmentedTabGroup(listOf("Monat", "Woche"), period, { period = it }, { it },
             fillEqually = true, icon = { if (it == "Monat") Icons.Rounded.CalendarMonth else Icons.Rounded.ViewWeek })
         Row(verticalAlignment = Alignment.CenterVertically) {
             val visible = days.filter { it.date >= today.minusWeeks(20).toString() && it.date <= today.toString() }
-            Text(if (actual) "${formatPeak(visible.sumOf { it.actual ?: 0.0 })} $unit · ${visible.count { (it.actual ?: 0.0) > 0 }} aktive Tage"
+            Text(if (actual) "${fmt(visible.sumOf { it.actual ?: 0.0 })} $unit · ${visible.count { (it.actual ?: 0.0) > 0 }} aktive Tage"
                 else "${visible.count { it.peak != null }} Tage mit Messwerten", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             IconButton(onClick = { info = true }) { Icon(Icons.Rounded.Info, "Kalender erklären", Modifier.size(20.dp)) }
         }
@@ -74,7 +75,7 @@ internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
                                 val shape = RoundedCornerShape(3.dp)
                                 Box(Modifier.size(cell).clip(shape).background(background)
                                     .then(if (date.toString() == selected) Modifier.border(1.dp, colors.primary, shape) else Modifier)
-                                    .semantics { contentDescription = "$provider, $date: ${level?.let { "${formatPeak(it)} ${if (actual) unit else "Prozent gemessene 5h-Spitze"}" } ?: "keine Daten"}" }
+                                    .semantics { contentDescription = "$provider, $date: ${level?.let { "${fmt(it)} ${if (actual) unit else "Prozent 5h-Spitze"}" } ?: "keine Daten"}" }
                                     .clickable(enabled = !future) { selected = date.toString() })
                             }
                         }
@@ -100,7 +101,7 @@ internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(date.format(DateTimeFormatter.ofPattern("EE dd", Locale.GERMAN)), style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(48.dp))
                     UsageTrack(((amount(record) ?: 0.0) / scale).toFloat().coerceIn(0f, 1f), colors.primary, Modifier.weight(1f).height(12.dp))
-                    Text(amount(record)?.let { "${formatPeak(it)}${if (actual) "" else "%"}" } ?: "—", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(if (actual) 68.dp else 42.dp))
+                    Text(amount(record)?.let { "${fmt(it)}${if (actual) "" else "%"}" } ?: "—", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(if (actual) 68.dp else 42.dp))
                 }
             }
         }
@@ -109,14 +110,14 @@ internal fun UsageCalendar(provider: String, days: List<UsageDay>, now: Long) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(runCatching { LocalDate.parse(selected).format(DateTimeFormatter.ofPattern("dd. MMMM", Locale.GERMAN)) }.getOrDefault(selected), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                Text(amount(entry)?.let { "${formatPeak(it)}${if (actual) " $unit" else "% · 5h-Spitze"}" } ?: "Keine Daten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(amount(entry)?.let { "${fmt(it)}${if (actual) " $unit" else "% · 5h-Spitze"}" } ?: "Keine Daten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
         }
-        Text(if (actual) days.firstOrNull()?.source.orEmpty() else "Gemessene 5h-Spitze · keine Tagesbilanz", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        Text(if (actual) days.firstOrNull()?.source.orEmpty() else "Höchster gemeldeter 5-Stunden-Wert", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
     }
-    if (info) AlertDialog(onDismissRequest = { info = false }, title = { Text("Gemessene Nutzung") },
-        text = { Text(if (actual) "Gemeldete Tageswerte aus dem Anbieterbericht. Es werden keine Abrufe hinzugezählt. Codex meldet UTC-Tage; Claude-Dateien behalten ihre exportierten Datumsangaben. Fehlende Tage bleiben unbekannt. Berichte können zeitverzögert oder unvollständig sein."
-            else "Jeder Tag zeigt den höchsten gemessenen 5-Stunden-Verbrauch, keine vollständige Tagesbilanz oder verbrauchten Limits. Aktualisieren erhöht keinen Nutzungszähler. Accountwerte werden etwa alle vier Stunden abgerufen; Android kann das verschieben. Echte Tageswerte sind in Statistiken verfügbar, wenn der Anbieter sie freigibt oder ein Claude-Code-Bericht importiert wurde.") },
+    if (info) AlertDialog(onDismissRequest = { info = false }, title = { Text("Gemeldete Werte") },
+        text = { Text(if (actual) "Tageswerte, wie OpenAI sie für deinen Account meldet (UTC-Tage). Die Zahl kann Cache-Tokens enthalten. Fehlende Tage bleiben leer."
+            else "Pro Tag der höchste 5-Stunden-Wert, den der Anbieter bei einer Aktualisierung gemeldet hat. Das ist keine Tagesbilanz; Tage ohne Aktualisierung bleiben leer.") },
         confirmButton = { TextButton(onClick = { info = false }) { Text("Verstanden") } })
 }
 private fun formatPeak(value: Double) = java.text.NumberFormat.getNumberInstance(Locale.GERMANY).apply { maximumFractionDigits = 1 }.format(value)

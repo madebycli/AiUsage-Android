@@ -118,4 +118,12 @@ class ClaudeUsageCompatibilityTest {
         assertEquals(1234.0, record.usage!!.extraUsage!!.used!!, 0.0)
         assertTrue(record.usage!!.warnings.isEmpty())
     }
+    @Test fun `reset times with numeric offsets stay attached to their windows`() {
+        val usage = ClaudeParser.parse("""{"five_hour":{"utilization":23.0,"resets_at":"2026-10-13T12:00:00.123456+00:00"},"seven_day":{"utilization":41.5,"resets_at":"2026-10-17T08:30:00+00:00"},"seven_day_opus":null,"seven_day_sonnet":{"utilization":9.0,"resets_at":"2026-10-17T08:30:00+00:00"},"extra_usage":{"is_enabled":false,"monthly_limit":null,"used_credits":null,"utilization":null}}""", 1791800000, "Max 5x")
+        val windows = usage.windows("Claude Code")
+        assertEquals(1791892800L, windows.first { it.seconds == 18000L }.resetAt)
+        assertEquals(1792225800L, windows.first { it.seconds == 604800L }.resetAt)
+        assertEquals(listOf("Claude Code", "Sonnet"), usage.groups.map { it.name })
+        assertTrue(usage.warnings.isEmpty())
+    }
 }

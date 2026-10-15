@@ -56,28 +56,26 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
     Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionTitle("Automatisch aktualisieren")
         SoftCard {
-            SwitchRow("Alle 4 Stunden", "Codex und Claude getrennt, nur verbundene Accounts", checked("daily", true)) { update("daily", it) }
-            Text("Aktuelle Limits und Reset-Termine; bei Codex zusätzlich der kleine Tagesbericht. Forecasts und API-Abrechnung werden hier nicht abgerufen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SwitchRow("Alle 3 Stunden", "Limits und Reset-Termine verbundener Accounts", checked("daily", true)) { update("daily", it) }
             TextButton(onClick = { batteryHelp = true }) { Icon(Icons.Rounded.BatterySaver, null); Spacer(Modifier.width(8.dp)); Text(if (unrestricted) "Akku: uneingeschränkt" else "Hintergrundbetrieb erlauben") }
         }
         SectionTitle("Reset-Benachrichtigungen")
         SoftCard {
-            SwitchRow("Reset-Hinweise", "Gemeldete Account-Termine, kein Forecast", checked("enabled", false)) { enabled ->
+            SwitchRow("Reset-Hinweise", "Meldung, wenn ein Limit zurückgesetzt wird", checked("enabled", false)) { enabled ->
                 if (enabled && !allowed) requestPermission()
                 else update("enabled", enabled)
             }
             Text(if (allowed) "Android-Freigabe erteilt" else "Android-Freigabe fehlt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!allowed) FilledTonalButton(onClick = { requestPermission() }) { Text("Benachrichtigungen erlauben") }
-            SwitchRow("Nur bei Nutzung", "Keine Meldung für ungenutzte Zeitfenster", checked("usedOnly", true)) { update("usedOnly", it) }
+            SwitchRow("Nur bei Nutzung", "Nicht für Zeitfenster ohne Verbrauch", checked("usedOnly", true)) { update("usedOnly", it) }
             TextButton(onClick = { notificationSettings() }) { Text("Android-Freigabe & Kanäle") }
         }
-        val providers = buildList { if (state.connected) add("Codex"); if (state.claudeConnected) add("Claude Code") }
-        providers.forEach { provider ->
+        state.connectedProviders.forEach { provider ->
             SectionTitle(provider)
             SoftCard {
                 ResetAlerts.rules.filter { it.provider == provider }.forEachIndexed { index, rule ->
                     if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
-                    SwitchRow(rule.title, "Nach dem Reset-Zeitpunkt des Anbieters", checked("rule.${rule.key}", true)) { update("rule.${rule.key}", it) }
+                    SwitchRow(rule.title, "Zum gemeldeten Reset-Zeitpunkt", checked("rule.${rule.key}", true)) { update("rule.${rule.key}", it) }
                     Text("Benachrichtigen", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val lead = values["lead.${rule.key}"] as? Int ?: 0
                     SegmentedTabGroup(listOf(0, 5, 15, 30, 60), lead, { selected ->
@@ -90,14 +88,10 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
                 }
             }
         }
-        SoftCard {
-            Text("So werden Termine geplant", style = MaterialTheme.typography.titleSmall)
-            Text("5-Stunden- und Wochenreset werden getrennt geplant. Neue Anbieterwerte ersetzen alte Termine. Ohne gemeldeten Zeitpunkt wird nichts erfunden. Abmelden entfernt die geplanten Hinweise dieses Anbieters.", style = MaterialTheme.typography.bodySmall)
-            Text("Android kann auch Hinweise verzögern. Die Meldung bestätigt einen gemeldeten Termin, nicht den tatsächlichen Reset. Zum Prüfen den Verbrauch aktualisieren.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Text("Android kann Hinweise verzögern. Sie beruhen auf dem Reset-Termin, den der Anbieter zuletzt gemeldet hat.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (batteryHelp) AlertDialog(onDismissRequest = { batteryHelp = false }, title = { Text("Im Hintergrund aktualisieren") },
-        text = { Text("Die App braucht keinen dauerhaft laufenden Dienst. Android plant kurze Abrufe etwa alle vier Stunden. Wenn dein Gerät sie stark einschränkt, stelle AI Usage in den Akku-Einstellungen auf uneingeschränkt. Auch dann sind Abrufe und Reset-Hinweise nicht sekundengenau garantiert.") },
+        text = { Text("Android ruft die Limits etwa alle drei Stunden im Hintergrund ab. Schränkt dein Gerät die App stark ein, stelle sie in den Akku-Einstellungen auf uneingeschränkt.") },
         confirmButton = { TextButton(onClick = {
             batteryHelp = false
             val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)

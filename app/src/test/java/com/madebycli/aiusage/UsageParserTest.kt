@@ -34,19 +34,6 @@ class UsageParserTest {
         assertEquals(listOf("Codex", "Reserve"), usage.groups.map { it.name })
         assertEquals(10.0, usage.groups.first().windows.single().usedPercent, 0.0)
     }
-    @Test fun `reset boundaries disable rate estimate`() {
-        val old = UsageSnapshot(null, listOf(QuotaGroup("Codex", listOf(UsageWindow(80.0, 18000, 1000)))), 100)
-        val newWindow = UsageWindow(10.0, 18000, 2000)
-        val new = old.copy(groups = listOf(QuotaGroup("Codex", listOf(newWindow))), fetchedAt = 110)
-        assertNull(usageRate(old, new, newWindow))
-        assertEquals(1, observeResets(old, new).size)
-    }
-    @Test fun `rate is measured in percentage points per second`() {
-        val old = UsageSnapshot(null, listOf(QuotaGroup("Codex", listOf(UsageWindow(10.0, 18000, 1000)))), 100)
-        val window = UsageWindow(12.0, 18000, 1000)
-        val new = old.copy(groups = listOf(QuotaGroup("Codex", listOf(window))), fetchedAt = 110)
-        assertEquals(0.2, usageRate(old, new, window)!!, 0.00001)
-    }
     @Test fun `credits retain available versus redeemed state`() {
         val credits = UsageParser.credits("""{"available_count":1,"credits":[{"status":"redeemed","title":"Full reset","expires_at":"2026-10-01T00:00:00Z"},{"status":"available","title":"Weekly","expires_at":null}]}""")
         assertEquals(2, credits.size)

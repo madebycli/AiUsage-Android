@@ -13,17 +13,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-@Serializable
-class Tokens(val access: String, val refresh: String, val accountId: String?, val expiresAt: Long?)
-
-interface TokenStore {
-    fun readTokens(): Tokens?
-    fun writeTokens(tokens: Tokens)
-    fun clear()
-}
-
-// All account data and tokens stay in noBackupFilesDir, encrypted by a device-bound key.
-class SecureStore(context: Context, private val namespace: String = "account") : TokenStore, ClaudeCredentialStore {
+/** Encrypted on-device storage in noBackupFilesDir, one namespace per provider. */
+class SecureStore(context: Context, private val namespace: String = "account") : TokenStore, ClaudeCredentialStore, DeviceLoginStore {
     private val directory = context.noBackupFilesDir
     private val ioLock = locks.getOrPut(directory.absolutePath + "/" + namespace) { Any() }
     private val alias = "aiusage.$namespace.v1"
@@ -60,15 +51,8 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
     fun readStats(): StatsBundle = read("stats.enc")?.let { appJson.decodeFromString(it) } ?: StatsBundle()
     fun writeStats(value: StatsBundle) = write("stats.enc", appJson.encodeToString(value))
-    fun readAnalyticsKey(): String? = read("analytics-key.enc")
-    fun writeAnalyticsKey(value: String) = write("analytics-key.enc", value)
-    fun clearAnalyticsKey(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("analytics-key.enc"))).delete() }
-    fun saveMeasurement(usage: UsageSnapshot, provider: String, observations: List<ResetObservation>? = null): PersonalRecord = synchronized(ioLock) {
-        val old = readRecord()
-        val next = recordMeasurement(old, usage, provider)
-        val result = if (observations != null && next.usage?.fetchedAt == usage.fetchedAt) next.copy(observations = observations) else next
-        writeRecord(result)
-        result
+    fun saveMeasurement(usage: UsageSnapshot, provider: String): PersonalRecord = synchronized(ioLock) {
+        recordMeasurement(readRecord(), usage, provider).also(::writeRecord)
     }
     companion object { private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>() }
     override fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
@@ -76,12 +60,18 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun readClaudeLogin(): ClaudePendingLogin? = read("login.enc")?.let { appJson.decodeFromString(it) }
     override fun writeClaudeLogin(value: ClaudePendingLogin) = write("login.enc", appJson.encodeToString(value))
     override fun clearClaudeLogin(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("login.enc"))).delete() }
+    override fun readDeviceLogin(): PendingDeviceLogin? = read("device.enc")?.let { appJson.decodeFromString(it) }
+    override fun writeDeviceLogin(value: PendingDeviceLogin) = write("device.enc", appJson.encodeToString(value))
+    override fun clearDeviceLogin(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("device.enc"))).delete() }
+    /** Drops what the removed organisation-API and file-import features may have stored. */
+    fun purgeLegacyStatistics(): Unit = synchronized(ioLock) {
+        AtomicFile(File(directory, filename("analytics-key.enc"))).delete()
+        if (namespace != "account") AtomicFile(File(directory, filename("stats.enc"))).delete()
+    }
     override fun clear(): Unit = synchronized(ioLock) {
-        AtomicFile(File(directory, filename("tokens.enc"))).delete()
-        AtomicFile(File(directory, filename("usage.enc"))).delete()
-        AtomicFile(File(directory, filename("stats.enc"))).delete()
-        clearAnalyticsKey()
+        listOf("tokens.enc", "usage.enc", "stats.enc", "analytics-key.enc").forEach { AtomicFile(File(directory, filename(it))).delete() }
         clearClaudeLogin()
+        clearDeviceLogin()
         KeyStore.getInstance("AndroidKeyStore").apply { load(null); deleteEntry(alias) }
     }
 }

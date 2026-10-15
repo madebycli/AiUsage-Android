@@ -1,7 +1,6 @@
 package com.madebycli.aiusage
 
 import com.madebycli.aiusage.data.*
-import com.madebycli.aiusage.background.ResetAlerts
 import org.junit.Assert.*
 import org.junit.Test
 import java.time.*
@@ -61,12 +60,21 @@ class ActivityHistoryTest {
             ResetEvent("b", 101, "Reset", "Same", "https://x.com/a/status/1"), ResetEvent("c", 101, "Reset", "Other", null))
         assertEquals(2, historyEvents("Codex", "api:CODEX_RESET", ResetFeed(ResetSource.CODEX_RESET, events, null, 120), emptyMap()).size)
     }
-    @Test fun `alerts only match the reported provider window and deadline`() {
-        val rule = ResetAlerts.rules.first { it.provider == "Codex" && it.seconds == 18000L }
-        assertTrue(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 15000), 15000, 15000))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, "Claude Code", 15000), 15000, 15000))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 16000), 15000, 15000))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = 15000), 15000, 36601))
-        assertFalse(ResetAlerts.valid(rule, snapshot(10000, 10.0, reset = null), 15000, 15000))
+    @Test fun `weekly value keeps the latest reading of the day`() {
+        fun both(at: Long, five: Double, week: Double) = UsageSnapshot(null,
+            listOf(QuotaGroup("Claude Code", listOf(UsageWindow(five, 18000, 1), UsageWindow(week, 604800, 2)))), at)
+        val zone = ZoneId.of("UTC")
+        var record = recordMeasurement(PersonalRecord(), both(10000, 30.0, 12.0), "Claude Code", zone)
+        record = recordMeasurement(record, both(20000, 10.0, 14.0), "Claude Code", zone)
+        assertEquals(30.0, record.days.single().peak!!, 0.0)
+        assertEquals(14.0, record.days.single().weekly!!, 0.0)
+    }
+    @Test fun `reset times with numeric offsets parse like Z times`() {
+        assertEquals(1791849600L, parseInstant("2026-10-13T00:00:00Z"))
+        assertEquals(1791849600L, parseInstant("2026-10-13T00:00:00+00:00"))
+        assertEquals(1791849600L, parseInstant("2026-10-13T02:00:00.000000+02:00"))
+        assertEquals(1791849600L, parseInstant("2026-10-12T23:59:59.8+00:00"))
+        assertNull(parseInstant("tomorrow"))
+        assertNull(parseInstant(null))
     }
 }
