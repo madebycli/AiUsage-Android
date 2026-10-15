@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.madebycli.aiusage.ProviderState
 import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.UsageViewModel
@@ -28,10 +29,22 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 
+/** The statistics tab: provider switch, activity calendar and the provider's reports. */
 @Composable
-internal fun UsageStatsScreen(provider: String, state: UiState, model: UsageViewModel, now: Long) {
-    LaunchedEffect(provider) { model.refreshStats(provider) }
-    if (provider == Providers.CODEX) CodexStats(state, now) else ClaudeStats(state, now)
+internal fun StatsTab(state: UiState, model: UsageViewModel, now: Long, provider: String, select: (String) -> Unit) {
+    val names = state.connectedProviders
+    val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
+    LaunchedEffect(active) { model.refreshStats(active) }
+    Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
+        if (names.size > 1) Box(Modifier.padding(20.dp, 4.dp, 20.dp, 8.dp)) { ProviderTabs(names, active, select) }
+        if (active == Providers.CODEX) CodexStats(state, now) else ClaudeStats(state, now)
+    }
+}
+
+@Composable
+private fun ActivityCalendar(provider: String, account: ProviderState, now: Long) {
+    val reported = if (provider == Providers.CODEX) reportedActivity(account.stats) else emptyList()
+    UsageCalendar(provider, reported.ifEmpty { account.days }, now)
 }
 
 @Composable
@@ -53,6 +66,8 @@ private fun CodexStats(state: UiState, now: Long) {
     val points = candidates.filter { it.label == label && (it.day == null || it.day >= end.minusDays((period - 1).toLong()).toString()) }
     val daily = points.filter { it.day != null && it.day <= end.toString() }.groupBy { it.day!! }.mapValues { (_, values) -> values.sumOf { it.value } }.toSortedMap()
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item { SectionTitle("Aktivitätsverlauf") }
+        item { ActivityCalendar(Providers.CODEX, account, now) }
         if (reports.size > 1) item { SegmentedTabGroup(reports.map { it.id }, report?.id.orEmpty(), { selectedReport = it }, { id -> reports.first { it.id == id }.title }) }
         if (account.statsLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         account.statsError?.let { item { Notice(it, true) } }
@@ -122,6 +137,8 @@ private fun ClaudeStats(state: UiState, now: Long) {
     val usage = account.usage
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         account.error?.let { item { Notice(it, true) } }
+        item { SectionTitle("Aktivitätsverlauf") }
+        item { ActivityCalendar(Providers.CLAUDE, account, now) }
         item { SectionTitle("Aktuelle Limits") }
         item { SoftCard {
             val groups = usage?.groups.orEmpty().filter { it.windows.isNotEmpty() }

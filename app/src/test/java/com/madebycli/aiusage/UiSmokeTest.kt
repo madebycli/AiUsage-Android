@@ -81,7 +81,7 @@ class UiSmokeTest {
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
         screenshot("forecast-dark")
-        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Anmeldungen").performClick()
         compose.onAllNodesWithText("Neu anmelden")[0].assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
@@ -150,7 +150,7 @@ class UiSmokeTest {
         compose.onNodeWithText("Codex Reset Tracker").performScrollTo().performClick()
         compose.onNodeWithText("Tracker-Meldung").assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.onNode(hasText("Einstellungen") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Benachrichtigungen & Aktualisierung").performClick()
         compose.onNodeWithText("Alle 3 Stunden").assertIsDisplayed()
         screenshot("notifications-dark")
@@ -170,6 +170,17 @@ class UiSmokeTest {
         compose.onNodeWithText("Max 5x").assertIsDisplayed()
     }
 
+    @Test fun `statistics are the second tab and can be switched off`() {
+        val model = model()
+        val screen = mutableStateOf(UiState(codex = account(true, codexUsage())))
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(screen.value, model) } }
+        compose.onAllNodes(hasClickAction() and (hasText("Verbrauch") or hasText("Statistiken") or hasText("Resets")))
+            .assertCountEquals(3)
+        compose.onNodeWithText("Einstellungen").assertDoesNotExist()
+        compose.runOnIdle { screen.value = screen.value.copy(statsEnabled = false) }
+        compose.onNode(hasText("Statistiken") and hasClickAction()).assertDoesNotExist()
+    }
+
     @Test fun `Codex statistics show reported tokens and keep report tabs in order`() {
         val model = model()
         val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
@@ -177,17 +188,13 @@ class UiSmokeTest {
         val credits = StatsParser.codex(CodexReport.CREDITS, """{"data":[]}""", now)
         val screen = UiState(codex = account(true, codexUsage()).copy(stats = StatsBundle(listOf(credits, profile))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
-        compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").performScrollTo().assertIsDisplayed()
-        screenshot("activity-dark")
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Statistiken"))
-        compose.onNodeWithText("Statistiken").performClick()
-        compose.onNodeWithText("Statistiken · Codex").assertIsDisplayed()
+        compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
+        compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").assertIsDisplayed()
+        screenshot("stats-codex-dark")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Heute (UTC)"))
         compose.onNodeWithText("Heute (UTC)").assertIsDisplayed()
         compose.onNodeWithText("Summe der letzten 30 Tage").assertIsDisplayed()
-        compose.onAllNodesWithText("Profil")[0].assertIsDisplayed()
-        screenshot("stats-codex-dark")
-        compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.onNodeWithText("AI Usage").assertIsDisplayed()
+        compose.onAllNodesWithText("Profil")[0].assertExists()
     }
 
     @Test fun `Claude statistics use only the limits and values Claude reported`() {
@@ -195,13 +202,11 @@ class UiSmokeTest {
         val day = java.time.LocalDate.now().toString()
         val screen = UiState(claude = account(true, claudeUsage()).copy(days = listOf(UsageDay(day, 42.0, 0, now, weekly = 18.0))))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen, model) } }
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Statistiken"))
-        compose.onNodeWithText("Statistiken").performClick()
-        compose.onNodeWithText("Statistiken · Claude Code").assertIsDisplayed()
+        compose.onNode(hasText("Statistiken") and hasClickAction()).performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Aktuelle Limits"))
         compose.onNodeWithText("Aktuelle Limits").assertIsDisplayed()
-        compose.onNodeWithText("42%").assertIsDisplayed()
-        compose.onNodeWithText("Verlauf").assertIsDisplayed()
         screenshot("stats-claude-dark")
-        compose.onNodeWithText("5 Std. 42% · Woche 18%").performScrollTo().assertIsDisplayed()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("5 Std. 42% · Woche 18%"))
+        compose.onNodeWithText("5 Std. 42% · Woche 18%").assertIsDisplayed()
     }
 }

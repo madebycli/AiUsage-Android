@@ -28,6 +28,9 @@ internal fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () 
             MenuRow("Benachrichtigungen & Aktualisierung", Icons.Rounded.Notifications, notifications)
         }
         SoftCard {
+            SwitchRow("Statistiken", "Eigener Tab mit Verlauf und Berichten. Aus: keine Statistik-Abrufe.", state.statsEnabled, model::setStatsEnabled)
+        }
+        SoftCard {
             Text("Darstellung", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Hell", ThemeMode.DARK to "Dunkel").forEach { (theme, label) ->

@@ -23,7 +23,8 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(UiState(
         source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
-        dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false)
+        dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false),
+        statsEnabled = prefs.getBoolean("statsEnabled", true)
     ))
     val state = mutable.asStateFlow()
 
@@ -84,6 +85,11 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setStatsEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean("statsEnabled", enabled) }
+        mutable.update { it.copy(statsEnabled = enabled) }
+        if (enabled) codex.refreshStats() else codex.cancelStats()
+    }
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }
     fun setDynamic(enabled: Boolean) { prefs.edit { putBoolean("dynamic", enabled) }; mutable.update { it.copy(dynamicColor = enabled) } }
     fun setAmoled(enabled: Boolean) { prefs.edit { putBoolean("amoled", enabled) }; mutable.update { it.copy(amoled = enabled) } }

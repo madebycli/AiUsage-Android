@@ -16,7 +16,6 @@ import androidx.compose.material.icons.rounded.ConfirmationNumber
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -34,22 +33,9 @@ import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.data.*
 
 @Composable
-internal fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit, stats: (String) -> Unit) {
-    val names = state.connectedProviders
-    var selected by rememberSaveable { mutableStateOf(Providers.CODEX) }
-    val active = selected.takeIf { it in names } ?: names.firstOrNull()
+internal fun UsageScreen(state: UiState, now: Long, open: (String) -> Unit) {
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        names.forEach { name -> item(key = "banner:$name") { ProviderBanner(name, state.provider(name), now) { open(name) } } }
-        if (active != null) {
-            item(key = "activity") { SectionTitle("Aktivitätsverlauf") }
-            if (names.size > 1) item(key = "activity-tabs") { ProviderTabs(names, active, { selected = it }) }
-            item(key = "calendar") {
-                val provider = state.provider(active)
-                val reported = if (active == Providers.CODEX) reportedActivity(provider.stats) else emptyList()
-                UsageCalendar(active, reported.ifEmpty { provider.days }, now)
-            }
-            item(key = "stats") { MenuCard { MenuRow("Statistiken", Icons.Rounded.BarChart) { stats(active) } } }
-        }
+        state.connectedProviders.forEach { name -> item(key = "banner:$name") { ProviderBanner(name, state.provider(name), now) { open(name) } } }
     }
 }
 
@@ -93,7 +79,7 @@ private fun windowColor(window: UsageWindow) = MaterialTheme.colorScheme.let {
 }
 
 @Composable
-internal fun ProviderUsageScreen(state: UiState, now: Long, name: String, stats: () -> Unit) {
+internal fun ProviderUsageScreen(state: UiState, now: Long, name: String, stats: (() -> Unit)?) {
     val provider = state.provider(name)
     val usage = provider.usage
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -129,7 +115,7 @@ internal fun ProviderUsageScreen(state: UiState, now: Long, name: String, stats:
                 spending.resetAt?.let { Text("Reset ${date(it)}", style = MaterialTheme.typography.labelMedium) }
             } } }
         }
-        item { MenuCard { MenuRow("Statistiken", Icons.Rounded.BarChart, stats) } }
+        if (stats != null) item { MenuCard { MenuRow("Statistiken", Icons.Rounded.BarChart, stats) } }
         usage?.let { item { Text("${if (provider.refreshing) "Aktualisiert… · " else ""}Stand ${date(it.fetchedAt, true)} (${age(now - it.fetchedAt)})",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
     }

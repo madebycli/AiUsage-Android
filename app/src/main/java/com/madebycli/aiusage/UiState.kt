@@ -43,6 +43,8 @@ data class ProviderState(
 data class UiState(
     val codex: ProviderState = ProviderState(),
     val claude: ProviderState = ProviderState(),
+    /** Hides the statistics tab and stops every statistics request when switched off. */
+    val statsEnabled: Boolean = true,
     val creditsLoading: Boolean = false,
     val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,

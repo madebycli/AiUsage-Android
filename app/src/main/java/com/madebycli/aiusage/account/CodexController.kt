@@ -168,7 +168,7 @@ class CodexController(
     /** Reads the account reports OpenAI offers to this login. Unavailable reports stay empty, never zero. */
     fun refreshStats(force: Boolean = false) {
         val s = current
-        if (!s.connected || statsJob?.isActive == true) return
+        if (!state.value.statsEnabled || !s.connected || statsJob?.isActive == true) return
         val prefs = app.getSharedPreferences("stats-refresh", 0)
         val now = Instant.now().epochSecond
         if (prefs.getLong("retry.${Providers.CODEX}", 0) > now) {
@@ -210,6 +210,11 @@ class CodexController(
             catch (e: Exception) { state.updateCodex { if (generation.isCurrent(gen)) copy(statsError = safeError(e)) else this } }
             finally { state.updateCodex { if (generation.isCurrent(gen)) copy(statsLoading = false) else this } }
         }
+    }
+
+    fun cancelStats() {
+        statsJob?.cancel()
+        state.updateCodex { copy(statsLoading = false, statsError = null) }
     }
 
     private fun failed(previous: StatsBundle, kind: CodexReport, message: String) =
