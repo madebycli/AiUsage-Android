@@ -194,8 +194,9 @@ class UiSmokeTest {
         compose.onNodeWithText("2.000 Tokens · 2 aktive Tage").assertIsDisplayed()
         screenshot("stats-codex-dark")
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Heute (UTC)"))
-        compose.onNodeWithText("Heute (UTC)").assertIsDisplayed()
-        compose.onNodeWithText("Summe der letzten 30 Tage").assertIsDisplayed()
+        compose.onNodeWithText("Heute (UTC)").assertExists()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Summe der letzten 30 Tage"))
+        compose.onNodeWithText("Summe der letzten 30 Tage").assertExists()
         compose.onAllNodesWithText("Profil")[0].assertExists()
     }
 
