@@ -81,14 +81,14 @@ class BackgroundSettingsTest {
         org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val alarms = org.robolectric.Shadows.shadowOf(context.getSystemService(android.app.AlarmManager::class.java))
         ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset))
-        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
         assertTrue(ResetAlarms.isArmed(context, rule))
         ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 1))
         assertEquals(1, alarms.scheduledAlarms.size)
-        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
         ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 5000))
         assertEquals(1, alarms.scheduledAlarms.size)
-        assertEquals((reset + 5000 - 900) * 1000, alarms.peekNextScheduledAlarm().triggerAtTime)
+        assertEquals((reset + 5000 - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
         assertNotNull(ResetAlerts.nextReminder(context, rule))
     }
 
