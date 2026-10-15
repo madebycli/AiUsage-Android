@@ -24,7 +24,20 @@ android {
             keyPassword = "android"
         }
     }
-    buildTypes { getByName("debug") { signingConfig = signingConfigs.getByName("stableDebug") } }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("stableDebug") }
+        // Optimised build for daily use: R8 shrinking, not debuggable, same public test signer as debug,
+        // so it installs over the debug build.
+        create("performance") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("stableDebug")
+        }
+    }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

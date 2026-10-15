@@ -38,8 +38,10 @@ JDK 17, Android SDK Platform 37, Build Tools 37.0.0:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Die CI baut dieselbe APK und lädt sie als `AiUsage-debug` hoch. Die APK ist mit einem
-öffentlichen Test-Schlüssel signiert und kein Play-Store-Release.
+Die CI lädt zwei APKs hoch: `AiUsage-debug` und `AiUsage-performance` (R8-optimiert, nicht
+debuggbar, für den Alltag). Beide sind mit demselben öffentlichen Test-Schlüssel signiert,
+lassen sich also übereinander installieren, und sind kein Play-Store-Release.
+Lokal: `./gradlew assemblePerformance`.
 
 ## Aufbau
 
