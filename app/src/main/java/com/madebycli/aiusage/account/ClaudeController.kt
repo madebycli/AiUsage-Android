@@ -113,8 +113,8 @@ class ClaudeController(
     }
 
     fun completeLogin(code: String) {
-        val login = current.login
-        if (!login.open || login.busy || login.url == null) return
+        val before = current.login
+        if (!before.open || before.busy || before.url == null) return
         val gen = generation.current()
         state.updateClaude { copy(login = login.copy(busy = true, error = null)) }
         loginJob = scope.launch(Dispatchers.IO) {
