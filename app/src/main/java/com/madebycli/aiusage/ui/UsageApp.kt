@@ -18,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithMediumTopAppBar
 import com.axiel7.anihyou.core.ui.composables.DefaultScaffoldWithSmallTopAppBar
 import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.UiState
@@ -47,7 +46,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
     val stack = rememberSaveable(saver = listSaver<SnapshotStateList<String>, String>(save = { it.toList() }, restore = { it.toMutableStateList() })) { mutableStateListOf<String>() }
     val route = stack.lastOrNull()
     val now = rememberNow()
-    val mainScroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val mainScroll = TopAppBarDefaults.pinnedScrollBehavior()
     val detailScroll = TopAppBarDefaults.pinnedScrollBehavior()
     val loginProvider = state.loginProvider
 
@@ -106,16 +105,17 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationProvider: String
             val provider = Route.provider(route)!!
             Page(provider, refreshAction) { ProviderUsageScreen(state, now, provider, stats = if (state.statsEnabled) ({ statsProvider = provider; tab = Tab.STATS; stack.clear() }) else null) }
         }
-        else -> DefaultScaffoldWithMediumTopAppBar(
+        // The bar stays fixed: its scroll behavior is not connected to the content, so it never collapses.
+        else -> DefaultScaffoldWithSmallTopAppBar(
             title = when (tab) { Tab.USAGE -> "AI Usage"; Tab.STATS -> "Statistiken"; Tab.RESETS -> "Resets" },
             accentTitle = true,
-            modifier = Modifier.nestedScroll(mainScroll.nestedScrollConnection),
             scrollBehavior = mainScroll,
             actions = {
+                IconButton(onClick = { stack.add(Route.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Einstellungen") }
                 if (tab == Tab.STATS) RefreshButton(state.refreshing || state.provider(statsProvider).statsLoading, "Statistiken aktualisieren") {
                     model.refreshStats(statsProvider, force = true); model.refresh()
                 } else RefreshButton(state.refreshing, onClick = model::refresh)
-                IconButton(onClick = { stack.add(Route.SETTINGS) }) { Icon(Icons.Rounded.Settings, "Einstellungen") }
+                Spacer(Modifier.width(16.dp))
             },
             bottomBar = {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {

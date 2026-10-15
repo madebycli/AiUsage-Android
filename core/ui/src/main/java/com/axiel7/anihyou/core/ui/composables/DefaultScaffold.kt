@@ -117,24 +117,32 @@ fun DefaultScaffoldWithSmallTopAppBar(
     modifier: Modifier = Modifier,
     snackbarHost: @Composable () -> Unit = {},
     floatingActionButton: @Composable () -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable (RowScope.() -> Unit) = {},
     scrollBehavior: TopAppBarScrollBehavior,
     topAppBarColors: TopAppBarColors = TopAppBarDefaults.topAppBarColors(),
     contentWindowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
+    accentTitle: Boolean = false,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
         modifier = modifier,
         topBar = {
             TopAppBar(
-                title = { Text(text = title) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (accentTitle) Box(Modifier.size(4.dp, 26.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)))
+                        Text(text = title)
+                    }
+                },
                 navigationIcon = navigationIcon,
                 actions = actions,
                 scrollBehavior = scrollBehavior,
                 colors = topAppBarColors,
             )
         },
+        bottomBar = bottomBar,
         snackbarHost = snackbarHost,
         floatingActionButton = floatingActionButton,
         contentWindowInsets = contentWindowInsets,
