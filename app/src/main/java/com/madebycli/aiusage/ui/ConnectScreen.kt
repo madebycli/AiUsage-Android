@@ -28,7 +28,8 @@ import com.madebycli.aiusage.data.LoginPhase
 /** One sign-in page for both providers: the same cards, order and actions, only the steps differ. */
 @Composable
 internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewModel) {
-    val login = state.provider(provider).login
+    val login = state.login(provider)
+    val replacing = state.account(login.replaceAccountId)
     val uri = LocalUriHandler.current
     var browserError by remember { mutableStateOf<String?>(null) }
     fun openBrowser(url: String) {
@@ -39,8 +40,12 @@ internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewMod
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             BrandTile(provider, 56)
-            Text(if (provider == Providers.CODEX) "Melde dich bei OpenAI an und bestätige den Code." else "Melde dich bei Claude an und kopiere den angezeigten Code.",
-                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(if (provider == Providers.CODEX) "Melde dich bei OpenAI an und bestätige den Code." else "Melde dich bei Claude an und kopiere den angezeigten Code.",
+                    style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (replacing != null) "Erneute Anmeldung für ${replacing.title}" else if (state.accountsOf(provider).isNotEmpty()) "Weiterer $provider-Account" else "",
+                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
         }
         if (provider == Providers.CODEX) CodexSteps(login, ::openBrowser) else ClaudeSteps(login, model, ::openBrowser)
         if (login.busy) {
@@ -51,7 +56,7 @@ internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewMod
         login.error?.let { Notice(it, true) }
         browserError?.let { Notice(it, true) }
         if (provider == Providers.CODEX && login.error != null && !login.busy && login.url == null)
-            FilledTonalButton(onClick = { model.connect(provider) }, modifier = Modifier.fillMaxWidth()) { Text("Neuen Code anfordern") }
+            FilledTonalButton(onClick = { model.connect(provider, login.replaceAccountId) }, modifier = Modifier.fillMaxWidth()) { Text("Neuen Code anfordern") }
         if (provider == Providers.CLAUDE) ClaudeImport(login, model)
         TextButton(onClick = { model.cancelLogin(provider) }, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Abbrechen") }
     }
@@ -95,7 +100,7 @@ private fun ClaudeSteps(login: LoginState, model: UsageViewModel, openBrowser: (
     StepCard(1, "Bei Claude anmelden") {
         Text("Google oder E-Mail funktionieren direkt im Browser.", style = MaterialTheme.typography.bodySmall)
         if (login.url != null) Button(onClick = { openBrowser(login.url) }, enabled = !login.busy, modifier = Modifier.fillMaxWidth()) { Text("Claude im Browser öffnen") }
-        else if (!login.busy) Button(onClick = { model.connect(Providers.CLAUDE) }, modifier = Modifier.fillMaxWidth()) { Text("Neue Anmeldung starten") }
+        else if (!login.busy) Button(onClick = { model.connect(Providers.CLAUDE, login.replaceAccountId) }, modifier = Modifier.fillMaxWidth()) { Text("Neue Anmeldung starten") }
     }
     if (login.url != null) StepCard(2, "Code einfügen") {
         Text("Den ganzen Code kopieren, einschließlich # und dem Text dahinter. Dieser Versuch gilt 10 Minuten.", style = MaterialTheme.typography.bodySmall)

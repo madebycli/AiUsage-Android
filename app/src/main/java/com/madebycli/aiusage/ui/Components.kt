@@ -41,8 +41,8 @@ internal val screenPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp)
 internal val maxContentWidth = 680.dp
 
 @Composable
-internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
@@ -57,11 +57,14 @@ internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) = SoftCard(Pa
 internal fun MenuDivider() = HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
 
 @Composable
-internal fun MenuRow(title: String, icon: ImageVector, open: () -> Unit) {
+internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null, open: () -> Unit) {
     Surface(onClick = open, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(20.dp, 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -112,6 +115,25 @@ internal fun BrandIcon(provider: String, modifier: Modifier = Modifier.size(28.d
         tint = if (provider == Providers.CODEX) MaterialTheme.colorScheme.onSurface else Color(0xFFD58C70))
 }
 
+/** Reset moment of a window: the clock time first, the remaining time below it. */
+@Composable
+internal fun ResetLines(resetAt: Long?, now: Long, modifier: Modifier = Modifier, horizontalAlignment: Alignment.Horizontal = Alignment.Start) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp), horizontalAlignment = horizontalAlignment) {
+        when {
+            resetAt == null -> Text("Reset nicht gemeldet", style = MaterialTheme.typography.labelMedium, color = muted)
+            resetAt <= now -> {
+                Text("Reset erreicht", style = MaterialTheme.typography.labelLarge)
+                Text("seit ${com.madebycli.aiusage.data.TimeText.clock(resetAt, now)} Uhr", style = MaterialTheme.typography.labelSmall, color = muted)
+            }
+            else -> {
+                Text("Reset ${com.madebycli.aiusage.data.TimeText.clock(resetAt, now)} Uhr", style = MaterialTheme.typography.labelLarge)
+                Text(com.madebycli.aiusage.data.TimeText.remaining(resetAt - now), style = MaterialTheme.typography.labelSmall, color = muted)
+            }
+        }
+    }
+}
+
 @Composable
 internal fun BrandTile(provider: String, size: Int = 76) {
     Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -140,17 +162,13 @@ internal fun UsageTrack(progress: Float, accent: Color, modifier: Modifier = Mod
 internal fun rememberNow(): Long {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var now by remember { mutableLongStateOf(Instant.now().epochSecond) }
-    LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { while (true) { now = Instant.now().epochSecond; delay(1000) } } }
+    LaunchedEffect(lifecycle) { lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) { while (true) { now = Instant.now().epochSecond; delay(10_000) } } }
     return now
 }
 
-internal fun percent(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.GERMAN, "%.1f", value)
+internal fun percent(value: Double): String = com.madebycli.aiusage.data.formatPercent(value)
 internal fun date(at: Long, seconds: Boolean = false): String = DateTimeFormatter.ofPattern(if (seconds) "dd.MM. · HH:mm:ss" else "dd.MM. · HH:mm", Locale.GERMAN)
     .withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(at))
-internal fun countdown(seconds: Long): String = when {
-    seconds >= 86400 -> "${seconds / 86400}d ${(seconds % 86400) / 3600}h"
-    else -> "%02d:%02d:%02d".format(seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-}
 internal fun age(seconds: Long): String = when { seconds < 60 -> "vor ${seconds.coerceAtLeast(0)} s"; seconds < 3600 -> "vor ${seconds / 60} min"; else -> "vor ${seconds / 3600} h" }
 internal fun number(value: Double, maxFraction: Int = 2): String =
     java.text.NumberFormat.getNumberInstance(Locale.GERMANY).apply { maximumFractionDigits = maxFraction }.format(value)

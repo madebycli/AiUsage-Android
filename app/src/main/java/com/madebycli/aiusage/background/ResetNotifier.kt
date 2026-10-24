@@ -19,7 +19,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** A planned reminder: which window, which reset, and the plan it belongs to. */
-data class Delivery(val rule: AlertRule, val target: Long, val generation: String, val planned: String?, val late: Boolean)
+data class Delivery(val account: Account, val rule: AlertRule, val target: Long, val generation: String, val planned: String?, val late: Boolean) {
+    val slot get() = rule.slot(account)
+}
 
 object ResetNotifier {
     private const val FETCH_BUDGET_MS = 8_000L
@@ -30,28 +32,27 @@ object ResetNotifier {
      */
     suspend fun deliver(context: Context, delivery: Delivery): Boolean {
         val rule = delivery.rule
+        val account = delivery.account
         val prefs = ResetAlerts.prefs(context)
-        val lock = if (rule.provider == Providers.CODEX) AccountAccess.codex else AccountAccess.claude
-        return lock.withLock {
+        return AccountAccess.lock(account.id).withLock {
             if (!stillPlanned(context, delivery)) return@withLock false
-            if (prefs.getString("delivered.${rule.key}", null) == "${delivery.generation}:${delivery.target}") return@withLock true
-            val store = SecureStore(context, if (rule.provider == Providers.CODEX) "account" else "claude")
-            val connected = if (rule.provider == Providers.CODEX) store.readTokens() != null else store.readClaude() != null
-            if (!connected) return@withLock false
+            if (prefs.getString("delivered.${delivery.slot}", null) == "${delivery.generation}:${delivery.target}") return@withLock true
+            val store = SecureStore(context, account.namespace)
+            if (!store.hasCredentials()) return@withLock false
             val now = Instant.now().epochSecond
             if (now - delivery.target > ResetAlerts.GRACE_SECONDS) return@withLock false
 
-            val fresh = withTimeoutOrNull(FETCH_BUDGET_MS) { runCatching { UsageReader.read(context, HttpTransport(), rule.provider, store) }.getOrNull() }
+            val fresh = withTimeoutOrNull(FETCH_BUDGET_MS) { runCatching { UsageReader.read(context, HttpTransport(), account, store) }.getOrNull() }
             fresh?.let {
                 runCatching { store.saveMeasurement(it, rule.provider) }
-                AccountAccess.changes.tryEmit(rule.provider)
+                AccountAccess.changes.tryEmit(account.id)
             }
             val snapshot = fresh ?: runCatching { store.readRecord().usage }.getOrNull()
             val after = Instant.now().epochSecond
             when (ResetAlerts.decide(rule, snapshot, fresh != null, delivery.target, after)) {
-                Decision.RESCHEDULE -> { fresh?.let { ResetAlerts.schedule(context, rule.provider, it) }; false }
+                Decision.RESCHEDULE -> { fresh?.let { ResetAlerts.schedule(context, account, it) }; false }
                 Decision.RECHECK -> {
-                    ResetAlarms.arm(context, rule, after + ResetAlerts.RECHECK_DELAY_SECONDS, delivery)
+                    ResetAlarms.arm(context, delivery.slot, after + ResetAlerts.RECHECK_DELAY_SECONDS, delivery)
                     false
                 }
                 Decision.ANNOUNCE -> post(context, delivery, "Laut Anbieter Reset in ${(delivery.target - after + 59) / 60} Minuten.", fresh)
@@ -65,9 +66,9 @@ object ResetNotifier {
     private fun stillPlanned(context: Context, delivery: Delivery): Boolean {
         val prefs = ResetAlerts.prefs(context)
         val rule = delivery.rule
-        if (!delivery.late && prefs.getString("scheduled.${rule.key}", null) != delivery.planned) return false
+        if (!delivery.late && prefs.getString("scheduled.${delivery.slot}", null) != delivery.planned) return false
         return prefs.getBoolean("enabled", false) && prefs.getBoolean("rule.${rule.key}", true) &&
-            prefs.getString("generation.${rule.provider}", null) == delivery.generation && ResetAlerts.permitted(context)
+            prefs.getString("generation.${delivery.account.id}", null) == delivery.generation && ResetAlerts.permitted(context)
     }
 
     private fun resetText(rule: AlertRule, snapshot: UsageSnapshot?): String {
@@ -85,18 +86,20 @@ object ResetNotifier {
         synchronized(ResetAlerts.deliveryLock) {
             if (!stillPlanned(context, delivery)) return@synchronized
             ResetAlerts.channels(context)
-            val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("provider", rule.provider)
-            val content = PendingIntent.getActivity(context, rule.key.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            NotificationManagerCompat.from(context).notify(rule.channel.hashCode(), NotificationCompat.Builder(context, rule.channel)
-                .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${rule.provider} · ${rule.title}")
+            val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra("account", delivery.account.id)
+            val content = PendingIntent.getActivity(context, delivery.slot.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            val everyone = AccountRegistry(context).list()
+            NotificationManagerCompat.from(context).notify(delivery.slot.hashCode(), NotificationCompat.Builder(context, rule.channel)
+                .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${displayName(delivery.account, everyone)} · ${rule.title}")
                 .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
                 .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setAutoCancel(true).setOnlyAlertOnce(true).build())
-            prefs.edit().putString("delivered.${rule.key}", "${delivery.generation}:${delivery.target}").apply()
+            prefs.edit().putString("delivered.${delivery.slot}", "${delivery.generation}:${delivery.target}").apply()
             delivered = true
         }
         // With the delivery recorded, plan the next window from the fresh numbers.
-        if (delivered && fresh != null) ResetAlerts.schedule(context, rule.provider, fresh)
+        if (delivered && fresh != null) ResetAlerts.schedule(context, delivery.account, fresh)
         return delivered
     }
 
@@ -115,11 +118,12 @@ object ResetNotifier {
 class ResetAlertWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
         val rule = ResetAlerts.rules.firstOrNull { it.key == inputData.getString("rule") } ?: return Result.success()
+        val account = AccountRegistry(applicationContext).find(inputData.getString("account").orEmpty()) ?: return Result.success()
         val generation = inputData.getString("generation") ?: return Result.success()
         val late = inputData.getBoolean("late", false)
         val planned = inputData.getString("scheduled")
         if (!late && planned == null) return Result.success()
-        ResetNotifier.deliver(applicationContext, Delivery(rule, inputData.getLong("reset", 0), generation, planned, late))
+        ResetNotifier.deliver(applicationContext, Delivery(account, rule, inputData.getLong("reset", 0), generation, planned, late))
         return Result.success()
     }
 }

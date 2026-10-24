@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.AtomicFile
+import com.madebycli.aiusage.Providers
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import java.io.File
@@ -47,10 +48,16 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     }
     override fun readTokens(): Tokens? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
     override fun writeTokens(tokens: Tokens) = write("tokens.enc", appJson.encodeToString(tokens))
-    fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString(it) } ?: PersonalRecord()
+    fun readRecord(): PersonalRecord = read("usage.enc")?.let { appJson.decodeFromString<PersonalRecord>(it).migrated() } ?: PersonalRecord()
     fun writeRecord(record: PersonalRecord) = write("usage.enc", appJson.encodeToString(record))
-    fun readStats(): StatsBundle = read("stats.enc")?.let { appJson.decodeFromString(it) } ?: StatsBundle()
-    fun writeStats(value: StatsBundle) = write("stats.enc", appJson.encodeToString(value))
+    /** Whether a sign-in is stored, without decrypting it. */
+    fun hasCredentials(): Boolean = synchronized(ioLock) { File(directory, filename("tokens.enc")).exists() }
+    /** Moves the stored sign-in of this store into [target] and empties this store. */
+    fun moveCredentialsTo(target: SecureStore, provider: String) = synchronized(ioLock) {
+        if (provider == Providers.CODEX) target.writeTokens(readTokens() ?: error("Keine Anmeldung gespeichert."))
+        else target.writeClaude(readClaude() ?: error("Keine Anmeldung gespeichert."))
+        clear()
+    }
     fun saveMeasurement(usage: UsageSnapshot, provider: String): PersonalRecord = synchronized(ioLock) {
         recordMeasurement(readRecord(), usage, provider).also(::writeRecord)
     }
@@ -63,10 +70,10 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     override fun readDeviceLogin(): PendingDeviceLogin? = read("device.enc")?.let { appJson.decodeFromString(it) }
     override fun writeDeviceLogin(value: PendingDeviceLogin) = write("device.enc", appJson.encodeToString(value))
     override fun clearDeviceLogin(): Unit = synchronized(ioLock) { AtomicFile(File(directory, filename("device.enc"))).delete() }
-    /** Drops what the removed organisation-API and file-import features may have stored. */
+    /** Drops what the removed statistics reports and organisation-API features may have stored. */
     fun purgeLegacyStatistics(): Unit = synchronized(ioLock) {
         AtomicFile(File(directory, filename("analytics-key.enc"))).delete()
-        if (namespace != "account") AtomicFile(File(directory, filename("stats.enc"))).delete()
+        AtomicFile(File(directory, filename("stats.enc"))).delete()
     }
     override fun clear(): Unit = synchronized(ioLock) {
         listOf("tokens.enc", "usage.enc", "stats.enc", "analytics-key.enc").forEach { AtomicFile(File(directory, filename(it))).delete() }

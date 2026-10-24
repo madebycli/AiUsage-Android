@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.UsageViewModel
+import com.madebycli.aiusage.background.AccountRefresh
 import com.madebycli.aiusage.background.ResetAlarms
 import com.madebycli.aiusage.background.ResetAlerts
 import com.madebycli.aiusage.background.ResetNotifier
@@ -58,7 +59,14 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
     Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionTitle("Automatisch aktualisieren")
         SoftCard {
-            SwitchRow("Alle 3 Stunden", "Limits und Reset-Termine verbundener Accounts", checked("daily", true)) { update("daily", it) }
+            SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik verbundener Accounts", checked("daily", true)) { update("daily", it) }
+            if (checked("daily", true)) {
+                Text("Intervall", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SegmentedTabGroup(AccountRefresh.choices, (values["hours"] as? Int)?.toLong()?.takeIf { it in AccountRefresh.choices } ?: AccountRefresh.DEFAULT_HOURS, { hours ->
+                    prefs.edit().putInt("hours", hours.toInt()).apply(); revision++; model.syncBackground()
+                }, { "$it Std." }, fillEqually = true)
+                Text("Zusätzlich liest die App kurz vor und nach jedem Reset, damit der Höchstwert nicht verloren geht.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             TextButton(onClick = { batteryHelp = true }) { Icon(Icons.Rounded.BatterySaver, null); Spacer(Modifier.width(8.dp)); Text(if (unrestricted) "Akku: uneingeschränkt" else "Hintergrundbetrieb erlauben") }
         }
         SectionTitle("Reset-Benachrichtigungen")
@@ -96,7 +104,7 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
                     SegmentedTabGroup(listOf(0, 5, 15, 30, 60), lead, { selected ->
                         prefs.edit().putInt("lead.${rule.key}", selected).apply(); revision++; model.rescheduleAlerts()
                     }, { if (it == 0) "Zum Reset" else "$it min vorher" })
-                    val next = ResetAlerts.nextReminder(context, rule)
+                    val next = ResetAlerts.nextReminder(context, state.accounts.map { it.account }, rule)
                     Text(next?.let { "Nächster Hinweis: ${date(it)}" } ?: "Kein Hinweis geplant. Er wird mit dem nächsten Abruf gesetzt.",
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     TextButton(onClick = {
@@ -109,7 +117,7 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
         Text("Android kann Hinweise verzögern. Sie beruhen auf dem Reset-Termin, den der Anbieter zuletzt gemeldet hat.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (batteryHelp) AlertDialog(onDismissRequest = { batteryHelp = false }, title = { Text("Im Hintergrund aktualisieren") },
-        text = { Text("Android ruft die Limits etwa alle drei Stunden im Hintergrund ab. Schränkt dein Gerät die App stark ein, stelle sie in den Akku-Einstellungen auf uneingeschränkt.") },
+        text = { Text("Android ruft die Limits im gewählten Intervall im Hintergrund ab. Schränkt dein Gerät die App stark ein, stelle sie in den Akku-Einstellungen auf uneingeschränkt.") },
         confirmButton = { TextButton(onClick = {
             batteryHelp = false
             val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)

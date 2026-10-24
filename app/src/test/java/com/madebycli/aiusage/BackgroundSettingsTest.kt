@@ -49,8 +49,21 @@ class BackgroundSettingsTest {
     @Test fun `worker without credentials returns success without inventing a measurement`() = runBlocking {
         val result = TestListenableWorkerBuilder<AccountRefreshWorker>(context).build().doWork()
         assertEquals(ListenableWorker.Result.success(), result)
-        assertFalse(context.noBackupFilesDir.resolve("usage.enc").exists())
-        assertFalse(context.noBackupFilesDir.resolve("claude.usage.enc").exists())
+        assertTrue(context.noBackupFilesDir.listFiles().orEmpty().none { it.name.endsWith("usage.enc") })
+    }
+
+    @Test fun `the background interval is chosen in hours and applied without restarting the period`() {
+        val prefs = context.getSharedPreferences("alerts", 0)
+        assertEquals(3L, AccountRefresh.hours(context))
+        prefs.edit().putInt("hours", 6).commit()
+        assertEquals(6L, AccountRefresh.hours(context))
+        prefs.edit().putInt("hours", 5).commit()
+        assertEquals("unknown choices fall back to the default", 3L, AccountRefresh.hours(context))
+        prefs.edit().putInt("hours", 1).commit()
+        AccountRefresh.sync(context, true)
+        val info = WorkManager.getInstance(context).getWorkInfosForUniqueWork(AccountRefresh.NAME).get().single { !it.state.isFinished }
+        assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
+        assertEquals(TimeUnit.HOURS.toMillis(1), AccountRefresh.request(1).workSpec.intervalDuration)
     }
 
     @Test fun `a firing reminder follows the providers newest report`() {
@@ -73,75 +86,106 @@ class BackgroundSettingsTest {
 
     private fun claudeUsage(reset: Long) = UsageSnapshot(null, listOf(QuotaGroup("Claude Code", listOf(UsageWindow(40.0, 18000, reset)))), 1)
 
+    private val claude = Account("c1", "Claude Code", "acc.c1")
+    private val second = Account("c2", "Claude Code", "acc.c2")
+    private val fiveRule get() = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 18000L }
+    private fun grantNotifications() = org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+
     @Test fun `scheduling arms one alarm at the reminder time and follows a moved reset`() {
         val prefs = ResetAlerts.prefs(context)
-        val rule = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 18000L }
+        val rule = fiveRule
+        val slot = rule.slot(claude)
         val reset = java.time.Instant.now().epochSecond + 100_000
-        prefs.edit().putBoolean("enabled", true).putString("generation.Claude Code", "g").putInt("lead.${rule.key}", 15).commit()
-        org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        prefs.edit().putBoolean("enabled", true).putString("generation.c1", "g").putInt("lead.${rule.key}", 15).commit()
+        grantNotifications()
         val alarms = org.robolectric.Shadows.shadowOf(context.getSystemService(android.app.AlarmManager::class.java))
-        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset))
+        ResetAlerts.schedule(context, claude, claudeUsage(reset))
         assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
-        assertTrue(ResetAlarms.isArmed(context, rule))
-        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 1))
+        assertTrue(ResetAlarms.isArmed(context, slot))
+        ResetAlerts.schedule(context, claude, claudeUsage(reset + 1))
         assertEquals(1, alarms.scheduledAlarms.size)
         assertEquals((reset - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
-        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset + 5000))
+        ResetAlerts.schedule(context, claude, claudeUsage(reset + 5000))
         assertEquals(1, alarms.scheduledAlarms.size)
         assertEquals((reset + 5000 - 900) * 1000, alarms.peekNextScheduledAlarm()!!.triggerAtTime)
-        assertNotNull(ResetAlerts.nextReminder(context, rule))
+        assertNotNull(ResetAlerts.nextReminder(context, slot))
+    }
+
+    @Test fun `every account gets its own reminder for the same setting`() {
+        val prefs = ResetAlerts.prefs(context)
+        val reset = java.time.Instant.now().epochSecond + 50_000
+        prefs.edit().putBoolean("enabled", true).commit()
+        grantNotifications()
+        val alarms = org.robolectric.Shadows.shadowOf(context.getSystemService(android.app.AlarmManager::class.java))
+        ResetAlerts.schedule(context, claude, claudeUsage(reset))
+        ResetAlerts.schedule(context, second, claudeUsage(reset + 3600))
+        assertEquals(2, alarms.scheduledAlarms.size)
+        assertEquals(reset, ResetAlerts.nextReminder(context, listOf(claude, second), fiveRule))
+        ResetAlerts.invalidate(context, claude)
+        assertFalse(ResetAlarms.isArmed(context, fiveRule.slot(claude)))
+        assertTrue("the other account keeps its alarm", ResetAlarms.isArmed(context, fiveRule.slot(second)))
+        assertEquals(reset + 3600, ResetAlerts.nextReminder(context, listOf(claude, second), fiveRule))
     }
 
     @Test fun `alarms come back after a reboot and disappear with the account`() {
         val prefs = ResetAlerts.prefs(context)
-        val rule = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 18000L }
+        val rule = fiveRule
+        val slot = rule.slot(claude)
         val reset = java.time.Instant.now().epochSecond + 50_000
-        prefs.edit().putBoolean("enabled", true).putString("generation.Claude Code", "g").commit()
-        org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        ResetAlerts.schedule(context, "Claude Code", claudeUsage(reset))
-        ResetAlarms.cancel(context, rule)
-        assertFalse(ResetAlarms.isArmed(context, rule))
+        AccountRegistry(context).add(claude)
+        prefs.edit().putBoolean("enabled", true).putString("generation.c1", "g").commit()
+        grantNotifications()
+        ResetAlerts.schedule(context, claude, claudeUsage(reset))
+        ResetAlarms.cancel(context, slot)
+        assertFalse(ResetAlarms.isArmed(context, slot))
         ResetAlerts.rearm(context)
-        assertTrue(ResetAlarms.isArmed(context, rule))
-        ResetAlerts.invalidate(context, "Claude Code")
-        assertFalse(ResetAlarms.isArmed(context, rule))
-        assertNull(ResetAlerts.nextReminder(context, rule))
+        assertTrue(ResetAlarms.isArmed(context, slot))
+        ResetAlerts.invalidate(context, claude)
+        assertFalse(ResetAlarms.isArmed(context, slot))
+        assertNull(ResetAlerts.nextReminder(context, slot))
     }
 
     @Test fun `notification workers ignore disabled stale account generations`() = runBlocking {
-        val rule = ResetAlerts.rules.first()
+        val rule = ResetAlerts.rules.first { it.provider == "Codex" }
+        val account = Account("x1", "Codex", "acc.x1")
+        AccountRegistry(context).add(account)
+        val slot = rule.slot(account)
         val prefs = ResetAlerts.prefs(context)
-        prefs.edit().putBoolean("enabled", false).putString("generation.Codex", "new").putString("scheduled.${rule.key}", "old:200000:0").commit()
+        prefs.edit().putBoolean("enabled", false).putString("generation.x1", "new").putString("scheduled.$slot", "old:200000:0").commit()
         val worker = TestListenableWorkerBuilder<ResetAlertWorker>(context)
-            .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
+            .setInputData(workDataOf("account" to "x1", "rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
-        assertNull(prefs.getString("delivered.${rule.key}", null))
-        ResetAlerts.invalidate(context, "Codex")
-        assertNotEquals("new", prefs.getString("generation.Codex", null))
-        assertNull(prefs.getString("generation.Claude Code", null))
+        assertNull(prefs.getString("delivered.$slot", null))
+        ResetAlerts.invalidate(context, account)
+        assertNotEquals("new", prefs.getString("generation.x1", null))
+        assertNull(prefs.getString("generation.c1", null))
     }
 
     @Test fun `a replaced reminder cannot remove the new schedule`() = runBlocking {
-        val rule = ResetAlerts.rules.first()
+        val rule = ResetAlerts.rules.first { it.provider == "Codex" }
+        val account = Account("x1", "Codex", "acc.x1")
+        AccountRegistry(context).add(account)
+        val slot = rule.slot(account)
         val prefs = ResetAlerts.prefs(context)
-        prefs.edit().putString("scheduled.${rule.key}", "new:200000:15").commit()
+        prefs.edit().putString("scheduled.$slot", "new:200000:15").commit()
         val worker = TestListenableWorkerBuilder<ResetAlertWorker>(context)
-            .setInputData(workDataOf("rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
+            .setInputData(workDataOf("account" to "x1", "rule" to rule.key, "reset" to 200000L, "generation" to "old", "scheduled" to "old:200000:0")).build()
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
-        assertEquals("new:200000:15", prefs.getString("scheduled.${rule.key}", null))
+        assertEquals("new:200000:15", prefs.getString("scheduled.$slot", null))
     }
 
     @Test fun `a refresh with the same reset within the jitter keeps the pending reminder`() {
         val prefs = ResetAlerts.prefs(context)
         val rule = ResetAlerts.rules.first { it.provider == "Claude Code" && it.seconds == 604800L }
+        val slot = rule.slot(claude)
         val future = java.time.Instant.now().epochSecond + 100_000
-        prefs.edit().putBoolean("enabled", true).putString("generation.Claude Code", "g").putInt("lead.${rule.key}", 0).commit()
+        prefs.edit().putBoolean("enabled", true).putString("generation.c1", "g").putInt("lead.${rule.key}", 0).commit()
         fun usage(reset: Long) = UsageSnapshot(null, listOf(QuotaGroup("Claude Code", listOf(UsageWindow(40.0, 604800, reset)))), 1)
-        org.robolectric.Shadows.shadowOf(context).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        ResetAlerts.schedule(context, "Claude Code", usage(future))
-        val first = prefs.getString("scheduled.${rule.key}", null)
+        grantNotifications()
+        ResetAlerts.schedule(context, claude, usage(future))
+        val first = prefs.getString("scheduled.$slot", null)
         assertNotNull(first)
-        ResetAlerts.schedule(context, "Claude Code", usage(future + 1))
-        assertEquals(first, prefs.getString("scheduled.${rule.key}", null))
+        ResetAlerts.schedule(context, claude, usage(future + 1))
+        assertEquals(first, prefs.getString("scheduled.$slot", null))
     }
 }

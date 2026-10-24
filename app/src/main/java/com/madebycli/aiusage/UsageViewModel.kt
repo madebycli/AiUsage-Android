@@ -24,74 +24,108 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false),
-        statsEnabled = prefs.getBoolean("statsEnabled", true)
+        nav = readNav()
     ))
     val state = mutable.asStateFlow()
 
     private val resetData = ResetDataController(viewModelScope, mutable, http)
-    private val codex = CodexController(application, viewModelScope, mutable, http, onSignedIn = ::onSignedIn)
-    private val claude = ClaudeController(application, viewModelScope, mutable, http, onSignedIn = ::onSignedIn)
+    private val accounts = AccountsController(application, viewModelScope, mutable, http, onChanged = ::onAccountsChanged)
+    private val codexLogin = CodexLogin(application, viewModelScope, mutable, http, accounts)
+    private val claudeLogin = ClaudeLogin(application, viewModelScope, mutable, http, accounts)
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { SecureStore(application).purgeLegacyStatistics() }
-            runCatching { SecureStore(application, "claude").purgeLegacyStatistics() }
+            accounts.registry.list().forEach { runCatching { SecureStore(application, it.namespace).purgeLegacyStatistics() } }
         }
-        viewModelScope.launch {
-            AccountAccess.changes.collect { provider ->
-                if (provider == Providers.CODEX) codex.reloadStoredRecord() else claude.reloadStoredRecord()
-            }
-        }
-        codex.load()
-        claude.load()
+        viewModelScope.launch { AccountAccess.changes.collect { accounts.reload(it) } }
+        accounts.load()
+        codexLogin.resume()
+        claudeLogin.resume()
     }
 
-    private fun onSignedIn() { resetData.refresh() }
+    private fun onAccountsChanged() {
+        resetData.refresh()
+        syncBackground()
+    }
 
     fun refresh() {
-        codex.refresh()
-        claude.refresh()
+        accounts.refreshAll()
         resetData.refresh()
     }
 
+    fun refresh(accountId: String) = accounts.refresh(accountId)
+
     fun foregroundRefresh() {
         if (state.value.initializing) return
-        codex.refreshIfStale(FOREGROUND_MAX_AGE_SECONDS)
-        claude.refreshIfStale(FOREGROUND_MAX_AGE_SECONDS)
+        accounts.refreshIfStale(FOREGROUND_MAX_AGE_SECONDS)
     }
 
-    fun refreshStats(provider: String, force: Boolean = false) { if (provider == Providers.CODEX) codex.refreshStats(force) }
     fun loadResetData() = resetData.refresh()
     fun setSource(source: ResetSource) { prefs.edit { putString("source", source.name) }; resetData.setSource(source) }
 
-    fun connect(provider: String) { if (provider == Providers.CODEX) codex.connect() else claude.beginLogin() }
-    fun cancelLogin(provider: String) { if (provider == Providers.CODEX) codex.cancelLogin() else claude.cancelLogin() }
-    fun disconnect(provider: String) { if (provider == Providers.CODEX) codex.disconnect() else claude.disconnect() }
-    fun refresh(provider: String) { if (provider == Providers.CODEX) codex.refresh() else claude.refresh() }
-    fun completeClaudeLogin(code: String) = claude.completeLogin(code)
-    fun importClaude(raw: String) = claude.importCredential(raw)
+    // ---- Accounts ---------------------------------------------------------------------------------------
+    /** Starts a sign-in. With [replaceAccountId] an existing account signs in again instead of a new one being added. */
+    fun connect(provider: String, replaceAccountId: String? = null) {
+        if (provider == Providers.CODEX) codexLogin.start(replaceAccountId) else claudeLogin.begin(replaceAccountId)
+    }
+    fun cancelLogin(provider: String) { if (provider == Providers.CODEX) codexLogin.cancel() else claudeLogin.cancel() }
+    fun completeClaudeLogin(code: String) = claudeLogin.complete(code)
+    fun importClaude(raw: String) = claudeLogin.import(raw)
+    fun removeAccount(id: String) = accounts.remove(id)
+    fun renameAccount(id: String, label: String?) = accounts.rename(id, label)
+    fun reorderAccounts(ids: List<String>) = accounts.reorder(ids)
 
     fun syncBackground() {
         val s = state.value
-        if (!s.initializing) AccountRefresh.sync(getApplication(), s.anyConnected)
+        if (s.initializing) return
+        AccountRefresh.sync(getApplication(), s.anyConnected)
     }
 
     fun rescheduleAlerts() {
         val s = state.value
         viewModelScope.launch(Dispatchers.IO) {
-            Providers.all.forEach { provider ->
-                s.provider(provider).takeIf { it.connected }?.usage?.let { ResetAlerts.schedule(getApplication(), provider, it) }
-            }
+            s.accounts.forEach { entry -> entry.usage?.let { ResetAlerts.schedule(getApplication(), entry.account, it) } }
         }
     }
 
-    fun setStatsEnabled(enabled: Boolean) {
-        prefs.edit { putBoolean("statsEnabled", enabled) }
-        mutable.update { it.copy(statsEnabled = enabled) }
-        if (enabled) codex.refreshStats() else codex.cancelStats()
-    }
+    // ---- Appearance and navigation ----------------------------------------------------------------------
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }
     fun setDynamic(enabled: Boolean) { prefs.edit { putBoolean("dynamic", enabled) }; mutable.update { it.copy(dynamicColor = enabled) } }
     fun setAmoled(enabled: Boolean) { prefs.edit { putBoolean("amoled", enabled) }; mutable.update { it.copy(amoled = enabled) } }
+
+    private fun readNav(): NavSettings {
+        fun tabs(key: String) = prefs.getString(key, null)?.split(',')?.mapNotNull { name -> AppTab.entries.firstOrNull { it.name == name } }
+        // The old "statistics" switch becomes a hidden tab.
+        val legacyHidden = if (!prefs.getBoolean("statsEnabled", true)) setOf(AppTab.STATS) else emptySet()
+        return NavSettings(
+            order = (tabs("nav.order").orEmpty() + AppTab.entries).distinct(),
+            hidden = (tabs("nav.hidden")?.toSet() ?: legacyHidden) - AppTab.USAGE,
+            start = enumValueOr(prefs.getString("nav.start", null), StartScreen.LAST),
+            last = tabs("nav.last")?.firstOrNull() ?: AppTab.USAGE,
+            statsRange = enumValueOr(prefs.getString("nav.range", null), StatsRange.MONTH),
+            statsMetric = enumValueOr(prefs.getString("nav.metric", null), StatsMetric.FIVE)
+        )
+    }
+
+    private fun changeNav(change: NavSettings.() -> NavSettings) {
+        val next = state.value.nav.change()
+        prefs.edit {
+            putString("nav.order", next.order.joinToString(",") { it.name })
+            putString("nav.hidden", next.hidden.joinToString(",") { it.name })
+            putString("nav.start", next.start.name)
+            putString("nav.last", next.last.name)
+            putString("nav.range", next.statsRange.name)
+            putString("nav.metric", next.statsMetric.name)
+        }
+        mutable.update { it.copy(nav = next) }
+    }
+
+    fun setTabVisible(tab: AppTab, visible: Boolean) { if (tab != AppTab.USAGE) changeNav { copy(hidden = if (visible) hidden - tab else hidden + tab) } }
+    fun setTabOrder(order: List<AppTab>) = changeNav { copy(order = (order + AppTab.entries).distinct()) }
+    fun setStartScreen(start: StartScreen) = changeNav { copy(start = start) }
+    fun setLastTab(tab: AppTab) { if (tab != state.value.nav.last) changeNav { copy(last = tab) } }
+    fun setStatsRange(range: StatsRange) = changeNav { copy(statsRange = range) }
+    fun setStatsMetric(metric: StatsMetric) = changeNav { copy(statsMetric = metric) }
+
     private inline fun <reified T : Enum<T>> enumValueOr(value: String?, fallback: T): T = enumValues<T>().firstOrNull { it.name == value } ?: fallback
 }

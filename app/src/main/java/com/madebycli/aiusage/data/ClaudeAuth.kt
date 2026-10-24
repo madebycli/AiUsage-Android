@@ -21,7 +21,7 @@ interface ClaudeCredentialStore {
 }
 
 @Serializable
-class ClaudePendingLogin(val verifier: String, val state: String, val expiresAt: Long) {
+class ClaudePendingLogin(val verifier: String, val state: String, val expiresAt: Long, val replaceId: String? = null) {
     override fun toString() = "ClaudePendingLogin(redacted)"
 }
 
@@ -38,8 +38,8 @@ class ClaudeAuth(
     private val mutex = Mutex()
     private val backoff = RequestBackoff()
 
-    suspend fun begin(): String = mutex.withLock {
-        val pending = ClaudePendingLogin(random(), random(), clock() + 600)
+    suspend fun begin(replaceId: String? = null): String = mutex.withLock {
+        val pending = ClaudePendingLogin(random(), random(), clock() + 600, replaceId)
         store.writeClaudeLogin(pending)
         url(pending)
     }
@@ -48,6 +48,9 @@ class ClaudeAuth(
         val pending = store.readClaudeLogin() ?: return@withLock null
         if (pending.expiresAt <= clock()) { store.clearClaudeLogin(); null } else url(pending)
     }
+
+    /** The account a pending sign-in is meant to renew, if any. */
+    suspend fun pendingReplaceId(): String? = mutex.withLock { store.readClaudeLogin()?.replaceId }
 
     suspend fun cancel() = mutex.withLock { store.clearClaudeLogin() }
 

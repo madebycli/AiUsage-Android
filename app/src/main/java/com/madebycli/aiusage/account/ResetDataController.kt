@@ -23,17 +23,17 @@ class ResetDataController(
     private val forecastQueue = RefreshQueue(scope) { readForecasts() }
 
     fun refresh() {
-        if (state.value.codex.connected) feedQueue.request()
+        if (state.value.hasProvider(Providers.CODEX)) feedQueue.request()
         if (state.value.anyConnected) forecastQueue.request()
     }
 
     fun setSource(source: ResetSource) {
         state.update { it.copy(source = source, feed = null, feedError = null, nextFeedSeconds = 0) }
-        if (state.value.codex.connected) feedQueue.request()
+        if (state.value.hasProvider(Providers.CODEX)) feedQueue.request()
     }
 
     private suspend fun readFeed() {
-        if (!state.value.codex.connected) return
+        if (!state.value.hasProvider(Providers.CODEX)) return
         val source = state.value.source
         state.update { it.copy(feedLoading = true) }
         try {
@@ -51,13 +51,13 @@ class ResetDataController(
         try {
             // Sources are independent: a slow or failed source never removes the others.
             coroutineScope {
-                val codexJobs = if (state.value.codex.connected) ResetSource.entries.map { source -> launch {
+                val codexJobs = if (state.value.hasProvider(Providers.CODEX)) ResetSource.entries.map { source -> launch {
                     val result = forecasts.fetch(source)
-                    state.update { if (!it.codex.connected) it else it.copy(forecasts = it.forecasts + (source to result)) }
+                    state.update { if (!it.hasProvider(Providers.CODEX)) it else it.copy(forecasts = it.forecasts + (source to result)) }
                 } } else emptyList()
-                val communityJobs = CommunitySource.entries.filter { state.value.provider(it.provider).connected }.map { source -> launch {
+                val communityJobs = CommunitySource.entries.filter { state.value.hasProvider(it.provider) }.map { source -> launch {
                     val result = community.fetch(source)
-                    state.update { if (!it.provider(source.provider).connected) it else it.copy(community = it.community + (source to result)) }
+                    state.update { if (!it.hasProvider(source.provider)) it else it.copy(community = it.community + (source to result)) }
                 } }
                 (codexJobs + communityJobs).joinAll()
             }

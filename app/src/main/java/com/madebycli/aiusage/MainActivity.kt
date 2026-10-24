@@ -20,14 +20,14 @@ import com.madebycli.aiusage.ui.UsageApp
 class MainActivity : ComponentActivity() {
     private var notificationEvent by mutableLongStateOf(0)
     override fun onSaveInstanceState(outState: Bundle) { outState.putLong("notificationEvent", notificationEvent); super.onSaveInstanceState(outState) }
-    private var notificationProvider by mutableStateOf<String?>(null)
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationProvider = intent.getStringExtra("provider"); notificationEvent++ }
+    private var notificationAccount by mutableStateOf<String?>(null)
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationAccount = intent.getStringExtra("account"); notificationEvent++ }
     private val model: UsageViewModel by viewModels()
     override fun onResume() { super.onResume(); model.foregroundRefresh() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        notificationProvider = intent.getStringExtra("provider")
-        notificationEvent = savedInstanceState?.getLong("notificationEvent") ?: if (notificationProvider != null) 1L else 0L
+        notificationAccount = intent.getStringExtra("account")
+        notificationEvent = savedInstanceState?.getLong("notificationEvent") ?: if (notificationAccount != null) 1L else 0L
         enableEdgeToEdge()
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             AniHyouTheme(darkTheme = dark, dynamicColor = state.dynamicColor, blackColors = state.amoled) {
-                UsageApp(state, model, notificationProvider, notificationEvent)
+                UsageApp(state, model, notificationAccount, notificationEvent)
             }
         }
     }

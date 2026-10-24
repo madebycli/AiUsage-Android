@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import com.madebycli.aiusage.data.AccountRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,16 +25,16 @@ object ResetAlarms {
 
     fun canScheduleExact(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || manager(context).canScheduleExactAlarms()
 
-    private fun intent(context: Context, rule: AlertRule) =
-        Intent(context, ResetAlarmReceiver::class.java).setAction(ACTION).setData(Uri.parse("aiusage://alarm/${rule.key}"))
+    private fun intent(context: Context, slot: String) =
+        Intent(context, ResetAlarmReceiver::class.java).setAction(ACTION).setData(Uri.parse("aiusage://alarm/$slot"))
 
-    fun isArmed(context: Context, rule: AlertRule): Boolean =
-        PendingIntent.getBroadcast(context, 0, intent(context, rule), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE) != null
+    fun isArmed(context: Context, slot: String): Boolean =
+        PendingIntent.getBroadcast(context, 0, intent(context, slot), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE) != null
 
     /** Returns whether the alarm fires at the exact time (true) or inside Android's idle window (false). */
-    fun arm(context: Context, rule: AlertRule, atEpochSeconds: Long, delivery: Delivery): Boolean {
+    fun arm(context: Context, slot: String, atEpochSeconds: Long, delivery: Delivery): Boolean {
         val pending = PendingIntent.getBroadcast(context, 0,
-            intent(context, rule).putExtra("rule", rule.key).putExtra("reset", delivery.target)
+            intent(context, slot).putExtra("account", delivery.account.id).putExtra("rule", delivery.rule.key).putExtra("reset", delivery.target)
                 .putExtra("generation", delivery.generation).putExtra("scheduled", delivery.planned),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val at = atEpochSeconds * 1000
@@ -46,8 +47,8 @@ object ResetAlarms {
         return false
     }
 
-    fun cancel(context: Context, rule: AlertRule) {
-        PendingIntent.getBroadcast(context, 0, intent(context, rule), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let {
+    fun cancel(context: Context, slot: String) {
+        PendingIntent.getBroadcast(context, 0, intent(context, slot), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let {
             manager(context).cancel(it)
             it.cancel()
         }
@@ -58,7 +59,8 @@ class ResetAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val app = context.applicationContext
         val rule = ResetAlerts.rules.firstOrNull { it.key == intent.getStringExtra("rule") } ?: return
-        val delivery = Delivery(rule, intent.getLongExtra("reset", 0), intent.getStringExtra("generation") ?: return,
+        val account = AccountRegistry(app).find(intent.getStringExtra("account").orEmpty()) ?: return
+        val delivery = Delivery(account, rule, intent.getLongExtra("reset", 0), intent.getStringExtra("generation") ?: return,
             intent.getStringExtra("scheduled"), late = false)
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {

@@ -14,8 +14,13 @@ class ClaudeCredential(val access: String, val expiresAt: Long? = null, val plan
     override fun toString() = "ClaudeCredential(redacted)"
 }
 
+/** What the profile endpoint says about an account; every part is optional. */
+data class ClaudeProfile(val plan: String?, val email: String?, val id: String?)
+
 object ClaudeParser {
-    fun profilePlan(body: String): String? {
+    fun profilePlan(body: String): String? = profile(body).plan
+
+    fun profile(body: String): ClaudeProfile {
         val root = appJson.parseToJsonElement(body) as? JsonObject ?: throw SchemaException()
         val org = root.obj("organization")
         val account = root.obj("account")
@@ -32,7 +37,9 @@ object ClaudeParser {
             }
         }
         // False Pro/Max flags do not mean Free: Team/Enterprise also have them.
-        return plan?.let { it + if (it == "Max") when { "20x" in tier -> " 20x"; "5x" in tier -> " 5x"; else -> "" } else "" }
+        val named = plan?.let { it + if (it == "Max") when { "20x" in tier -> " 20x"; "5x" in tier -> " 5x"; else -> "" } else "" }
+        fun clean(value: String?) = value?.trim()?.takeIf { it.isNotEmpty() && it.length <= 200 && it.none(Char::isISOControl) }
+        return ClaudeProfile(named, clean(account?.text("email_address") ?: account?.text("email")), clean(account?.text("uuid")))
     }
     fun credential(raw: String): ClaudeCredential {
         if (raw.length !in 1..65_536) throw SchemaException()
@@ -56,8 +63,9 @@ object ClaudeParser {
 
 class ClaudeRepository(private val http: HttpTransport, private val endpoint: String = "https://api.anthropic.com/api/oauth/usage?cedar_ember=1") {
     private val backoff = RequestBackoff()
-    suspend fun profilePlan(credential: ClaudeCredential): String? = ClaudeParser.profilePlan(http.get(
+    suspend fun profile(credential: ClaudeCredential): ClaudeProfile = ClaudeParser.profile(http.get(
         "https://api.anthropic.com/api/oauth/profile", mapOf("Authorization" to "Bearer ${credential.access}", "anthropic-beta" to "oauth-2025-04-20")))
+    suspend fun profilePlan(credential: ClaudeCredential): String? = profile(credential).plan
     suspend fun fetch(credential: ClaudeCredential): UsageSnapshot {
         backoff.check()
         if (credential.expiresAt?.let { it <= Instant.now().epochSecond } == true) throw HttpFailure(401)

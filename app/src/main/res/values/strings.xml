@@ -1,0 +1,5 @@
+<resources>
+    <string name="widget_refresh">Jetzt aktualisieren</string>
+    <string name="widget_description">Verbrauch und Reset-Zeiten deiner Codex- und Claude-Accounts</string>
+    <string name="widget_config_title">AI Usage Widget</string>
+</resources>

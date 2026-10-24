@@ -6,9 +6,37 @@ object Providers {
     const val CODEX = "Codex"
     const val CLAUDE = "Claude Code"
     val all = listOf(CODEX, CLAUDE)
+    /** Short name for tight places such as the widget. */
+    fun short(provider: String) = if (provider == CODEX) "Codex" else "Claude"
 }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** Pages of the bottom bar. The usage page is the home screen and cannot be hidden. */
+enum class AppTab(val title: String) {
+    USAGE("Verbrauch"), STATS("Statistiken"), RESETS("Resets")
+}
+
+enum class StartScreen(val title: String, val tab: AppTab?) {
+    LAST("Zuletzt geöffnet", null), USAGE("Verbrauch", AppTab.USAGE), STATS("Statistiken", AppTab.STATS), RESETS("Resets", AppTab.RESETS)
+}
+
+enum class StatsRange(val title: String) { WEEK("Woche"), MONTH("Monat"), YEAR("Jahr") }
+
+/** Which bottom-bar pages exist, in which order, and where a fresh start opens. */
+data class NavSettings(
+    val order: List<AppTab> = AppTab.entries,
+    val hidden: Set<AppTab> = emptySet(),
+    val start: StartScreen = StartScreen.LAST,
+    val last: AppTab = AppTab.USAGE,
+    val statsRange: StatsRange = StatsRange.MONTH,
+    val statsMetric: StatsMetric = StatsMetric.FIVE
+) {
+    /** Visible pages. The home screen is always among them. */
+    val visible: List<AppTab> get() = (order + AppTab.entries).distinct().filter { it == AppTab.USAGE || it !in hidden }
+    /** The page a fresh start opens on, falling back to the home screen if it is hidden. */
+    val initial: AppTab get() = (start.tab ?: last).takeIf { it in visible } ?: AppTab.USAGE
+}
 
 /** One sign-in attempt, shared by the Codex device-code and Claude PKCE flows. */
 data class LoginState(
@@ -20,43 +48,51 @@ data class LoginState(
     /** Codex only: the code to type into the browser page. */
     val deviceCode: String? = null,
     val hint: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Set when an existing account signs in again instead of a new one being added. */
+    val replaceAccountId: String? = null
 )
 
-data class ProviderState(
-    val connected: Boolean = false,
-    val initializing: Boolean = true,
+data class AccountState(
+    val account: Account,
+    val title: String,
     val usage: UsageSnapshot? = null,
-    /** Per-day values the provider reported when the app read them. */
-    val days: List<UsageDay> = emptyList(),
-    val stats: StatsBundle = StatsBundle(),
-    val statsLoading: Boolean = false,
-    val statsError: String? = null,
+    val ledger: UsageLedger = UsageLedger(),
     val refreshing: Boolean = false,
     val error: String? = null,
-    val disconnecting: Boolean = false,
-    val login: LoginState = LoginState(),
-    /** Incremented after every successful sign-in so the UI can open the new account. */
-    val loginResult: Long = 0
-)
+    val creditsLoading: Boolean = false,
+    val storageWarning: String? = null
+) {
+    val id get() = account.id
+    val provider get() = account.provider
+    val plan get() = usage?.plan?.takeIf { it.isNotBlank() }
+    fun windows() = usage?.windows(provider).orEmpty()
+}
+
+/** Raised after a sign-in so the UI can open the new account once. */
+data class SignedIn(val accountId: String, val sequence: Long)
 
 data class UiState(
-    val codex: ProviderState = ProviderState(),
-    val claude: ProviderState = ProviderState(),
-    /** Hides the statistics tab and stops every statistics request when switched off. */
-    val statsEnabled: Boolean = true,
-    val creditsLoading: Boolean = false,
+    val accounts: List<AccountState> = emptyList(),
+    /** False until the stored accounts have been read. */
+    val loaded: Boolean = false,
+    val logins: Map<String, LoginState> = emptyMap(),
+    val signedIn: SignedIn? = null,
     val storageWarning: String? = null,
     val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
     val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
     val community: Map<CommunitySource, CommunityResult> = emptyMap(),
     val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
-    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false
+    val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false,
+    val nav: NavSettings = NavSettings()
 ) {
-    fun provider(name: String): ProviderState = if (name == Providers.CODEX) codex else claude
-    val initializing get() = codex.initializing || claude.initializing
-    val anyConnected get() = codex.connected || claude.connected
-    val connectedProviders get() = Providers.all.filter { provider(it).connected }
-    val loginProvider: String? get() = Providers.all.firstOrNull { provider(it).login.open }
-    val refreshing get() = codex.refreshing || claude.refreshing
+    val initializing get() = !loaded
+    val anyConnected get() = accounts.isNotEmpty()
+    val connectedProviders get() = Providers.all.filter { provider -> accounts.any { it.provider == provider } }
+    fun accountsOf(provider: String) = accounts.filter { it.provider == provider }
+    fun hasProvider(provider: String) = accounts.any { it.provider == provider }
+    fun account(id: String?) = accounts.firstOrNull { it.id == id }
+    fun login(provider: String) = logins[provider] ?: LoginState()
+    val loginProvider: String? get() = Providers.all.firstOrNull { login(it).open }
+    val refreshing get() = accounts.any { it.refreshing }
 }

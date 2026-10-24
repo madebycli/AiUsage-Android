@@ -18,7 +18,7 @@ data class DeviceCode(val id: String, val code: String, val interval: Long)
 
 /** A device code that survives process death until OpenAI expires it. */
 @Serializable
-class PendingDeviceLogin(val device: DeviceCode, val expiresAt: Long) {
+class PendingDeviceLogin(val device: DeviceCode, val expiresAt: Long, val replaceId: String? = null) {
     override fun toString() = "PendingDeviceLogin(redacted)"
 }
 
@@ -116,9 +116,11 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
         val claims = jwt(obj.text("id_token")) ?: jwt(access)
         val account = claims?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id")
             ?: jwt(access)?.obj("https://api.openai.com/auth")?.text("chatgpt_account_id") ?: old?.accountId
+        fun mail(claims: JsonObject?) = claims?.text("email") ?: claims?.obj("https://api.openai.com/profile")?.text("email")
+        val email = (mail(claims) ?: mail(jwt(access)))?.takeIf { it.length <= 200 && it.none(Char::isISOControl) } ?: old?.email
         val expiry = obj.integer("expires_in")?.takeIf { it > 0 }?.let { Instant.now().epochSecond + it }
             ?: jwt(access)?.integer("exp") ?: claims?.integer("exp")
-        return Tokens(access, obj.text("refresh_token")?.takeIf { it.isNotBlank() } ?: old?.refresh.orEmpty(), account, expiry)
+        return Tokens(access, obj.text("refresh_token")?.takeIf { it.isNotBlank() } ?: old?.refresh.orEmpty(), account, expiry, email)
     }
     private fun jwt(token: String?): JsonObject? = runCatching {
         val part = token?.split('.')?.getOrNull(1) ?: return null

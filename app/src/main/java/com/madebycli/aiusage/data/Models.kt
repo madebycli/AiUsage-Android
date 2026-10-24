@@ -39,7 +39,7 @@ data class SpendingLimit(val limit: Double?, val used: Double?, val remainingPer
 @Serializable
 data class ExtraUsage(val enabled: Boolean?, val used: Double?, val limit: Double?, val currency: String?, val decimals: Int?)
 @Serializable
-data class PersonalRecord(val usage: UsageSnapshot? = null, val days: List<UsageDay> = emptyList())
+data class PersonalRecord(val usage: UsageSnapshot? = null, val days: List<UsageDay> = emptyList(), val ledger: UsageLedger = UsageLedger())
 @Serializable
 data class ResetEvent(val id: String, val at: Long, val kind: String, val summary: String, val url: String?)
 @Serializable

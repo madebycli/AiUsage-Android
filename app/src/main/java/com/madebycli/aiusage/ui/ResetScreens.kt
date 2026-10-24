@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.madebycli.aiusage.AccountState
 import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.UsageViewModel
@@ -36,10 +37,13 @@ internal fun ResetScreen(state: UiState, now: Long, provider: String, select: (S
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
     val consensus = ForecastConsensus.combine(active, state.forecasts, state.community, now)
     val hours = if (active == Providers.CODEX) listOf(6, 24, 48) else listOf(48, 168)
-    val usage = state.provider(active).usage
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
         if (names.size > 1) Box(Modifier.padding(20.dp, 4.dp, 20.dp, 8.dp)) { ProviderTabs(names, active, select) }
         LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (state.accounts.any { entry -> entry.windows().any { it.resetAt != null } }) {
+                item(key = "upcoming-title") { SectionTitle("Deine nächsten Resets") }
+                item(key = "upcoming") { UpcomingResets(state.accounts, now) }
+            }
             item { SectionTitle("Reset-Chance") }
             item {
                 SoftCard {
@@ -68,9 +72,28 @@ internal fun ResetScreen(state: UiState, now: Long, provider: String, select: (S
                     MenuRow("Reset-Verlauf", Icons.Rounded.History) { open(active, "Verlauf") }
                 }
             }
-            usage?.takeIf { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null }?.let { snapshot ->
-                item { SectionTitle("Dein Vorrat") }
-                item { BankedCard(snapshot, now, active == Providers.CODEX && state.creditsLoading) }
+            val banked = state.accountsOf(active).filter { entry -> entry.usage?.let { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null } == true }
+            if (banked.isNotEmpty()) item(key = "stock-title") { SectionTitle("Dein Vorrat") }
+            banked.forEach { entry ->
+                item(key = "stock:${entry.id}") { BankedCard(entry.usage!!, now, entry.creditsLoading, title = if (state.accountsOf(active).size > 1) entry.title else null) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpcomingResets(accounts: List<AccountState>, now: Long) {
+    val entries = accounts.flatMap { entry -> entry.windows().mapNotNull { window -> window.resetAt?.let { Triple(entry, window, it) } } }.sortedBy { it.third }.take(8)
+    SoftCard {
+        entries.forEachIndexed { index, (entry, window, at) ->
+            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .3f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BrandIcon(entry.provider, Modifier.size(22.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(entry.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(window.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                ResetLines(at, now, horizontalAlignment = Alignment.End)
             }
         }
     }
