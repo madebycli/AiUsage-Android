@@ -23,9 +23,24 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Release key from CI secrets. Without them the release APK stays unsigned instead of falling back to the test key.
+        create("release") {
+            System.getenv("ANDROID_KEYSTORE_PATH")?.let { path ->
+                storeFile = file(path)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         getByName("debug") { signingConfig = signingConfigs.getByName("stableDebug") }
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
+        }
         // Optimised build for daily use: R8 shrinking, not debuggable, same public test signer as debug,
         // so it installs over the debug build.
         create("performance") {

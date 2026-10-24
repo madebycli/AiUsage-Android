@@ -15,3 +15,10 @@ only task-relevant links within this project. Do not search sibling projects.
 If validation fails, stop context loading and report the exact mismatch.
 Private durable context belongs in master-context; public documentation belongs
 in this source repository.
+
+## Release-Regel
+
+Stabile Releases entstehen nur aus `main` (Workflow `release.yml`, Tag `v<versionName>`).
+Feature-Branches bauen und testen nur über `android.yml`. Eine Version wird erst mit
+einer erhöhten `versionName` in `app/build.gradle.kts` veröffentlicht.
+Signierschlüssel liegen nur als GitHub-Secrets und lokal außerhalb des Repos.
