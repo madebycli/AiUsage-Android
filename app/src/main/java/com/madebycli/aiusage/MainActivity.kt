@@ -12,6 +12,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.axiel7.anihyou.core.ui.theme.AniHyouTheme
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
                 onDispose {}
             }
             AniHyouTheme(darkTheme = dark, dynamicColor = state.dynamicColor, blackColors = state.amoled) {
+                // The window behind the app has the app's own background, so no light flash can show through.
+                val background = androidx.compose.material3.MaterialTheme.colorScheme.background
+                androidx.compose.runtime.SideEffect { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb())) }
                 UsageApp(state, model, notificationAccount, notificationEvent)
             }
         }

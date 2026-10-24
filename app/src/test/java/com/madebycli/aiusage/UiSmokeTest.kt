@@ -47,9 +47,25 @@ class UiSmokeTest {
         AccountState(Account(id, provider, "acc.$id", label), label ?: provider, usage, ledger, error = error)
     private fun codex(label: String? = null, usage: UsageSnapshot? = codexUsage(), id: String = "c1") = entry(id, Providers.CODEX, label, usage)
     private fun claude(label: String? = null, usage: UsageSnapshot? = claudeUsage(), id: String = "a1") = entry(id, Providers.CLAUDE, label, usage)
-    private fun ui(vararg accounts: AccountState, nav: NavSettings = NavSettings(), logins: Map<String, LoginState> = emptyMap(), feed: ResetFeed? = null,
-        community: Map<CommunitySource, CommunityResult> = emptyMap(), theme: ThemeMode = ThemeMode.SYSTEM) =
-        UiState(accounts = accounts.toList(), loaded = true, logins = logins, feed = feed, community = community, nav = nav, theme = theme)
+    private fun ui(vararg accounts: AccountState, nav: NavSettings = NavSettings(), logins: Map<String, LoginState> = emptyMap(),
+        intel: Map<IntelSource, IntelResult> = emptyMap(), theme: ThemeMode = ThemeMode.SYSTEM) =
+        UiState(accounts = accounts.toList(), loaded = true, logins = logins, intel = intel, nav = nav, theme = theme)
+
+    private fun fixture(name: String) = javaClass.classLoader!!.getResourceAsStream("intel/$name")!!.readBytes().toString(Charsets.UTF_8)
+
+    /** Real answers of the public sources, as the app would have read them just now. */
+    private fun codexIntel(): Map<IntelSource, IntelResult> {
+        val at = Instant.now().epochSecond
+        // The fixtures are from 24 October; shifting the read time keeps them "current" without touching their content.
+        val forecast = IntelParser.codexResetForecast(fixture("codex_reset_forecast.json"), at)
+        val timeline = IntelParser.codexResetTimeline(fixture("codex_reset_timeline.json"))
+        val lunar = IntelParser.lunarForecast(fixture("lunarwerx_forecast.json"), at)
+        val tracker = IntelParser.tracker(IntelSource.CODEX_TRACKER, fixture("tracker_codex.html"), at)
+        return mapOf(
+            IntelSource.CODEX_RESET to IntelResult(forecast.copy(publishedAt = at - 600).withHistory(timeline)),
+            IntelSource.LUNARWERX to IntelResult(lunar.copy(publishedAt = at - 300).withHistory(IntelParser.lunarResets(fixture("lunarwerx_resets.json")))),
+            IntelSource.CODEX_TRACKER to IntelResult(tracker.copy(publishedAt = at - 3600, validUntil = at + 3600)))
+    }
 
     /** Lazy lists only compose what is near the screen, so rows further down are scrolled to by their text. */
     private fun scrollTo(text: String) { compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText(text)) }
@@ -147,20 +163,24 @@ class UiSmokeTest {
         compose.onNodeWithText("Claude Code").assertDoesNotExist()
         compose.runOnIdle { screen.value = screen.value.copy(accounts = screen.value.accounts + claude("Claude Max")) }
         screenshot("overview-both")
-        compose.runOnIdle { screen.value = screen.value.copy(forecasts = ResetSource.entries.associateWith { source ->
-            ForecastResult(ResetForecast(source, if (source == ResetSource.CODEX_RESET) listOf(ForecastChance(24, 19.0), ForecastChance(48, 34.0)) else listOf(ForecastChance(6, 3.2, 1.1, 9.7), ForecastChance(24, 27.0, 13.6, 45.2)), now, now, now - 86400)) }) }
+        compose.runOnIdle { screen.value = screen.value.copy(intel = codexIntel(), theme = ThemeMode.DARK) }
         compose.onNode(hasText("Resets") and hasClickAction()).performClick()
-        compose.onNodeWithText("Deine nächsten Resets").assertIsDisplayed()
-        scrollTo("Reset-Chance")
-        compose.onNodeWithText("Reset-Chance").assertIsDisplayed()
-        scrollTo("23%")
-        compose.onNodeWithText("23%").assertIsDisplayed()
-        scrollTo("Quellen & Berechnung")
-        compose.onNodeWithText("Quellen & Berechnung").performClick()
-        compose.onNodeWithText("Quellen · Codex").assertIsDisplayed()
+        compose.onNodeWithText("Letzter Reset").assertIsDisplayed()
+        compose.onNodeWithText("Deine nächsten Resets").assertDoesNotExist()
+        screenshot("resets-dark")
+        scrollTo("Wahrscheinlichkeit")
+        scrollTo("In den nächsten 48 Stunden")
+        compose.onNodeWithText("In den nächsten 48 Stunden").assertIsDisplayed()
+        compose.onNodeWithText("63 %").assertExists()
+        compose.onNodeWithText("7 %").assertExists()
+        compose.onNodeWithText("Die Quellen weichen um 56 Punkte ab", substring = true).assertExists()
+        screenshot("resets-outlook-dark")
+        scrollTo("Quellen")
+        compose.onNodeWithText("Quellen").performClick()
+        compose.onNodeWithText("codex-reset.com").assertIsDisplayed()
+        compose.onNodeWithText("LunarWerx").assertIsDisplayed()
+        screenshot("resets-sources-dark")
         compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.runOnIdle { screen.value = screen.value.copy(theme = ThemeMode.DARK) }
-        screenshot("forecast-dark")
         compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Anmeldungen").performClick()
         compose.onAllNodesWithText("Neu anmelden")[0].assertIsDisplayed()
@@ -169,6 +189,7 @@ class UiSmokeTest {
         screenshot("accounts-page")
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("Darstellung").assertIsDisplayed()
+        compose.onNodeWithText("Homescreen-Widget").assertDoesNotExist()
     }
 
     @Test fun `Codex and Claude sign in with the same page structure`() {
@@ -229,30 +250,42 @@ class UiSmokeTest {
         compose.onNodeWithText("4,34 EUR").assertIsDisplayed()
     }
 
-    @Test fun `history filters and notification settings cover both providers`() {
+    @Test fun `history shows cleaned merged resets with filters and notification settings cover both providers`() {
         val model = model()
-        val feed = ResetFeed(ResetSource.CODEX_RESET, listOf(ResetEvent("api", now, "API-Meldung", "Only API", null)), null, now)
-        val report = CommunityReport(CommunitySource.VERCEL_CODEX, ForecastChance(48, 20.0), null, now, null,
-            listOf(ResetEvent("tracker", now, "Tracker-Meldung", "Only tracker", null)))
-        val screen = mutableStateOf(ui(codex(usage = null), claude(usage = null), feed = feed,
-            community = mapOf(CommunitySource.VERCEL_CODEX to CommunityResult(report)), theme = ThemeMode.DARK))
+        val screen = mutableStateOf(ui(codex(usage = null), claude(usage = null), intel = codexIntel(), theme = ThemeMode.DARK))
         compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(screen.value, model) } }
         compose.onNode(hasText("Resets") and hasClickAction()).performClick()
-        scrollTo("Reset-Verlauf")
-        compose.onNodeWithText("Reset-Verlauf").performClick()
-        compose.onNodeWithText("API-Meldung").assertIsDisplayed()
-        compose.onNodeWithText("Tracker-Meldung").assertDoesNotExist()
-        compose.onNodeWithText("Codex Reset Tracker").performScrollTo().performClick()
-        compose.onNodeWithText("Tracker-Meldung").assertIsDisplayed()
+        scrollTo("Gesamten Verlauf ansehen")
+        compose.onNodeWithText("Gesamten Verlauf ansehen").performClick()
+        compose.onNodeWithText("Oktober 2026").assertIsDisplayed()
+        screenshot("history-dark")
+        compose.onAllNodesWithText("&amp;", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("t.co/", substring = true).assertCountEquals(0)
+        compose.onNode(hasText("Gutschriften") and hasClickAction()).performClick()
+        compose.onAllNodesWithText("Gutschrift", substring = true).assertCountEquals(1 + compose.onAllNodesWithText("Gutschrift", substring = true).fetchSemanticsNodes().size - 1)
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Benachrichtigungen & Aktualisierung").performClick()
         compose.onNodeWithText("Im Hintergrund aktualisieren").assertIsDisplayed()
-        compose.onNodeWithText("3 Std.").assertIsDisplayed()
+        compose.onNodeWithText("3 h").assertIsDisplayed()
         screenshot("notifications-dark")
-        compose.onNodeWithText("Claude Code").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithText("Darstellung").assertIsDisplayed()
+    }
+
+    @Test fun `the home screen has no add button and the claude page shows the date only history`() {
+        val model = model()
+        val results = mapOf(IntelSource.CLAUDE_RESETS to IntelResult(IntelParser.claudeResets(fixture("claude_resets.html"), Instant.now().epochSecond)))
+        compose.setContent { AniHyouTheme(dynamicColor = false, darkTheme = true) { UsageApp(ui(claude("Claude Max"), intel = results), model) } }
+        compose.onNodeWithText("Weiteren Account hinzufügen").assertDoesNotExist()
+        compose.onNodeWithText("Account verbinden").assertDoesNotExist()
+        compose.onNode(hasText("Resets") and hasClickAction()).performClick()
+        compose.onNodeWithText("Letzter Reset").assertIsDisplayed()
+        compose.onNodeWithText("Uhrzeit unbekannt", substring = true).assertIsDisplayed()
+        scrollTo("Wahrscheinlichkeit")
+        compose.onNodeWithText("In den nächsten 7 Tagen").assertIsDisplayed()
+        compose.onNodeWithText("80 %").assertExists()
+        screenshot("resets-claude-dark")
     }
 
     @Test fun `notification tap opens that account once and does not override a later sign in`() {

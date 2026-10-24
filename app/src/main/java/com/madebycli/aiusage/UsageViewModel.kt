@@ -21,14 +21,13 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("appearance", 0)
     private val http = HttpTransport()
     private val mutable = MutableStateFlow(UiState(
-        source = enumValueOr(prefs.getString("source", null), ResetSource.CODEX_RESET),
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false),
         nav = readNav()
     ))
     val state = mutable.asStateFlow()
 
-    private val resetData = ResetDataController(viewModelScope, mutable, http)
+    private val intel = IntelController(viewModelScope, mutable, http)
     private val accounts = AccountsController(application, viewModelScope, mutable, http, onChanged = ::onAccountsChanged)
     private val codexLogin = CodexLogin(application, viewModelScope, mutable, http, accounts)
     private val claudeLogin = ClaudeLogin(application, viewModelScope, mutable, http, accounts)
@@ -44,13 +43,13 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun onAccountsChanged() {
-        resetData.refresh()
+        intel.refresh()
         syncBackground()
     }
 
     fun refresh() {
         accounts.refreshAll()
-        resetData.refresh()
+        intel.refresh(force = true)
     }
 
     fun refresh(accountId: String) = accounts.refresh(accountId)
@@ -60,8 +59,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
         accounts.refreshIfStale(FOREGROUND_MAX_AGE_SECONDS)
     }
 
-    fun loadResetData() = resetData.refresh()
-    fun setSource(source: ResetSource) { prefs.edit { putString("source", source.name) }; resetData.setSource(source) }
+    fun loadResetData() = intel.refresh()
 
     // ---- Accounts ---------------------------------------------------------------------------------------
     /** Starts a sign-in. With [replaceAccountId] an existing account signs in again instead of a new one being added. */

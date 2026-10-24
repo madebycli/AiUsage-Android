@@ -15,22 +15,29 @@ object AccountSync {
     suspend fun run(context: Context, ids: Set<String>? = null): Boolean {
         val http = HttpTransport()
         var retry = false
+        var failures = 0
+        var reads = 0
         for (account in AccountRegistry(context).list()) {
             if (ids != null && account.id !in ids) continue
             try {
                 AccountAccess.lock(account.id).withLock {
                     val store = SecureStore(context, account.namespace)
                     val snapshot = UsageReader.read(context, http, account, store) ?: return@withLock
-                    store.saveMeasurement(snapshot, account.provider)
+                    reads++
+                    val (_, events) = store.saveMeasurementEvents(snapshot, account.provider)
+                    ResetAlerts.onLedgerEvents(context, account, events, snapshot)
                     ResetAlerts.schedule(context, account, snapshot)
                     AccountAccess.changes.tryEmit(account.id)
                 }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
+                failures++
                 // A rejected login will not recover by retrying; everything else might.
                 retry = retry || e !is HttpFailure || e.status !in listOf(400, 401, 403)
             }
         }
+        // What the settings page shows as the state of the background reads.
+        context.getSharedPreferences("alerts", 0).edit().putLong("bg.last", Instant.now().epochSecond).putInt("bg.reads", reads).putInt("bg.failures", failures).apply()
         ResetTicks.schedule(context)
         WidgetUpdater.updateAll(context)
         return retry

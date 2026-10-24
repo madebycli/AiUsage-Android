@@ -108,8 +108,7 @@ class AccountsController(
         registry.remove(id)
         state.update { current ->
             current.copy(accounts = withTitles(current.accounts.filterNot { it.id == id }),
-                community = current.community.filterKeys { key -> current.accounts.any { it.id != id && it.provider == key.provider } },
-                forecasts = if (current.accounts.none { it.id != id && it.provider == Providers.CODEX }) emptyMap() else current.forecasts)
+                intel = current.intel.filterKeys { key -> current.accounts.any { it.id != id && it.provider == key.provider } })
         }
         WidgetUpdater.requestUpdate(app)
         onChanged()

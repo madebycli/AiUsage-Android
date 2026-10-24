@@ -63,13 +63,4 @@ class ClaudeForecastTest {
             assertTrue(request.getHeader("User-Agent")!!.contains("AiUsage-Android/${BuildConfig.VERSION_NAME}"))
         } finally { server.shutdown() }
     }
-    @Test fun `source horizons are preserved without converting six hours to forty eight`() {
-        val lunar = ForecastParser.parse(ResetSource.LUNARWERX, """{"nearTerm":{"hours":6,"probability":0.032,"low":0.011,"high":0.097},"next24Hours":{"probability":0.27,"low":0.136,"high":0.452}}""", 10)
-        assertEquals(listOf(6, 24), lunar.chances.map { it.hours })
-        assertEquals(27.0, lunar.chances[1].percent, .001)
-        val codex = ForecastParser.parse(ResetSource.CODEX_RESET, """{"probabilities":{"rounded_24h":19,"rounded_48h":34},"confidence":"low"}""", 10)
-        assertEquals(listOf(24, 48), codex.chances.map { it.hours })
-        assertNull(codex.publishedAt)
-    }
-    @Test(expected = SchemaException::class) fun `invalid probability scale rejected`() { ForecastParser.parse(ResetSource.LUNARWERX, """{"nearTerm":{"hours":6,"probability":32,"low":0,"high":1}}""", 0) }
 }

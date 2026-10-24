@@ -44,7 +44,7 @@ import com.madebycli.aiusage.data.*
 
 /** The home screen: one card per account in the order the user chose, or the sort list. */
 @Composable
-internal fun UsageScreen(state: UiState, now: Long, sorting: Boolean, open: (String) -> Unit, add: () -> Unit, reorder: (List<String>) -> Unit) {
+internal fun UsageScreen(state: UiState, now: Long, sorting: Boolean, open: (String) -> Unit, reorder: (List<String>) -> Unit) {
     if (sorting) {
         SortList(state.accounts, reorder)
         return
@@ -53,15 +53,6 @@ internal fun UsageScreen(state: UiState, now: Long, sorting: Boolean, open: (Str
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
             AccountCard(entry, now, index, Modifier.animateItem()) { open(entry.id) }
         }
-        item(key = "add") { AddAccountRow(state.accounts.size, add, Modifier.animateItem()) }
-    }
-}
-
-@Composable
-private fun AddAccountRow(count: Int, add: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedButton(onClick = add, modifier = modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(20.dp)) {
-        Icon(Icons.Rounded.Add, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
-        Text(if (count == 0) "Account verbinden" else "Weiteren Account hinzufügen")
     }
 }
 
@@ -215,10 +206,11 @@ internal fun AccountDetailScreen(state: UiState, now: Long, entry: AccountState,
         usage?.let { snapshot ->
             val warnings = snapshot.warnings.filterNot { it == snapshot.creditsWarning }
             if (warnings.isNotEmpty()) item { Notice(warnings.joinToString("\n")) }
-            var animatedIndex = 0
+            var shown = 0
             snapshot.groups.forEachIndexed { index, group ->
-                if (group.name != entry.provider) item(key = "title:$index") { SectionTitle(group.name) }
-                items(group.windows, key = { "$index:${it.seconds}" }) { window -> WindowCard(window, now, animatedIndex++) }
+                items(group.windows, key = { "$index:${it.seconds}" }) { window ->
+                    WindowCard(window, now, if (group.name == entry.provider) window.title else "${group.name} · ${window.title}", shown++)
+                }
             }
             if (snapshot.groups.all { it.windows.isEmpty() }) item { Notice("Der Anbieter meldet aktuell keine Zeitfenster.") }
             if (snapshot.availableResets != null || snapshot.resetCredits.isNotEmpty() || snapshot.creditsWarning != null)
@@ -263,41 +255,82 @@ private fun RecentUsageCard(entry: AccountState, now: Long, stats: (() -> Unit)?
     }
 }
 
+/** One window in detail: usage, the reset as a clock time, how far the window has run, and the pace so far. */
 @Composable
-private fun WindowCard(window: UsageWindow, now: Long, index: Int) {
+private fun WindowCard(window: UsageWindow, now: Long, title: String, index: Int) {
     val colors = MaterialTheme.colorScheme
     val accent = windowColor(window, colors)
-    val animated by rememberFillProgress((window.usedPercent / 100).toFloat().coerceIn(0f, 1f), 100)
+    val at = window.resetAt
+    val expired = at != null && at <= now
     SoftCard {
-        Text(window.title, style = MaterialTheme.typography.titleMedium)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            Box(Modifier.size(112.dp).semantics { contentDescription = "${window.title}: ${percent(window.usedPercent)} Prozent verbraucht" }, contentAlignment = Alignment.Center) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val inset = 8.dp.toPx()
-                    val bounds = Size(size.width - inset * 2, size.height - inset * 2)
-                    drawArc(accent.copy(alpha = .12f), 140f, 260f, false, Offset(inset, inset), bounds, style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
-                    if (animated > 0) drawArc(accent, 140f, 260f * animated, false, Offset(inset, inset), bounds, style = Stroke(8.dp.toPx(), cap = StrokeCap.Round))
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("${rememberCountingPercent(window.usedPercent)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                    Text("genutzt", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
-                }
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Nächster Reset", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                val at = window.resetAt
-                Text(if (at == null) "Nicht gemeldet" else if (at <= now) "Erreicht" else "${TimeText.clock(at, now)} Uhr", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium)
-                if (at != null) Text(if (at <= now) "seit ${TimeText.clock(at, now)} Uhr" else TimeText.remaining(at - now), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                if (at != null && at > now) Text(date(at), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            when {
+                expired -> StatusPill("Reset erreicht", colors.tertiaryContainer, colors.onTertiaryContainer)
+                window.usedPercent >= 100 -> StatusPill("Limit erreicht", colors.errorContainer, colors.onErrorContainer)
+                at != null -> StatusPill("Läuft", colors.surfaceContainerHighest, colors.onSurfaceVariant)
             }
         }
-        window.elapsed(now)?.let { elapsed ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                UsageTrack(elapsed, colors.onSurfaceVariant.copy(alpha = .6f), Modifier.weight(1f).height(3.dp))
-                Text("${percent(elapsed.toDouble() * 100)}% der Zeit", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+            RingGauge((window.usedPercent / 100).toFloat(), accent, "${rememberCountingPercent(window.usedPercent)}%", "genutzt",
+                size = 120.dp, modifier = Modifier.semantics { contentDescription = "$title: ${percent(window.usedPercent)} Prozent verbraucht" })
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(if (expired) "Reset war" else "Nächster Reset", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text(if (at == null) "Nicht gemeldet" else "${TimeText.clock(at, now)} Uhr", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                if (at != null) Text(if (expired) TimeText.remaining(0).let { "seit ${Words.ago(now - at).removePrefix("vor ")}" } else TimeText.remaining(at - now),
+                    style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)
             }
+        }
+        if (at != null && !expired) {
+            WindowTimeline(window, now, accent)
+            Pace.of(window, now)?.let { PaceLine(it, now) }
         }
     }
+}
+
+@Composable
+private fun StatusPill(text: String, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color) {
+    Surface(shape = RoundedCornerShape(10.dp), color = container, contentColor = content) {
+        Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+    }
+}
+
+/** Time and usage on one scale: the window from start to reset, with how much of both is gone. */
+@Composable
+private fun WindowTimeline(window: UsageWindow, now: Long, accent: androidx.compose.ui.graphics.Color) {
+    val colors = MaterialTheme.colorScheme
+    val end = window.resetAt ?: return
+    val start = end - window.seconds
+    val elapsed = ((now - start).toDouble() / window.seconds).toFloat().coerceIn(0f, 1f)
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        TimelineRow("Zeit", elapsed, colors.onSurfaceVariant.copy(alpha = .55f), "${percent(elapsed * 100.0)} %")
+        TimelineRow("Verbrauch", (window.usedPercent / 100).toFloat(), accent, "${percent(window.usedPercent)} %")
+        Row {
+            Text(TimeText.clock(start, now), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.weight(1f))
+            Text("Reset ${TimeText.clock(end, now)}", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun TimelineRow(label: String, progress: Float, color: androidx.compose.ui.graphics.Color, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(72.dp))
+        UsageTrack(progress, color, Modifier.weight(1f).height(8.dp))
+        Text(value, style = MaterialTheme.typography.labelMedium, modifier = Modifier.width(48.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+}
+
+@Composable
+private fun PaceLine(pace: Pace, now: Long) {
+    val colors = MaterialTheme.colorScheme
+    val (text, color) = when (pace.status) {
+        Pace.Status.FULL -> return
+        Pace.Status.WILL_RUN_OUT -> (pace.fullAt?.let { "Bei diesem Tempo ist das Limit um ${TimeText.clock(it, now)} Uhr voll, ${TimeText.remaining(it - now)}." }
+            ?: "Bei diesem Tempo wäre das Limit zum Reset knapp erreicht.") to colors.error
+        Pace.Status.ON_TRACK -> "Bei diesem Tempo sind es zum Reset etwa ${percent(Math.round(pace.projectedPercent).toDouble())} %." to colors.onSurfaceVariant
+    }
+    Text("$text Schätzung aus dem bisherigen Verlauf.", style = MaterialTheme.typography.labelMedium, color = color)
 }
 
 @Composable

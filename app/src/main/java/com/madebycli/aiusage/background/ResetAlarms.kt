@@ -76,6 +76,13 @@ class ResetAlarmReceiver : BroadcastReceiver() {
 /** Alarms disappear on reboot and on app update; this restores them from the stored plan. */
 class ResetBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) ResetAlerts.rearm(context.applicationContext)
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED || intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            val app = context.applicationContext
+            ResetAlerts.rearm(app)
+            // Work normally survives both, but a missing plan costs a whole interval, so it is put back without waiting.
+            val connected = AccountRegistry(app).list().isNotEmpty()
+            AccountRefresh.sync(app, connected)
+            if (connected) ResetTicks.schedule(app)
+        }
     }
 }

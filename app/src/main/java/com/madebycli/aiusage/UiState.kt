@@ -79,10 +79,7 @@ data class UiState(
     val logins: Map<String, LoginState> = emptyMap(),
     val signedIn: SignedIn? = null,
     val storageWarning: String? = null,
-    val feed: ResetFeed? = null, val feedLoading: Boolean = false, val feedError: String? = null,
-    val source: ResetSource = ResetSource.CODEX_RESET, val nextFeedSeconds: Long = 0,
-    val community: Map<CommunitySource, CommunityResult> = emptyMap(),
-    val forecasts: Map<ResetSource, ForecastResult> = emptyMap(), val forecastLoading: Boolean = false,
+    val intel: Map<IntelSource, IntelResult> = emptyMap(), val intelLoading: Boolean = false,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false,
     val nav: NavSettings = NavSettings()
 ) {

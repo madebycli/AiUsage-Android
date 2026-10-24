@@ -81,6 +81,28 @@ class UsageLedgerTest {
         assertEquals(1, day.fiveResets)
     }
 
+    @Test fun `an early reset yields one early event and the same reading again yields none`() {
+        val end = at("2026-10-20T20:00:00Z")
+        val first = UsageTracker.update(UsageLedger(), snap(at("2026-10-20T12:00:00Z"), five = 90.0 to end), "Codex", utc)
+        assertTrue(first.events.isEmpty())
+        val reset = snap(at("2026-10-20T12:30:00Z"), five = 4.0 to at("2026-10-20T17:30:00Z"))
+        val second = UsageTracker.update(first.ledger, reset, "Codex", utc)
+        assertEquals(1, second.events.size)
+        assertTrue(second.events[0].early)
+        assertEquals(StatsMetric.FIVE, second.events[0].metric)
+        assertEquals(90.0, second.events[0].peak, 0.0001)
+        val again = UsageTracker.update(second.ledger, reset.copy(fetchedAt = at("2026-10-20T12:40:00Z")), "Codex", utc)
+        assertTrue(again.events.isEmpty())
+    }
+
+    @Test fun `a run that ends at its deadline is an event but not an early one`() {
+        val end = at("2026-10-20T15:00:00Z")
+        val first = UsageTracker.update(UsageLedger(), snap(at("2026-10-20T14:00:00Z"), five = 70.0 to end), "Codex", utc)
+        val next = UsageTracker.update(first.ledger, snap(at("2026-10-20T15:10:00Z"), five = 2.0 to at("2026-10-20T20:00:00Z")), "Codex", utc)
+        assertEquals(1, next.events.size)
+        assertFalse(next.events[0].early)
+    }
+
     @Test fun `a window that disappears before its deadline is not a reset`() {
         val end = at("2026-10-20T20:00:00Z")
         val ledger = feed(snap(at("2026-10-20T12:00:00Z"), five = 40.0 to end), snap(at("2026-10-20T13:00:00Z")), snap(at("2026-10-20T14:00:00Z"), five = 45.0 to end))

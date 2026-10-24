@@ -50,32 +50,6 @@ class RequestBackoff(private val clock: () -> Long = System::nanoTime) {
     fun check() { remainingSeconds().takeIf { it > 0 }?.let { throw HttpFailure(429, it) } }
 }
 
-data class FeedResult(val feed: ResetFeed?, val nextFetchSeconds: Long, val error: String? = null)
-
-class ResetRepository(private val http: HttpTransport, private val clock: () -> Long = System::nanoTime) {
-    private val feeds = mutableMapOf<ResetSource, ResetFeed>()
-    private val backoffs = mutableMapOf<ResetSource, RequestBackoff>()
-    private val errors = mutableMapOf<ResetSource, String>()
-    suspend fun fetch(source: ResetSource): FeedResult {
-        val backoff = backoffs.getOrPut(source) { RequestBackoff(clock) }
-        val remaining = backoff.remainingSeconds()
-        if (remaining > 0) return FeedResult(feeds[source], remaining, errors[source])
-        backoff.defer(source.minimumSeconds)
-        try {
-            val feed = ResetParser.parse(source, http.get(source.endpoint), Instant.now().epochSecond)
-            feeds[source] = feed
-            errors.remove(source)
-            return FeedResult(feed, source.minimumSeconds)
-        } catch (e: CancellationException) { throw e }
-        catch (e: Exception) {
-            if (e is HttpFailure && e.retrySeconds != null)
-                backoff.defer(e.retrySeconds)
-            errors[source] = safeError(e)
-            return FeedResult(feeds[source], backoff.remainingSeconds(), errors[source])
-        }
-    }
-}
-
 // An active request is never cancelled by tapping again. One fresh read is queued.
 class RefreshQueue(scope: CoroutineScope, private val refresh: suspend () -> Unit) {
     private val channel = Channel<Unit>(Channel.CONFLATED)

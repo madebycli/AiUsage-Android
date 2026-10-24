@@ -4,6 +4,7 @@ package com.madebycli.aiusage.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -100,6 +101,8 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
         else -> Screen("main", 0)
     }
 
+    // A solid base under every page and transition: nothing can shine through while pages move.
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     AnimatedContent(screen, transitionSpec = pageTransition(), label = "pages") { target ->
         val key = target.key
         when {
@@ -167,7 +170,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
                                 when (AppTab.entries[shown]) {
                                     AppTab.RESETS -> ResetScreen(state, now, resetProvider, { resetProvider = it }) { provider, page -> stack.add(Route.reset(provider, page)) }
                                     AppTab.STATS -> StatsTab(state, now, statsScope) { statsScope = it }
-                                    AppTab.USAGE -> UsageScreen(state, now, sorting, { stack.add(Route.account(it)) }, { stack.add(Route.ACCOUNTS) }, model::reorderAccounts)
+                                    AppTab.USAGE -> UsageScreen(state, now, sorting, { stack.add(Route.account(it)) }, model::reorderAccounts)
                                 }
                             }
                         }
@@ -175,6 +178,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
                 }
             }
         }
+    }
     }
 }
 

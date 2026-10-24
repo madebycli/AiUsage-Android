@@ -85,8 +85,9 @@ abstract class AccountRuntime(
     /** Stores the reading and everything derived from it. The caller holds the account lock. */
     protected suspend fun persist(usage: UsageSnapshot) {
         persistAccountRecord {
-            val record = store.saveMeasurement(usage, account.provider)
+            val (record, events) = store.saveMeasurementEvents(usage, account.provider)
             update { copy(ledger = record.ledger) }
+            runCatching { ResetAlerts.onLedgerEvents(app, account, events, usage) }
             ResetAlerts.schedule(app, account, usage)
             ResetTicks.schedule(app)
             WidgetUpdater.requestUpdate(app)

@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -131,6 +132,57 @@ internal fun ResetLines(resetAt: Long?, now: Long, modifier: Modifier = Modifier
                 Text(com.madebycli.aiusage.data.TimeText.remaining(resetAt - now), style = MaterialTheme.typography.labelSmall, color = muted)
             }
         }
+    }
+}
+
+/**
+ * A ring with its text in the middle. The text size follows the ring, so a long value such as "35,2%"
+ * always stays inside it. A gap at the bottom keeps the familiar gauge shape when [gauge] is set.
+ */
+@Composable
+internal fun RingGauge(progress: Float, color: Color, text: String, caption: String? = null, size: androidx.compose.ui.unit.Dp = 112.dp,
+    stroke: androidx.compose.ui.unit.Dp = 9.dp, gauge: Boolean = false, modifier: Modifier = Modifier) {
+    val animated by rememberFillProgress(progress)
+    val track = color.copy(alpha = .14f)
+    Box(modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val width = stroke.toPx()
+            val inset = width / 2
+            val bounds = androidx.compose.ui.geometry.Size(this.size.width - width, this.size.height - width)
+            val start = if (gauge) 140f else -90f
+            val sweep = if (gauge) 260f else 360f
+            drawArc(track, start, sweep, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
+            if (animated > 0f) drawArc(color, start, sweep * animated, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
+        }
+        val factor = if (text.length >= 5) .19f else if (text.length == 4) .22f else .27f
+        val fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size.toPx() * factor).toSp() }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text, style = MaterialTheme.typography.titleLarge.copy(fontSize = fontSize), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1, softWrap = false)
+            if (caption != null) Text(caption, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * A 0 to 100 scale with a band from [low] to [high] and a dot at [value]: how far apart a source's own range is.
+ */
+@Composable
+internal fun RangeBar(value: Double, low: Double?, high: Double?, color: Color, modifier: Modifier = Modifier.fillMaxWidth().height(14.dp)) {
+    val track = MaterialTheme.colorScheme.surfaceContainerHighest
+    val reveal by rememberFillProgress(1f)
+    Canvas(modifier) {
+        val h = size.height
+        val barHeight = h * .42f
+        val top = (h - barHeight) / 2
+        drawRoundRect(track, Offset(0f, top), Size(size.width, barHeight), androidx.compose.ui.geometry.CornerRadius(barHeight / 2))
+        if (low != null && high != null && high > low) {
+            val x0 = (size.width * (low / 100).toFloat()).coerceIn(0f, size.width)
+            val x1 = (size.width * (high / 100).toFloat()).coerceIn(0f, size.width)
+            drawRoundRect(color.copy(alpha = .35f), Offset(x0, top), Size((x1 - x0).coerceAtLeast(barHeight), barHeight), androidx.compose.ui.geometry.CornerRadius(barHeight / 2))
+        }
+        val x = (size.width * (value / 100).toFloat() * reveal).coerceIn(h / 2, size.width - h / 2)
+        drawCircle(color, h / 2, Offset(x, h / 2))
+        drawCircle(Color.White.copy(alpha = .9f), h / 6, Offset(x, h / 2))
     }
 }
 

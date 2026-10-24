@@ -58,8 +58,11 @@ class SecureStore(context: Context, private val namespace: String = "account") :
         else target.writeClaude(readClaude() ?: error("Keine Anmeldung gespeichert."))
         clear()
     }
-    fun saveMeasurement(usage: UsageSnapshot, provider: String): PersonalRecord = synchronized(ioLock) {
-        recordMeasurement(readRecord(), usage, provider).also(::writeRecord)
+    fun saveMeasurement(usage: UsageSnapshot, provider: String): PersonalRecord = saveMeasurementEvents(usage, provider).first
+
+    /** Saves the reading and returns the runs it ended. Only the call that stored the reading sees them. */
+    fun saveMeasurementEvents(usage: UsageSnapshot, provider: String): Pair<PersonalRecord, List<LedgerEvent>> = synchronized(ioLock) {
+        recordMeasurementEvents(readRecord(), usage, provider).also { writeRecord(it.first) }
     }
     companion object { private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>() }
     override fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }

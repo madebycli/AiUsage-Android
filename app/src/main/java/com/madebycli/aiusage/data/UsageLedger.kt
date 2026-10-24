@@ -68,6 +68,15 @@ data class UsageLedger(
     fun run(metric: StatsMetric) = if (metric == StatsMetric.FIVE) fiveRun else weekRun
 }
 
+/**
+ * A run that ended. [early] means the provider reset the window before its announced deadline, for example a
+ * global reset in the middle of the week or a redeemed reset credit. [at] is when the reset happened as far as
+ * known: the old deadline, or the moment the change was noticed for an early one.
+ */
+data class LedgerEvent(val metric: StatsMetric, val at: Long, val early: Boolean, val peak: Double, val endedAt: Long)
+
+class LedgerUpdate(val ledger: UsageLedger, val events: List<LedgerEvent>)
+
 object UsageTracker {
     /** Providers report the same reset with a little jitter; closer times are the same run. */
     const val RESET_TOLERANCE_SECONDS = 300L
@@ -75,7 +84,8 @@ object UsageTracker {
     private const val DROP_TOLERANCE = 1.0
     const val MAX_DAYS = 800
 
-    private class Outcome(var run: LedgerRun?, var added: Double = 0.0, var started: Boolean = false, val resets: MutableList<Long> = mutableListOf())
+    private class Closed(val at: Long, val early: Boolean, val peak: Double, val endsAt: Long)
+    private class Outcome(var run: LedgerRun?, var added: Double = 0.0, var started: Boolean = false, val resets: MutableList<Closed> = mutableListOf())
 
     /** Folds one reading of one window into its run. [window] is null when the provider reports none. */
     private fun observe(window: UsageWindow?, current: LedgerRun?, at: Long, seconds: Long): Outcome {
@@ -94,7 +104,7 @@ object UsageTracker {
             }
             if (!continues) {
                 // A passed deadline resets at that deadline; a changed one resets when it was noticed.
-                outcome.resets += if (expired) run.endsAt else at
+                outcome.resets += Closed(if (expired) run.endsAt else at, !expired, run.peak, run.endsAt)
                 run = null
             } else if (sameEnd) run = run.copy(endsAt = reported!!)
         }
@@ -114,10 +124,13 @@ object UsageTracker {
         return outcome
     }
 
-    fun record(ledger: UsageLedger, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): UsageLedger {
+    fun record(ledger: UsageLedger, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): UsageLedger =
+        update(ledger, snapshot, provider, zone).ledger
+
+    fun update(ledger: UsageLedger, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): LedgerUpdate {
         val at = snapshot.fetchedAt
         // Older or repeated readings (enrichment of the same read, racing workers) add nothing.
-        if (at <= ledger.lastReadAt) return ledger
+        if (at <= ledger.lastReadAt) return LedgerUpdate(ledger, emptyList())
         fun day(epoch: Long) = Instant.ofEpochSecond(epoch).atZone(zone).toLocalDate().toString()
         val windows = snapshot.windows(provider)
         val five = observe(windows.firstOrNull { it.seconds == FIVE_HOURS }, ledger.fiveRun, at, FIVE_HOURS)
@@ -128,9 +141,11 @@ object UsageTracker {
         edit(today) { it.copy(reads = it.reads + 1, five = it.five + five.added, week = it.week + week.added,
             fiveRuns = it.fiveRuns + if (five.started) 1 else 0, weekRuns = it.weekRuns + if (week.started) 1 else 0,
             peak = if (five.added > 0) maxOf(it.peak, five.run?.peak ?: 0.0) else it.peak) }
-        five.resets.forEach { time -> edit(day(time)) { it.copy(fiveResets = it.fiveResets + 1) } }
-        week.resets.forEach { time -> edit(day(time)) { it.copy(weekResets = it.weekResets + 1) } }
-        return UsageLedger(byDate.values.sortedByDescending { it.date }.take(MAX_DAYS), five.run, week.run, at)
+        five.resets.forEach { closed -> edit(day(closed.at)) { it.copy(fiveResets = it.fiveResets + 1) } }
+        week.resets.forEach { closed -> edit(day(closed.at)) { it.copy(weekResets = it.weekResets + 1) } }
+        val events = five.resets.map { LedgerEvent(StatsMetric.FIVE, it.at, it.early, it.peak, it.endsAt) } +
+            week.resets.map { LedgerEvent(StatsMetric.WEEK, it.at, it.early, it.peak, it.endsAt) }
+        return LedgerUpdate(UsageLedger(byDate.values.sortedByDescending { it.date }.take(MAX_DAYS), five.run, week.run, at), events)
     }
 
     /** Old history only knew the highest 5-hour value of a day; keep that as a lower bound. */
@@ -148,11 +163,16 @@ object UsageTracker {
 data class UsageDay(val date: String, val peak: Double? = null, val lastMeasuredAt: Long = 0, val weekly: Double? = null)
 
 /** Stores the newest snapshot and folds it into the account's usage ledger. */
-fun recordMeasurement(record: PersonalRecord, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): PersonalRecord {
+fun recordMeasurement(record: PersonalRecord, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): PersonalRecord =
+    recordMeasurementEvents(record, snapshot, provider, zone).first
+
+/** Like [recordMeasurement], and also names the runs that ended with this reading. Each ending is reported exactly once. */
+fun recordMeasurementEvents(record: PersonalRecord, snapshot: UsageSnapshot, provider: String, zone: ZoneId = ZoneId.systemDefault()): Pair<PersonalRecord, List<LedgerEvent>> {
     val base = record.migrated()
     val current = base.usage
-    if (current != null && snapshot.fetchedAt < current.fetchedAt) return base
-    return base.copy(usage = snapshot, ledger = UsageTracker.record(base.ledger, snapshot, provider, zone))
+    if (current != null && snapshot.fetchedAt < current.fetchedAt) return base to emptyList()
+    val update = UsageTracker.update(base.ledger, snapshot, provider, zone)
+    return base.copy(usage = snapshot, ledger = update.ledger) to update.events
 }
 
 /** Moves the old peak-only history into the ledger once. */

@@ -13,12 +13,4 @@ class UsageStatsTest {
         val old = appJson.decodeFromString<UsageSnapshot>("""{"plan":null,"groups":[],"fetchedAt":1}""")
         assertNull(old.accountCredits)
     }
-    @Test fun `declared tracker sync preserves the 48h horizon without trusting indefinitely old data`() {
-        val now = 100000L
-        val report = CommunityReport(CommunitySource.VERCEL_CLAUDE, ForecastChance(48, 42.0), now - 10800, now, null, emptyList(), now + 10800)
-        assertTrue(ForecastConsensus.isCommunityFresh(report, now))
-        assertFalse(ForecastConsensus.isCommunityFresh(report, now + 10801))
-        assertFalse(ForecastConsensus.isCommunityFresh(report.copy(validUntil = now + 30000), now))
-        assertEquals(48, ForecastConsensus.combine("Claude Code", emptyMap(), mapOf(CommunitySource.VERCEL_CLAUDE to CommunityResult(report)), now).single().hours)
-    }
 }

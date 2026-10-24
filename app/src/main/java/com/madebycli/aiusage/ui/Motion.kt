@@ -7,6 +7,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.madebycli.aiusage.data.formatPercent
 import kotlinx.coroutines.delay
@@ -62,19 +63,21 @@ internal fun rememberCountingPercent(target: Double): String {
 internal data class Screen(val key: String, val depth: Int)
 
 internal fun pageTransition(): AnimatedContentTransitionScope<Screen>.() -> ContentTransform = {
-    if (targetState.depth > initialState.depth) {
-        (slideInHorizontally(tween(PAGE_MILLIS, easing = FastOutSlowInEasing)) { it / 5 } + fadeIn(tween(PAGE_MILLIS))) togetherWith
-            (slideOutHorizontally(tween(PAGE_MILLIS, easing = FastOutSlowInEasing)) { -it / 8 } + fadeOut(tween(PAGE_MILLIS / 2)))
-    } else if (targetState.depth < initialState.depth) {
-        (slideInHorizontally(tween(PAGE_MILLIS, easing = FastOutSlowInEasing)) { -it / 8 } + fadeIn(tween(PAGE_MILLIS))) togetherWith
-            (slideOutHorizontally(tween(PAGE_MILLIS, easing = FastOutSlowInEasing)) { it / 5 } + fadeOut(tween(PAGE_MILLIS / 2)))
-    } else fadeIn(tween(220)) togetherWith fadeOut(tween(160))
+    val spec = tween<IntOffset>(PAGE_MILLIS, easing = FastOutSlowInEasing)
+    when {
+        // The page above slides over the one below. Both stay fully opaque, so nothing shows through and no ghost images appear.
+        targetState.depth > initialState.depth ->
+            (slideInHorizontally(spec) { it } togetherWith slideOutHorizontally(spec) { -it / 4 }).apply { targetContentZIndex = 1f }
+        targetState.depth < initialState.depth ->
+            (slideInHorizontally(spec) { -it / 4 } togetherWith slideOutHorizontally(spec) { it }).apply { targetContentZIndex = -1f }
+        // Same level: fade through, the old page is gone before the new one appears.
+        else -> fadeIn(tween(180, delayMillis = 90)) togetherWith fadeOut(tween(90))
+    }
 }
 
-/** Tabs slide towards the side they sit on. */
+/** Tabs fade through with a small slide towards the side they sit on. */
 internal fun tabTransition(order: List<Int>): AnimatedContentTransitionScope<Int>.() -> ContentTransform = {
     val forward = order.indexOf(targetState) >= order.indexOf(initialState)
-    val offset: (Int) -> Int = { width -> if (forward) width / 6 else -width / 6 }
-    (slideInHorizontally(tween(280, easing = FastOutSlowInEasing), offset) + fadeIn(tween(280))) togetherWith
-        (slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -offset(it) } + fadeOut(tween(140)))
+    val offset: (Int) -> Int = { width -> if (forward) width / 14 else -width / 14 }
+    (fadeIn(tween(200, delayMillis = 90)) + slideInHorizontally(tween(260, easing = FastOutSlowInEasing), offset)) togetherWith fadeOut(tween(90))
 }

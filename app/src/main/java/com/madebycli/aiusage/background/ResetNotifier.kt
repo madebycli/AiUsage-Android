@@ -25,6 +25,7 @@ data class Delivery(val account: Account, val rule: AlertRule, val target: Long,
 
 object ResetNotifier {
     private const val FETCH_BUDGET_MS = 8_000L
+    private const val MIN_GAP_SECONDS = 10 * 60L
 
     /**
      * Sends the reminder for [delivery] once. Before announcing a reset it asks the provider for fresh
@@ -44,7 +45,7 @@ object ResetNotifier {
 
             val fresh = withTimeoutOrNull(FETCH_BUDGET_MS) { runCatching { UsageReader.read(context, HttpTransport(), account, store) }.getOrNull() }
             fresh?.let {
-                runCatching { store.saveMeasurement(it, rule.provider) }
+                runCatching { store.saveMeasurementEvents(it, rule.provider) }.getOrNull()?.let { (_, events) -> ResetAlerts.onLedgerEvents(context, account, events, it) }
                 AccountAccess.changes.tryEmit(account.id)
             }
             val snapshot = fresh ?: runCatching { store.readRecord().usage }.getOrNull()
@@ -55,7 +56,7 @@ object ResetNotifier {
                     ResetAlarms.arm(context, delivery.slot, after + ResetAlerts.RECHECK_DELAY_SECONDS, delivery)
                     false
                 }
-                Decision.ANNOUNCE -> post(context, delivery, "Laut Anbieter Reset in ${(delivery.target - after + 59) / 60} Minuten.", fresh)
+                Decision.ANNOUNCE -> post(context, delivery, "Das ${rule.title}-Limit wird um ${TimeText.clock(delivery.target, after)} Uhr zurückgesetzt (${TimeText.remaining(delivery.target - after)}).", fresh)
                 Decision.RESET -> post(context, delivery, resetText(rule, snapshot), fresh)
                 Decision.OVERDUE -> post(context, delivery, "Der Reset-Zeitpunkt ist erreicht. Der Anbieter meldet noch den alten Termin.", fresh)
                 Decision.UNVERIFIED -> post(context, delivery, "Der gemeldete Reset-Zeitpunkt ist erreicht. Verbrauch in der App prüfen.", null)
@@ -85,6 +86,9 @@ object ResetNotifier {
         var delivered = false
         synchronized(ResetAlerts.deliveryLock) {
             if (!stillPlanned(context, delivery)) return@synchronized
+            // A second notification for the same window within minutes is noise, whatever path asked for it.
+            val sinceLast = Instant.now().epochSecond - prefs.getLong("lastPost.${delivery.slot}", 0)
+            if (sinceLast in 0 until MIN_GAP_SECONDS) return@synchronized
             ResetAlerts.channels(context)
             val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 .putExtra("account", delivery.account.id)
@@ -95,13 +99,46 @@ object ResetNotifier {
                 .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
                 .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setAutoCancel(true).setOnlyAlertOnce(true).build())
-            prefs.edit().putString("delivered.${delivery.slot}", "${delivery.generation}:${delivery.target}").apply()
+            prefs.edit().putString("delivered.${delivery.slot}", "${delivery.generation}:${delivery.target}").putLong("lastPost.${delivery.slot}", Instant.now().epochSecond).apply()
             delivered = true
         }
         // With the delivery recorded, plan the next window from the fresh numbers.
         if (delivered && fresh != null) ResetAlerts.schedule(context, delivery.account, fresh)
         return delivered
     }
+
+    /**
+     * "Your limit was reset earlier than planned." Several accounts of one provider reset together in a global reset, so they share
+     * one notification that names all of them instead of one per account.
+     */
+    @SuppressLint("MissingPermission")
+    fun postEarlyReset(context: Context, account: Account, rule: AlertRule, event: LedgerEvent, window: UsageWindow?) {
+        val prefs = ResetAlerts.prefs(context)
+        val now = Instant.now().epochSecond
+        val everyone = AccountRegistry(context).list()
+        val name = displayName(account, everyone)
+        val key = "spontNames.${rule.key}"
+        val recent = (prefs.getStringSet(key, emptySet()).orEmpty().mapNotNull { entry ->
+            entry.substringBefore('|').toLongOrNull()?.takeIf { now - it < SPONTANEOUS_JOIN_SECONDS }?.let { entry.substringAfter('|') }
+        } + name).distinct()
+        prefs.edit().putStringSet(key, recent.map { "$now|$it" }.toSet()).apply()
+        val until = window?.resetAt?.takeIf { it > now }?.let { " Das neue Fenster läuft bis ${TimeText.clock(it, now)} Uhr." }.orEmpty()
+        val used = "Zuvor waren ${formatPercent(event.peak)} % verbraucht."
+        val message = if (recent.size == 1) "Das ${rule.title}-Limit wurde früher als geplant zurückgesetzt. $used$until"
+            else "Das ${rule.title}-Limit wurde bei ${recent.joinToString(", ")} früher als geplant zurückgesetzt.$until"
+        synchronized(ResetAlerts.deliveryLock) {
+            ResetAlerts.channels(context)
+            val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("account", account.id)
+            val content = PendingIntent.getActivity(context, "spont.${rule.key}".hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            NotificationManagerCompat.from(context).notify("spont.${rule.key}".hashCode(), NotificationCompat.Builder(context, rule.channel)
+                .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${rule.provider} · Reset erkannt")
+                .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
+                .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setAutoCancel(true).setOnlyAlertOnce(true).build())
+        }
+    }
+
+    private const val SPONTANEOUS_JOIN_SECONDS = 30 * 60L
 
     @SuppressLint("MissingPermission")
     fun sendTest(context: Context) {

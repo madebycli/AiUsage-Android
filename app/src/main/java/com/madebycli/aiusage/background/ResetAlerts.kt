@@ -100,6 +100,28 @@ object ResetAlerts {
         return at.takeIf { it > Instant.now().epochSecond }
     }
 
+    /**
+     * Called with every run that a reading ended. A window the provider reset before its deadline (a global reset in the
+     * middle of the week, a redeemed credit) would otherwise pass without a word, because the planned reminder is for the old deadline.
+     */
+    fun onLedgerEvents(context: Context, account: Account, events: List<LedgerEvent>, usage: UsageSnapshot) {
+        val prefs = prefs(context)
+        if (events.none { it.early } || !prefs.getBoolean("enabled", false) || !prefs.getBoolean("spontaneous", true) || !permitted(context)) return
+        val now = Instant.now().epochSecond
+        events.filter { it.early && it.peak > 0 && now - it.at <= GRACE_SECONDS }.forEach { event ->
+            val rule = rules.firstOrNull { it.provider == account.provider && it.seconds == event.metric.seconds } ?: return@forEach
+            if (!prefs.getBoolean("rule.${rule.key}", true)) return@forEach
+            val slot = rule.slot(account)
+            val window = usage.windows(account.provider).firstOrNull { it.seconds == rule.seconds }
+            // A moved deadline alone is no reset: the usage must have fallen as well.
+            if ((window?.usedPercent ?: 0.0) > event.peak - 2.0) return@forEach
+            // One announcement per ended run, however many times the same change is read.
+            if (prefs.getLong("spont.$slot", 0) == event.endedAt) return@forEach
+            prefs.edit().putLong("spont.$slot", event.endedAt).apply()
+            ResetNotifier.postEarlyReset(context, account, rule, event, window)
+        }
+    }
+
     fun schedule(context: Context, account: Account, usage: UsageSnapshot) {
         val provider = account.provider
         val prefs = prefs(context)

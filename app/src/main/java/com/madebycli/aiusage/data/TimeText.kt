@@ -52,3 +52,34 @@ object TimeText {
 
 /** "42" or "42,5": whole numbers stay whole. */
 fun formatPercent(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.GERMAN, "%.1f", value)
+
+/** More German wording for the reset pages. */
+object Words {
+    private val dateFormat = java.time.format.DateTimeFormatter.ofPattern("EEE, d. MMM", Locale.GERMAN)
+    private val fullDate = java.time.format.DateTimeFormatter.ofPattern("d. MMM yyyy", Locale.GERMAN)
+
+    /** "2,4 Tage", "1 Tag". */
+    fun days(value: Double): String {
+        val text = if (value >= 10) value.toInt().toString() else String.format(Locale.GERMAN, "%.1f", value).removeSuffix(",0")
+        return if (text == "1") "1 Tag" else "$text Tage"
+    }
+
+    /** "vor 35 Min.", "vor 17 Std.", "vor 3,5 Tagen". */
+    fun ago(seconds: Long): String {
+        val s = seconds.coerceAtLeast(0)
+        return when {
+            s < 60 -> "gerade eben"
+            s < 3600 -> "vor ${s / 60} Min."
+            s < 48 * 3600 -> "vor ${s / 3600} Std."
+            else -> {
+                val d = s / 86_400.0
+                val text = if (d >= 10) d.toInt().toString() else String.format(Locale.GERMAN, "%.1f", d).removeSuffix(",0")
+                "vor $text Tagen"
+            }
+        }
+    }
+
+    fun date(at: Long, zone: ZoneId = ZoneId.systemDefault()): String = Instant.ofEpochSecond(at).atZone(zone).format(dateFormat).replace(".,", ",")
+    fun dateYear(at: Long, zone: ZoneId = ZoneId.systemDefault()): String = Instant.ofEpochSecond(at).atZone(zone).format(fullDate)
+    fun time(at: Long, zone: ZoneId = ZoneId.systemDefault()): String = Instant.ofEpochSecond(at).atZone(zone).format(DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN))
+}

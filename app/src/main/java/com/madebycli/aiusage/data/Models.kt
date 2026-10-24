@@ -40,16 +40,6 @@ data class SpendingLimit(val limit: Double?, val used: Double?, val remainingPer
 data class ExtraUsage(val enabled: Boolean?, val used: Double?, val limit: Double?, val currency: String?, val decimals: Int?)
 @Serializable
 data class PersonalRecord(val usage: UsageSnapshot? = null, val days: List<UsageDay> = emptyList(), val ledger: UsageLedger = UsageLedger())
-@Serializable
-data class ResetEvent(val id: String, val at: Long, val kind: String, val summary: String, val url: String?)
-@Serializable
-data class ResetFeed(val source: ResetSource, val events: List<ResetEvent>, val publishedAt: Long?, val fetchedAt: Long)
-@Serializable
-enum class ResetSource(val label: String, val site: String, val endpoint: String, val minimumSeconds: Long) {
-    CODEX_RESET("codex-reset.com", "https://codex-reset.com", "https://codex-reset.com/api/timeline", 60),
-    LUNARWERX("LunarWerx", "https://codex.lunarwerx.com", "https://codex.lunarwerx.com/api/v1/resets?limit=100", 300)
-}
-
 /** Accepts `Z` and numeric offsets such as `+00:00`; older Android runtimes only parse the former. */
 fun parseInstant(value: String?): Long? {
     val text = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null

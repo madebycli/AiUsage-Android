@@ -1,6 +1,8 @@
 package com.madebycli.aiusage
 
 import com.madebycli.aiusage.data.TimeText
+import com.madebycli.aiusage.data.parseInstant
+import org.junit.Assert.assertNull
 import com.madebycli.aiusage.data.formatPercent
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -34,5 +36,14 @@ class TimeTextTest {
     @Test fun `percent keeps whole numbers whole`() {
         assertEquals("42", formatPercent(42.0))
         assertEquals("42,5", formatPercent(42.5))
+    }
+
+    @Test fun `reset times with numeric offsets parse like Z times`() {
+        assertEquals(1791849600L, parseInstant("2026-10-13T00:00:00Z"))
+        assertEquals(1791849600L, parseInstant("2026-10-13T00:00:00+00:00"))
+        assertEquals(1791849600L, parseInstant("2026-10-13T02:00:00.000000+02:00"))
+        assertEquals(1791849600L, parseInstant("2026-10-12T23:59:59.8+00:00"))
+        assertNull(parseInstant("tomorrow"))
+        assertNull(parseInstant(null))
     }
 }

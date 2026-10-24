@@ -1,13 +1,14 @@
 package com.madebycli.aiusage.ui
 
 import android.Manifest
-import android.content.Intent
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.PowerManager
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,8 +16,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.BatterySaver
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,6 +31,9 @@ import com.madebycli.aiusage.background.AccountRefresh
 import com.madebycli.aiusage.background.ResetAlarms
 import com.madebycli.aiusage.background.ResetAlerts
 import com.madebycli.aiusage.background.ResetNotifier
+import com.madebycli.aiusage.data.TimeText
+import com.madebycli.aiusage.data.Words
+import java.time.Instant
 
 @Composable
 internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
@@ -52,46 +56,57 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
         } else if (ResetAlerts.permitted(context)) update("enabled", true)
         else { update("enabled", true); notificationSettings() }
     }
-    val battery = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-    val unrestricted = battery.isIgnoringBatteryOptimizations(context.packageName)
+    fun openBatterySettings() {
+        try { context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+        catch (_: ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
+    }
+    val unrestricted = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(context.packageName)
     val allowed = ResetAlerts.permitted(context)
-    var batteryHelp by remember { mutableStateOf(false) }
+    val now = Instant.now().epochSecond
+    val last = (values["bg.last"] as? Long)?.takeIf { it > 0 }
+    val failures = values["bg.failures"] as? Int ?: 0
+    val reads = values["bg.reads"] as? Int ?: 0
+
     Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionTitle("Automatisch aktualisieren")
+        SectionTitle("Hintergrund")
         SoftCard {
-            SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik verbundener Accounts", checked("daily", true)) { update("daily", it) }
+            SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik", checked("daily", true)) { update("daily", it) }
             if (checked("daily", true)) {
                 Text("Intervall", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SegmentedTabGroup(AccountRefresh.choices, (values["hours"] as? Int)?.toLong()?.takeIf { it in AccountRefresh.choices } ?: AccountRefresh.DEFAULT_HOURS, { hours ->
                     prefs.edit().putInt("hours", hours.toInt()).apply(); revision++; model.syncBackground()
-                }, { "$it Std." }, fillEqually = true)
-                Text("Zusätzlich liest die App kurz vor und nach jedem Reset, damit der Höchstwert nicht verloren geht.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }, { "$it h" }, fillEqually = true)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
+                StatusLine("Letzte Abfrage", when {
+                    last == null -> "Noch keine im Hintergrund"
+                    else -> "${Words.ago(now - last)} · $reads ${if (reads == 1) "Account" else "Accounts"} gelesen" + if (failures > 0) " · $failures Fehler" else ""
+                })
+                StatusLine("Zusätzlich", "Kurz vor und nach jedem Reset, damit der Höchstwert zählt")
+                StatusLine("Akku", if (unrestricted) "Uneingeschränkt" else "Von Android optimiert. Abfragen können sich verspäten.")
+                if (!unrestricted) TextButton(onClick = ::openBatterySettings, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Rounded.BatterySaver, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Akku-Einstellungen öffnen")
+                }
             }
-            TextButton(onClick = { batteryHelp = true }) { Icon(Icons.Rounded.BatterySaver, null); Spacer(Modifier.width(8.dp)); Text(if (unrestricted) "Akku: uneingeschränkt" else "Hintergrundbetrieb erlauben") }
         }
-        SectionTitle("Reset-Benachrichtigungen")
+        SectionTitle("Reset-Hinweise")
         SoftCard {
             SwitchRow("Reset-Hinweise", "Meldung, wenn ein Limit zurückgesetzt wird", checked("enabled", false)) { enabled ->
-                if (enabled && !allowed) requestPermission()
-                else update("enabled", enabled)
+                if (enabled && !allowed) requestPermission() else update("enabled", enabled)
             }
-            Text(if (allowed) "Android-Freigabe erteilt" else "Android-Freigabe fehlt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusLine("Android-Freigabe", if (allowed) "Erteilt" else "Fehlt")
             if (!allowed) FilledTonalButton(onClick = { requestPermission() }) { Text("Benachrichtigungen erlauben") }
             SwitchRow("Nur bei Nutzung", "Nicht für Zeitfenster ohne Verbrauch", checked("usedOnly", true)) { update("usedOnly", it) }
-            TextButton(onClick = { notificationSettings() }) { Text("Android-Freigabe & Kanäle") }
-        }
-        SectionTitle("Genauigkeit")
-        SoftCard {
+            SwitchRow("Früher Reset", "Meldung, wenn der Anbieter ein Limit vor dem Termin zurücksetzt, zum Beispiel bei einem globalen Reset", checked("spontaneous", true)) { update("spontaneous", it) }
             val exact = ResetAlarms.canScheduleExact(context)
-            Text(if (exact) "Exakte Alarme erlaubt" else "Exakte Alarme nicht erlaubt", style = MaterialTheme.typography.titleSmall)
-            Text(if (exact) "Reset-Hinweise kommen zur gemeldeten Minute, auch wenn das Handy im Ruhemodus ist."
-                else "Android darf Hinweise im Ruhemodus um einige Minuten verschieben. Mit der Erlaubnis kommen sie pünktlich.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            StatusLine("Genauigkeit", if (exact) "Exakte Alarme erlaubt: Hinweise kommen zur gemeldeten Minute" else "Android darf Hinweise im Ruhemodus um einige Minuten verschieben")
             if (!exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) FilledTonalButton(onClick = {
                 try { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) }
-                catch (_: android.content.ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
+                catch (_: ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
             }) { Text("Exakte Alarme erlauben") }
-            TextButton(onClick = { ResetNotifier.sendTest(context) }, enabled = allowed) { Text("Testbenachrichtigung senden") }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { ResetNotifier.sendTest(context) }, enabled = allowed) { Text("Test senden") }
+                TextButton(onClick = { notificationSettings() }) { Text("Android-Einstellungen") }
+            }
         }
         state.connectedProviders.forEach { provider ->
             SectionTitle(provider)
@@ -104,24 +119,25 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
                     SegmentedTabGroup(listOf(0, 5, 15, 30, 60), lead, { selected ->
                         prefs.edit().putInt("lead.${rule.key}", selected).apply(); revision++; model.rescheduleAlerts()
                     }, { if (it == 0) "Zum Reset" else "$it min vorher" })
-                    val next = ResetAlerts.nextReminder(context, state.accounts.map { it.account }, rule)
-                    Text(next?.let { "Nächster Hinweis: ${date(it)}" } ?: "Kein Hinweis geplant. Er wird mit dem nächsten Abruf gesetzt.",
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    state.accountsOf(provider).forEach { entry ->
+                        val next = ResetAlerts.nextReminder(context, rule.slot(entry.account))
+                        StatusLine(entry.title, next?.let { "${TimeText.clock(it, now)} Uhr · ${TimeText.remaining(it - now)}" } ?: "Kein Hinweis geplant")
+                    }
                     TextButton(onClick = {
                         ResetAlerts.channels(context)
                         context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, rule.channel))
-                    }) { Icon(Icons.Rounded.Notifications, null); Spacer(Modifier.width(8.dp)); Text("Ton, Vibration & Anzeige") }
+                    }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Rounded.Notifications, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Ton, Vibration & Anzeige") }
                 }
             }
         }
-        Text("Android kann Hinweise verzögern. Sie beruhen auf dem Reset-Termin, den der Anbieter zuletzt gemeldet hat.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Hinweise beruhen auf dem Reset-Termin, den der Anbieter zuletzt gemeldet hat. Android kann sie verzögern.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    if (batteryHelp) AlertDialog(onDismissRequest = { batteryHelp = false }, title = { Text("Im Hintergrund aktualisieren") },
-        text = { Text("Android ruft die Limits im gewählten Intervall im Hintergrund ab. Schränkt dein Gerät die App stark ein, stelle sie in den Akku-Einstellungen auf uneingeschränkt.") },
-        confirmButton = { TextButton(onClick = {
-            batteryHelp = false
-            val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-            try { context.startActivity(intent) } catch (_: android.content.ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
-        }) { Text("Akku-Einstellungen öffnen") } },
-        dismissButton = { TextButton(onClick = { batteryHelp = false }) { Text("Später") } })
+}
+
+@Composable
+private fun StatusLine(title: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
 }
