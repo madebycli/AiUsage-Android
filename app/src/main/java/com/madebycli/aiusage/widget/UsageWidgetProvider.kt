@@ -23,7 +23,7 @@ class UsageWidgetProvider : AppWidgetProvider() {
     /** Reading the encrypted measurements and drawing take a moment, so they run off the main thread. */
     private fun async(block: () -> Unit) {
         val pending = goAsync()
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { try { block() } finally { pending.finish() } }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch { try { block() } catch (error: Exception) { if (error is CancellationException) throw error } finally { pending.finish() } }
     }
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -33,8 +33,13 @@ class UsageWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    /**
+     * The launcher reports every size while the widget is dragged larger. The new picture is drawn right here from the
+     * last reading, using the reported size, so the old one is never stretched; the stored data is read again afterwards.
+     */
     override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, appWidgetId: Int, newOptions: Bundle) {
-        async { WidgetUpdater.update(context, intArrayOf(appWidgetId)) }
+        if (WidgetData.peek() != null) runCatching { WidgetUpdater.update(context, intArrayOf(appWidgetId), cached = true, options = newOptions) }
+        async { WidgetUpdater.update(context, intArrayOf(appWidgetId), options = newOptions) }
     }
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
@@ -81,31 +86,45 @@ object WidgetUpdater {
 
     fun updateAll(context: Context) = update(context, ids(context))
 
-    fun update(context: Context, widgetIds: IntArray) {
+    fun update(context: Context, widgetIds: IntArray, cached: Boolean = false, options: Bundle? = null) {
         if (widgetIds.isEmpty()) return
         val app = context.applicationContext
         val manager = AppWidgetManager.getInstance(app)
-        val accounts = WidgetData.load(app)
+        // A failed read must not leave the widget empty: it is drawn with what is known, and as the last resort as a placeholder.
+        val accounts = (if (cached) WidgetData.peek() else null) ?: runCatching { WidgetData.load(app) }.getOrNull() ?: WidgetData.peek() ?: emptyList()
         val now = Instant.now().epochSecond
-        widgetIds.forEach { id -> runCatching { manager.updateAppWidget(id, views(app, manager, id, accounts, now)) } }
+        widgetIds.forEach { id ->
+            val sent = listOf(1f, 0.6f, 0.35f).any { quality ->
+                runCatching { manager.updateAppWidget(id, views(app, manager, id, accounts, now, quality, options)) }.isSuccess
+            }
+            if (!sent) runCatching { manager.updateAppWidget(id, RemoteViews(app.packageName, R.layout.widget_root)) }
+        }
     }
 
+    /** The system refuses bitmaps above a memory budget, so big widgets are drawn at a lower density and scaled up. */
+    private const val MAX_PIXELS = 1_400_000f
+
     /** Widget size in dp, from what the launcher reports. */
-    fun sizeDp(context: Context, manager: AppWidgetManager, id: Int): Pair<Int, Int> {
-        val options = manager.getAppWidgetOptions(id)
+    fun sizeDp(context: Context, manager: AppWidgetManager, id: Int, reported: Bundle? = null): Pair<Int, Int> {
+        val options = reported?.takeIf { it.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) > 0 } ?: manager.getAppWidgetOptions(id)
         val landscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val width = options.getInt(if (landscape) AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH else AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
         val height = options.getInt(if (landscape) AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT else AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)
         return (if (width > 0) width else 250) to (if (height > 0) height else 120)
     }
 
-    private fun views(context: Context, manager: AppWidgetManager, id: Int, accounts: List<WidgetAccount>, now: Long): RemoteViews {
+    private fun views(context: Context, manager: AppWidgetManager, id: Int, accounts: List<WidgetAccount>, now: Long, quality: Float, reported: Bundle?): RemoteViews {
         val config = WidgetConfigStore.read(context, id)
-        val (width, height) = sizeDp(context, manager, id)
+        val (width, height) = sizeDp(context, manager, id, reported)
         val refreshing = WidgetConfigStore.refreshingUntil(context, id) > now
-        val bitmap = WidgetRenderer.render(context, config, accounts, width, height, now, refreshing)
+        val density = context.resources.displayMetrics.density
+        val fitting = kotlin.math.sqrt(MAX_PIXELS / (width.coerceAtLeast(40) * height.coerceAtLeast(40).toFloat())).coerceAtMost(density)
+        val bitmap = WidgetRenderer.render(context, config, accounts, width, height, now, refreshing, density = (fitting * quality).coerceAtLeast(0.5f))
         val views = RemoteViews(context.packageName, R.layout.widget_root)
         views.setImageViewBitmap(R.id.widget_image, bitmap)
+        // The placeholder only covers the time before the first drawing; a translucent widget must not show it through.
+        views.setInt(R.id.widget_root, "setBackgroundResource", 0)
+        views.setViewVisibility(R.id.widget_placeholder, android.view.View.GONE)
         val shown = WidgetData.select(accounts, config)
         views.setContentDescription(R.id.widget_image, shown.joinToString(". ") { a ->
             "${a.title}: " + listOfNotNull(a.window(com.madebycli.aiusage.data.FIVE_HOURS)?.let { "5 Stunden ${com.madebycli.aiusage.data.formatPercent(it.usedPercent)} Prozent" },

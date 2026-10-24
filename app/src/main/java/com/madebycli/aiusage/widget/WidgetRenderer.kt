@@ -75,6 +75,9 @@ object WidgetRenderer {
     /** Draws everything with density-independent numbers; [px] converts to pixels. */
     private class Painter(val context: Context, val canvas: Canvas, val density: Float, val fontScale: Float, val palette: WidgetPalette, val config: WidgetConfig) {
         fun px(dp: Float) = dp * density
+
+        /** The same painter with everything [factor] times larger; coordinates are then given in the smaller space. */
+        fun scaled(factor: Float) = if (factor == 1f) this else Painter(context, canvas, density * factor, fontScale, palette, config)
         val regular: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_regular)
         val medium: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_medium)
         val bold: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_bold)
@@ -187,6 +190,17 @@ object WidgetRenderer {
         WidgetStyle.RINGS -> 118f
     }
 
+    /** Natural size of one tile in dp: (width, tallest useful height). Bigger tiles draw everything larger instead of leaving space. */
+    private fun naturalTile(config: WidgetConfig, rows: Int): Pair<Float, Float> = when (config.style) {
+        WidgetStyle.BARS -> (if (rows > 1) 190f else 170f) to maxTileHeight(config, rows)
+        WidgetStyle.COMPACT -> (if (rows > 1) 250f else 200f) to maxTileHeight(config, rows)
+        WidgetStyle.PERCENT -> (if (rows > 1) 150f else 100f) to 82f
+        WidgetStyle.RINGS -> (if (rows > 1) 150f else 100f) to 104f
+    }
+
+    /** Largest enlargement of the content in big widgets. */
+    private const val MAX_ENLARGE = 2.2f
+
     fun render(context: Context, config: WidgetConfig, all: List<WidgetAccount>, widthDp: Int, heightDp: Int, now: Long = Instant.now().epochSecond,
         refreshing: Boolean = false, density: Float = context.resources.displayMetrics.density): Bitmap {
         val width = max(40, widthDp).toFloat()
@@ -226,9 +240,10 @@ object WidgetRenderer {
         val shown = accounts.take(capacity)
         val usedRows = ceil(shown.size / columns.toFloat()).toInt()
         val tileW = (contentW - gap * (columns - 1)) / columns
-        val tileH = min((contentH - gap * (usedRows - 1)) / usedRows, maxTileHeight(config.copy(style = style), rowCount))
-        val gridH = tileH * usedRows + gap * (usedRows - 1)
-        val gridTop = top + max(0f, (contentH - gridH) / 2)
+        val tileH = (contentH - gap * (usedRows - 1)) / usedRows
+        val (naturalW, naturalH) = naturalTile(config.copy(style = style), rowCount)
+        val enlarge = min(tileW / naturalW, tileH / naturalH).coerceIn(1f, MAX_ENLARGE)
+        val gridTop = top
         val framed = accounts.size > 1 || shown.size > 1
         if (hasHeader) drawHeader(painter, accounts, now, refreshing, width, pad, config, hidden = accounts.size - shown.size)
 
@@ -238,11 +253,18 @@ object WidgetRenderer {
             if (framed) painter.roundRect(x, y, tileW, tileH, max(8f, config.corner * 0.55f), withAlpha(palette.tile))
             val inner = if (framed) 10f else 2f
             val rows = rowsFor(account, config)
+            // Content is laid out in a smaller space and enlarged, so text and bars grow with the widget.
+            val k = enlarge
+            val drawer = painter.scaled(k)
+            val tileContentH = min(tileH / k, naturalH)
+            val cx = x / k
+            val cy = (y + (tileH - tileContentH * k) / 2) / k
+            val cw = tileW / k
             when (style) {
-                WidgetStyle.BARS -> drawBars(painter, account, rows, x + inner, y + (if (framed) 9f else 2f), tileW - inner * 2, tileH - (if (framed) 18f else 4f), now)
-                WidgetStyle.COMPACT -> drawCompact(painter, account, rows, x + inner, y, tileW - inner * 2, tileH, now)
-                WidgetStyle.PERCENT -> drawPercent(painter, account, rows, x + inner, y + (if (framed) 8f else 2f), tileW - inner * 2, tileH - (if (framed) 16f else 4f), now)
-                WidgetStyle.RINGS -> drawRings(painter, account, rows, x + inner, y + (if (framed) 8f else 2f), tileW - inner * 2, tileH - (if (framed) 16f else 4f), now)
+                WidgetStyle.BARS -> drawBars(drawer, account, rows, cx + inner, cy + (if (framed) 9f else 2f), cw - inner * 2, tileContentH - (if (framed) 18f else 4f), now)
+                WidgetStyle.COMPACT -> drawCompact(drawer, account, rows, cx + inner, cy, cw - inner * 2, tileContentH, now)
+                WidgetStyle.PERCENT -> drawPercent(drawer, account, rows, cx + inner, cy + (if (framed) 8f else 2f), cw - inner * 2, tileContentH - (if (framed) 16f else 4f), now)
+                WidgetStyle.RINGS -> drawRings(drawer, account, rows, cx + inner, cy + (if (framed) 8f else 2f), cw - inner * 2, tileContentH - (if (framed) 16f else 4f), now)
             }
         }
         if (accounts.size > shown.size && !hasHeader && stripHeight > 0f) {

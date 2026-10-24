@@ -16,8 +16,15 @@ data class WidgetAccount(
 }
 
 object WidgetData {
+    /** The last reading, so that a widget being resized is redrawn at once instead of after the encrypted store is read again. */
+    @Volatile private var last: List<WidgetAccount>? = null
+
+    fun peek(): List<WidgetAccount>? = last
+
     /** Reads the stored measurements. Never touches the network. */
-    fun load(context: Context): List<WidgetAccount> {
+    fun load(context: Context): List<WidgetAccount> = read(context).also { last = it }
+
+    private fun read(context: Context): List<WidgetAccount> {
         val accounts = AccountRegistry(context).list()
         return accounts.map { account ->
             val usage = runCatching { SecureStore(context, account.namespace).readRecord().usage }.getOrNull()

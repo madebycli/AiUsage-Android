@@ -2,7 +2,18 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_placeholder">
+    <!-- Shown until the first drawing arrives, so a widget is never an empty hole. -->
+    <TextView
+        android:id="@+id/widget_placeholder"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="@string/widget_loading"
+        android:textColor="@color/widget_placeholder_text"
+        android:textSize="12sp"
+        android:importantForAccessibility="no" />
     <ImageView
         android:id="@+id/widget_image"
         android:layout_width="match_parent"
