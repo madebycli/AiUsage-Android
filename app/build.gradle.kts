@@ -16,6 +16,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Public test key, intentionally shared. Never use this key for a release.
+    val releaseKeystore: String? = System.getenv("ANDROID_KEYSTORE_PATH")
     signingConfigs {
         create("stableDebug") {
             storeFile = file("debug-signing.p12")
@@ -24,9 +25,9 @@ android {
             keyPassword = "android"
         }
         // Release key from CI secrets. Without them the release APK stays unsigned instead of falling back to the test key.
-        create("release") {
-            System.getenv("ANDROID_KEYSTORE_PATH")?.let { path ->
-                storeFile = file(path)
+        releaseKeystore?.let {
+            create("release") {
+                storeFile = file(it)
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("ANDROID_KEY_ALIAS")
                 keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
@@ -39,7 +40,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            releaseKeystore?.let { signingConfig = signingConfigs.getByName("release") }
         }
         // Optimised build for daily use: R8 shrinking, not debuggable, same public test signer as debug,
         // so it installs over the debug build.
