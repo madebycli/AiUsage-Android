@@ -30,6 +30,20 @@ class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
     suspend fun get(url: String, headers: Map<String, String> = emptyMap()): String = execute(
         request(url, headers).get().build()
     )
+    /** Public pages may canonicalise their paths. Never follow them to another origin or send account headers. */
+    suspend fun getPublicHtml(url: String): String {
+        val page = request(url, mapOf("Accept" to "text/html")).get().build()
+        val origin = page.url
+        val pageClient = client.newBuilder().followRedirects(true).followSslRedirects(false)
+            .addNetworkInterceptor { chain ->
+                val target = chain.request().url
+                if (target.scheme != origin.scheme || target.host != origin.host || target.port != origin.port)
+                    throw IOException("Public page redirected to another origin")
+                chain.proceed(chain.request())
+            }.build()
+        // OkHttp bounds redirect chains and applies the call timeout to the complete chain.
+        return execute(page, pageClient)
+    }
     suspend fun postJson(url: String, json: String): String = execute(
         request(url).post(json.toRequestBody("application/json".toMediaType())).build()
     )
@@ -42,8 +56,8 @@ class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
         .header("Accept", "application/json").header("Cache-Control", "no-cache, no-store")
         .header("Pragma", "no-cache").apply { headers.forEach { (name, value) -> header(name, value) } }
 
-    private suspend fun execute(request: Request): String = suspendCancellableCoroutine { continuation ->
-        val call = client.newCall(request)
+    private suspend fun execute(request: Request, requestClient: OkHttpClient = client): String = suspendCancellableCoroutine { continuation ->
+        val call = requestClient.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {

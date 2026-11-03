@@ -56,7 +56,7 @@ class IntelRepository(private val http: HttpTransport, private val clock: () -> 
                 IntelResult(report, partial = "Der Verlauf von ${source.label} konnte nicht geladen werden.")
             }
         }
-        IntelSource.CODEX_TRACKER, IntelSource.CLAUDE_TRACKER -> IntelResult(IntelParser.tracker(source, http.get(source.site, mapOf("Accept" to "text/html")), now))
-        IntelSource.CLAUDE_RESETS -> IntelResult(IntelParser.claudeResets(http.get(source.site, mapOf("Accept" to "text/html")), now))
+        IntelSource.CODEX_TRACKER, IntelSource.CLAUDE_TRACKER -> IntelResult(IntelParser.tracker(source, http.getPublicHtml(source.site), now))
+        IntelSource.CLAUDE_RESETS -> IntelResult(IntelParser.claudeResets(http.getPublicHtml(source.site), now))
     }
 }

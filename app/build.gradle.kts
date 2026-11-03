@@ -11,8 +11,8 @@ android {
         applicationId = "com.madebycli.aiusage"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.9.0"
+        versionCode = 12
+        versionName = "0.9.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Public test key, intentionally shared. Never use this key for a release.
