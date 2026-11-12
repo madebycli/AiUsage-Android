@@ -2,21 +2,25 @@
 
 ## Local checks
 
-- **168 tests in 17 suites**, zero failures, errors or skipped tests. This includes **28 Compose UI tests** and native widget-renderer tests. [Suite counts](tests.json).
-- The 28 UI tests passed again after adding the additional widget-configuration gallery views.
-- Android Lint: **0 errors, 58 warnings**. Existing warnings are not claimed to be resolved.
+- **172 tests in 17 suites**, zero failures, errors or skipped tests. This includes **32 Compose UI tests** and native widget-renderer tests. [Suite counts](tests.json).
+- Android Lint: **0 errors, 59 warnings**. Warnings are not claimed to be resolved; this includes the ported SharedPreferences API style recommendation.
 - `git diff --check` passes.
 - The bottom-navigation implementation block matches approved commit `c0cf342` byte for byte. Its existing order/visibility/start-page regression tests still pass.
 
 ```sh
-./gradlew :app:testDebugUnitTest :app:lintDebug --max-workers=2
-./gradlew :app:testDebugUnitTest --tests '*.UiSmokeTest' --max-workers=2
+./gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon --max-workers=1 \
+  -Dorg.gradle.jvmargs='-Xmx2g -Dfile.encoding=UTF-8' \
+  -Pkotlin.compiler.execution.strategy=in-process
 python tools/build_preview_gallery.py
 ```
 
 ## New behavioral coverage
 
 - Every count-up frame contains only a whole-number percentage, including a fractional measured target; the final 42.5 measurement displays as 43%.
+- All 30 normal/emphasized Material typography slots use the bundled Google Sans Flex family.
+- The fixed bento geometry matches Orion’s tall-left/two-short-right structure.
+- A real long-press drag trades settings tiles and writes the new order to preferences.
+- Ordinary toolbar titles replace the removed hero banners.
 - Every settings destination opens and returns; settings search filters and opens the matching destination.
 - Native title layout results confirm all six German tile labels remain on one line without visual overflow.
 - Decorative rotation changes the actual rendered bitmap.
@@ -28,9 +32,11 @@ python tools/build_preview_gallery.py
 
 ## Preview artifact
 
-The new GitHub prerelease is built with the **normal** `com.madebycli.aiusage` package, version **0.9.3 (14)**. The release workflow uses the existing release certificate and checks it against Stable 0.9.1 before publishing. Preview is a GitHub prerelease designation. No separate `.preview` Android application is created.
+The new GitHub prerelease is built with the **normal** `com.madebycli.aiusage` package, version **0.9.4 (15)**. The release workflow uses the existing release certificate and checks it against Stable 0.9.1 before publishing. Preview is a GitHub prerelease designation. No separate `.preview` Android application is created.
 
 The workflow runs the full tests, `lintRelease` and `assembleRelease`. Release signature, normal package/label, non-debuggable status and ZIP integrity are checked before upload. The release contains the APK and SHA256SUMS, and links to this English review. [Workflow](https://github.com/madebycli/AiUsage-Android/actions/workflows/release.yml).
+
+The first local attempt exceeded the environment’s memory limit. The completed run used one Gradle worker and in-process Kotlin compilation; it is the result reported above.
 
 ## Interpretation limits
 

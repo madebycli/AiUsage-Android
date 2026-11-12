@@ -30,7 +30,6 @@ internal fun AccountsScreen(state: UiState, model: UsageViewModel, sort: (() -> 
     var confirm by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<String?>(null) }
     LazyColumn(Modifier.widthIn(max = 560.dp).fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        if (state.anyConnected) item(key = "hero") { PageHero(DesignPage.ACCOUNTS) }
         if (!state.anyConnected) item(key = "welcome") { Welcome() }
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
             AccountCard(entry, state.login(entry.provider).busy, Modifier.animateItem().staggeredEntrance(index, entry.id),
@@ -86,7 +85,7 @@ internal fun RenameDialog(entry: AccountState, dismiss: () -> Unit, save: (Strin
 @Composable
 private fun Welcome() {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHero(DesignPage.USAGE, "Dein Verbrauch. Dein Überblick.", "Codex und Claude Code, auch mit mehreren Accounts.")
+        Text("AI Usage", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { Providers.all.forEach { BrandTile(it) } }
         Text("Verbinde Codex und Claude Code mit deinem Konto, auch mehrere pro Anbieter. Die Daten kommen direkt vom Anbieter.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)

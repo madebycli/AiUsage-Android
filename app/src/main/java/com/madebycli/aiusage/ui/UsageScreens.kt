@@ -50,7 +50,6 @@ internal fun UsageScreen(state: UiState, now: Long, sorting: Boolean, open: (Str
         return
     }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.USAGE, compact = true) }
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
             AccountCard(entry, now, index, Modifier.animateItem()) { open(entry.id) }
         }
@@ -140,7 +139,7 @@ internal fun SortList(accounts: List<AccountState>, commit: (List<String>) -> Un
     }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(sortGap)) {
         item(key = "hint") {
-            PageHero(DesignPage.NAVIGATION, "Accounts ordnen", "Am Griff ziehen oder mit den Pfeilen verschieben.", compact = true)
+            Text("Am Griff ziehen oder mit den Pfeilen verschieben.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         items(order, key = { it }) { id ->
             val entry = accounts.firstOrNull { it.id == id } ?: return@items
@@ -187,7 +186,6 @@ internal fun SortList(accounts: List<AccountState>, commit: (List<String>) -> Un
 internal fun AccountDetailScreen(state: UiState, now: Long, entry: AccountState, stats: (() -> Unit)?) {
     val usage = entry.usage
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.USAGE, entry.title, entry.provider, compact = true) }
         item {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BrandIcon(entry.provider)

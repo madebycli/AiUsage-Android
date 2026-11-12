@@ -32,7 +32,6 @@ internal fun NavigationSettings(state: UiState, model: UsageViewModel) {
         if (from != to) { order.add(to, order.removeAt(from)); model.setTabOrder(order) }
     }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.NAVIGATION) }
         item(key = "preview") { BarPreview(nav) }
         item(key = "bar-title") { SectionTitle("Untere Leiste") }
         items(nav.order, key = { it.name }) { tab ->

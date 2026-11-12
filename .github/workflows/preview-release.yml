@@ -5,7 +5,7 @@ on:
       tag:
         description: GitHub prerelease tag
         required: true
-        default: v0.9.3-preview.1
+        default: v0.9.4-preview.1
         type: string
 permissions:
   contents: write
@@ -56,7 +56,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew testDebugUnitTest lintRelease assembleRelease --max-workers=2 --stacktrace
+        run: ./gradlew testDebugUnitTest lintRelease assembleRelease --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process --stacktrace
       - name: Verify update signature and normal application identity
         run: |
           python3 - <<'PY'
@@ -81,7 +81,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
           sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
           cat > preview-notes.md <<'NOTES'
-          Preview of AI Usage 0.9.3: Orion UI throughout, whole-number percentages, working widget presets and vertical layouts.
+          Preview of AI Usage 0.9.4: original Orion settings layout and full-page open/close transitions, removed banners/title stripes, Google Sans Flex across every typography style.
 
           Normal Android package: `com.madebycli.aiusage`. Signed with the same release certificate as Stable 0.9.1; optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate Android application.
 

@@ -84,7 +84,6 @@ fun DefaultScaffoldWithMediumTopAppBar(
     scrollBehavior: TopAppBarScrollBehavior,
     topAppBarColors: TopAppBarColors = TopAppBarDefaults.topAppBarColors(),
     contentWindowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
-    accentTitle: Boolean = false,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
@@ -93,7 +92,6 @@ fun DefaultScaffoldWithMediumTopAppBar(
             MediumTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (accentTitle) Box(Modifier.size(4.dp, 26.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)))
                         Text(text = title)
                     }
                 },
@@ -123,7 +121,6 @@ fun DefaultScaffoldWithSmallTopAppBar(
     scrollBehavior: TopAppBarScrollBehavior,
     topAppBarColors: TopAppBarColors = TopAppBarDefaults.topAppBarColors(),
     contentWindowInsets: WindowInsets = ScaffoldDefaults.contentWindowInsets,
-    accentTitle: Boolean = false,
     content: @Composable (PaddingValues) -> Unit
 ) {
     Scaffold(
@@ -132,7 +129,6 @@ fun DefaultScaffoldWithSmallTopAppBar(
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (accentTitle) Box(Modifier.size(4.dp, 26.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)))
                         Text(text = title)
                     }
                 },

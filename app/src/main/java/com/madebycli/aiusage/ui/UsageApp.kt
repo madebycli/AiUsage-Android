@@ -4,6 +4,11 @@ package com.madebycli.aiusage.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -90,7 +95,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
 
     @Composable fun Page(title: String, actions: @Composable RowScope.() -> Unit = {}, content: @Composable () -> Unit) =
         DefaultScaffoldWithSmallTopAppBar(
-            title = if (title != DesignPage.ABOUT.title && DesignPage.entries.any { it.title == title }) "" else title, scrollBehavior = detailScroll,
+            title = title, scrollBehavior = detailScroll,
             modifier = Modifier.nestedScroll(detailScroll.nestedScrollConnection),
             navigationIcon = { IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
             actions = actions
@@ -108,7 +113,16 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
     val shared = this
     // A solid base under every page and transition: nothing can shine through while pages move.
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-    AnimatedContent(screen, transitionSpec = pageTransition(), label = "pages") { target ->
+    val regularPageTransition = pageTransition()
+    AnimatedContent(screen, transitionSpec = {
+        when {
+            targetState.key == "route:settings" ->
+                (slideInHorizontally { it / 3 } + fadeIn()) togetherWith fadeOut()
+            initialState.key == "route:settings" ->
+                fadeIn() togetherWith (slideOutHorizontally { it / 3 } + fadeOut())
+            else -> regularPageTransition(this)
+        }
+    }, label = "pages") { target ->
         OrionSharedScreen(shared, this) {
         val key = target.key
         when {
@@ -116,7 +130,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
             key.startsWith("login:") -> {
                 val provider = key.removePrefix("login:")
                 DefaultScaffoldWithSmallTopAppBar(
-                    title = "", scrollBehavior = detailScroll,
+                    title = "$provider verbinden", scrollBehavior = detailScroll,
                     navigationIcon = { IconButton(onClick = { model.cancelLogin(provider) }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } }
                 ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ConnectScreen(provider, state, model) } }
             }
@@ -124,9 +138,8 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
             key.startsWith("route:") -> {
                 val current = key.removePrefix("route:")
                 when {
-                    current == Route.SETTINGS -> Page("Einstellungen") {
-                        SettingsScreen(state, model, { stack.add(Route.ACCOUNTS) }, { stack.add(Route.NOTIFICATIONS) }, { stack.add(Route.NAVIGATION) }, { stack.add(Route.APPEARANCE) }, { stack.add(Route.WIDGETS) }, { stack.add(Route.ABOUT) })
-                    }
+                    current == Route.SETTINGS -> SettingsScreen(state, model, onBack = ::back,
+                        onSortAccounts = { tab = AppTab.USAGE; stack.clear(); sorting = true })
                     current == Route.APPEARANCE -> Page("Erscheinungsbild") { AppearanceScreen(state, model) }
                     current == Route.WIDGETS -> Page("Widgets") { WidgetsScreen() }
                     current == Route.ABOUT -> Page("Über AI Usage") { AboutScreen() }
@@ -152,7 +165,6 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
                 // The bar stays fixed: its scroll behavior is not connected to the content, so it never collapses.
                 DefaultScaffoldWithSmallTopAppBar(
                     title = if (sorting) "Reihenfolge" else tab.title.let { if (tab == AppTab.USAGE) "AI Usage" else it },
-                    accentTitle = true,
                     scrollBehavior = mainScroll,
                     actions = {
                         if (sorting) {
@@ -200,7 +212,7 @@ private fun AccountPage(entry: com.madebycli.aiusage.AccountState, state: UiStat
     var renaming by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     DefaultScaffoldWithSmallTopAppBar(
-        title = "", scrollBehavior = scroll,
+        title = entry.title, scrollBehavior = scroll,
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
         actions = {

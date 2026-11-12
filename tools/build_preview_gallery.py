@@ -33,7 +33,8 @@ for name in SCREENS.values():
         raise FileNotFoundError(f"Run the full host tests first: {name}.png is missing")
 for target, name in SCREENS.items():
     shutil.copyfile(SOURCE / f"{name}.png", IMAGES / f"{target}.png")
-for name, prefix, width in (("settings-entry", "settings", 440), ("submenu", "subpage", 440),
+for name, prefix, width in (("settings-entry", "settings", 440), ("submenu", "subpage", 440), ("submenu-close", "return", 440),
+                            ("settings-close", "settings-close", 440),
                             ("search", "search", 440), ("percentage", "counter", 288)):
     files = sorted(SOURCE.glob(f"motion-{prefix}-[0-9][0-9].png"))
     if not files:
@@ -75,4 +76,4 @@ if len(suites) > 1:
     result["suites"] = [{key: s.attrib[key] for key in ("name", "tests", "failures", "errors", "skipped")}
                         for s in suites]
     (OUTPUT / "tests.json").write_text(json.dumps(result, indent=2) + "\n")
-print(f"Assembled {len(SCREENS)} screenshots, four GIFs and an overview sheet.")
+print(f"Assembled {len(SCREENS)} screenshots, six GIFs and an overview sheet.")

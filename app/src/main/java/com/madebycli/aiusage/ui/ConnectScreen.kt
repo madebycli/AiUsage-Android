@@ -38,7 +38,6 @@ internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewMod
     }
     Column(Modifier.widthIn(max = 560.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHero(DesignPage.LOGIN, "$provider verbinden")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             BrandTile(provider, 56)
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

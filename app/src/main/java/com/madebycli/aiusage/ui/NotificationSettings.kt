@@ -68,7 +68,6 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
     val reads = values["bg.reads"] as? Int ?: 0
 
     Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHero(DesignPage.NOTIFICATIONS)
         SectionTitle("Hintergrund")
         SoftCard {
             SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik", checked("daily", true)) { update("daily", it) }

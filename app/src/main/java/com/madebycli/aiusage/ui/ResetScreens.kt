@@ -57,7 +57,6 @@ private fun ResetProviderBody(state: UiState, now: Long, active: String, open: (
     val loaded = outlook.sources.any { it.state != SourceState.EMPTY }
     val banked = state.accountsOf(active).filter { entry -> entry.usage?.let { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null } == true }
     LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.RESETS, compact = true) }
         if (state.intelLoading && !loaded) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         if (problems.isNotEmpty()) item(key = "problems") {
             Notice(problems.joinToString("\n") { "${it.source.label}: ${it.error}" }, error = outlook.horizons.isEmpty() && outlook.timeline.isEmpty())
@@ -258,7 +257,6 @@ private fun HistoryList(outlook: ResetOutlook) {
     val entries = outlook.timeline.filter { when (filter) { HistoryFilter.ALL -> true; HistoryFilter.RESETS -> it.kind != ResetKind.BANKED; HistoryFilter.BANKED -> it.kind == ResetKind.BANKED } }
     val gaps = ResetOutlookBuilder.gapsDays(outlook.timeline.filter { it.kind != ResetKind.BANKED }).let { list -> outlook.timeline.filter { it.kind != ResetKind.BANKED }.zip(list).toMap() }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item(key = "hero") { PageHero(DesignPage.HISTORY, compact = true) }
         item(key = "filter") { SegmentedTabGroup(HistoryFilter.entries, filter, { filter = it }, { it.title }, fillEqually = true) }
         if (entries.isEmpty()) item { SoftCard { Text("Noch keine Meldungen", style = MaterialTheme.typography.titleMedium) } }
         val byMonth = entries.groupBy { Instant.ofEpochSecond(it.at).atZone(ZoneId.systemDefault()).let { d -> d.year to d.monthValue } }
@@ -285,7 +283,6 @@ private fun SourcesList(outlook: ResetOutlook, now: Long) {
     val uri = LocalUriHandler.current
     val colors = MaterialTheme.colorScheme
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.SOURCES, compact = true) }
         items(outlook.sources, key = { it.source.name }) { status ->
             SoftCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {

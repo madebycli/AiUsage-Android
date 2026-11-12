@@ -105,7 +105,6 @@ internal fun StatsTab(state: UiState, now: Long, scope: String, select: (String)
     val byDate = remember(days) { days.associateBy { it.date } }
 
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxSize(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item(key = "hero") { PageHero(DesignPage.STATS, compact = true) }
         if (accounts.size > 1) item(key = "scope") {
             val ids = listOf(ALL_ACCOUNTS) + accounts.map { it.id }
             SegmentedTabGroup(ids, if (active != null) active.id else ALL_ACCOUNTS, select, { id -> if (id == ALL_ACCOUNTS) "Alle" else accounts.first { it.id == id }.title },

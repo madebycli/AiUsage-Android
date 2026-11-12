@@ -1,25 +1,24 @@
-# Visual self-review
+# Visual self-review · 0.9.4
 
-This review is written in English. The screenshots deliberately exercise the app's German labels, including long settings names. They show native Compose components with fixture data; they are not generated illustrations.
+This review is in English. The screenshots use the app’s German labels to exercise long wording. They are actual Android host renderings with fixture data, not generated mockups.
 
-## Findings corrected during implementation
+## Corrections in this preview
 
-1. **Fractional counter frames changed the width of the percentage.** Display formatting now rounds to whole numbers in the app, notifications, widgets and accessibility labels. Measurements, calculations, prices and non-percentage units keep their precision. The real percentage ring uses a constant type-size factor for 0–100%; its count-up frames are checked for digit-only percentage text.
-2. **The original widget size tabs were only simulations.** They did not change stored configuration. Real Detailed, Compact and Rings presets now update the per-widget settings; the size simulator is explicitly labelled separately.
-3. **Automatic account columns prevented a fixed vertical layout.** Users can now select automatic layout, a vertical stack or a two-column grid. Rings and percentage layouts also offer vertically stacked time windows.
-4. **Rings silently became Compact at a common 4×2 size.** The previous minimum-height threshold was slightly larger than the available content. It is corrected and covered by a regression test. Truly insufficient sizes still use a compact fallback, now explained in the configuration UI.
-5. **Settings were only a pair of decorated tiles.** They now contain six destinations, including dedicated Appearance, Widgets and About pages. Every other existing destination also uses the shared presentation family.
-6. **Long German tile names broke inside words.** The final tiles use native single-line auto sizing. A layout test checks every title for overflow. Large-font layouts use a single column and taller tiles.
-7. **Background decorations increased header height.** Their layout now follows the measured foreground with `matchParentSize`; they no longer reserve empty space below the actual header content.
-8. **Repeated login headings duplicated action labels.** Navigation bars and page identity areas no longer repeat the same login title. The first code step has its own heading, distinct from the Copy action.
-9. **Widget configuration could lose edits during recreation.** The selected configuration now has a saveable serialized state. The preset UI test restores the saved state before confirming the result.
+1. **The previous settings transition shared only a decorative header.** The settings menu now owns a local saved destination, following Orion’s `SettingsScreen`. The matching shared key covers the source bento and the entire destination Scaffold. Orion’s default effect specs and `scaleToBounds(FillWidth, TopCenter)` drive opening and closing, without remeasuring page contents every frame.
+2. **The previous settings grid did not match the reference.** Fixed Orion slots now provide a full-width first tile, a tall left tile beside two compact tiles, and lower full-width tiles. The integrated heading and persistent search follow the supplied screenshot. The actual Orion long-press drag/trade and spring glide code is adapted to the six AI Usage categories; the chosen order persists.
+3. **Repeated wide identity banners crowded the pages.** The `PageHero` component and every use are removed. Settings destinations, usage, statistics, resets, source status, history, sign-in and widget configuration use their ordinary titles. About retains its app icon/version identity. The integrated settings hub heading remains as requested in the reference.
+4. **Colored vertical title stripes were distracting.** The stripe option and its drawing code are removed from the shared scaffold.
+5. **Some text did not use the selected font.** The embedded files were already Google Sans Flex derivatives, verified by their original Google font metadata. The 15 emphasized Material styles had not been assigned the family. All 30 typography slots now explicitly use it. The font asset is not misrepresented as a new download.
+6. **Saved scroll position affected the gallery.** Returning from About correctly restored the scrolled hub. The gallery test now explicitly scrolls to the integrated heading before taking the overview image; the app retains the saved position during ordinary use.
 
-## What the images establish
+## Retained work
 
-The gallery covers the real settings destinations, source attribution, both login screens, overview and detail cards, statistics, reset views, widget configuration and actual widget bitmaps. Frame sequences show settings entry, a tile-to-subpage transition, expanding search and the actual percentage ring. A separate test confirms the decorative shape continues rotating.
+Whole-number percentage frames, stable ring type size, applied widget presets, saved widget edits, vertical account/window layouts and the Rings size correction remain included. Authentication, account actions, permission controls and reset computations retain their existing callbacks. The bottom-navigation implementation is unchanged.
 
-The actual bottom-navigation source block was compared against the approved 0.9.2 implementation and is unchanged. Existing navigation tests remain part of the suite.
+## Evidence and intentional differences
 
-## Limits
+The gallery contains 25 screenshots, six recorded frame sequences and an overview sheet. It includes settings entry/exit and tile-to-page opening **and return** animations. The root settings slide uses the same one-third-width offset and default animation parameters as Orion `Root.kt`. Tests exercise all six destinations, search, drag persistence, bento geometry, long German labels, font assignment, rotation and the earlier data/widget behavior.
 
-Robolectric API 35 with native graphics is an Android host runtime, not a connected phone or launcher. These images do not establish Android 17 device frame rate, real OAuth browser completion, live account access, launcher resizing behavior or background delivery. The final normal-ID APK is built and signed by GitHub using the existing release key. Its signature is checked against Stable 0.9.1 before publication.
+This is a port of Orion’s settings layout and transition implementation into AI Usage, not a replacement with store features. AI Usage categories and controls remain. The supplied reference adds a persistent search and integrated decorative heading; the user explicitly requested removing the separate destination banners, so those are intentionally omitted. Large-font mode uses one column for readability.
+
+No phone or emulator is attached. Host screenshots do not establish Android 17 device frame rate, launcher resizing, live OAuth completion or background delivery. The final normal-ID APK is signed in GitHub with the existing release key and checked against Stable 0.9.1 before publication.

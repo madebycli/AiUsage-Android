@@ -1,5 +1,5 @@
 {
-  "tests": 168,
+  "tests": 172,
   "failures": 0,
   "errors": 0,
   "skipped": 0,
@@ -55,7 +55,7 @@
     },
     {
       "name": "com.madebycli.aiusage.UiSmokeTest",
-      "tests": "28",
+      "tests": "32",
       "failures": "0",
       "errors": "0",
       "skipped": "0"

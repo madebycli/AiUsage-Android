@@ -70,37 +70,16 @@ val DesignPage.shape: androidx.graphics.shapes.RoundedPolygon get() = when (this
     else -> MaterialShapes.Cookie9Sided
 }
 
-/** Orion Settings.Page hero, scaled to compact data pages; both decorative polygons rotate. */
-@Composable
-fun PageHero(page: DesignPage, title: String = page.title, description: String = page.description, compact: Boolean = false) {
-    val accent = page.accent
-    val (bg, fg) = orionTonal(accent)
-    val shape = page.shape
-    Box(Modifier.orionSharedBounds("settings:${page.name}").fillMaxWidth().clipToBounds().background(Brush.verticalGradient(listOf(bg, MaterialTheme.colorScheme.background)), MaterialTheme.shapes.extraLarge)) {
-        // Decoration follows the measured foreground instead of making the header artificially tall.
-        Box(Modifier.matchParentSize()) {
-            OrionSpinner(shape, fg.copy(.09f), if (compact) 120.dp else 200.dp, Modifier.align(Alignment.TopEnd).offset(40.dp, (-32).dp), 40000)
-        }
-        Row(Modifier.padding(if (compact) 14.dp else 20.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.size(if (compact) 48.dp else 64.dp), contentAlignment = Alignment.Center) {
-                OrionSpinner(shape, fg.copy(.16f), if (compact) 48.dp else 64.dp, periodMs = 18000)
-                Icon(page.icon, null, Modifier.size(if (compact) 24.dp else 30.dp), tint = fg)
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = if (compact) MaterialTheme.typography.titleLargeEmphasized else MaterialTheme.typography.headlineSmallEmphasized, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (description.isNotBlank()) Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
 @Composable
 internal fun AppearanceScreen(state: UiState, model: UsageViewModel) {
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHero(DesignPage.APPEARANCE)
         SectionTitle("Farbschema")
         SoftCard {
             SegmentedTabGroup(ThemeMode.entries, state.theme, model::setTheme, { when(it) { ThemeMode.SYSTEM -> "System"; ThemeMode.LIGHT -> "Hell"; ThemeMode.DARK -> "Dunkel" } }, fillEqually = true)
+        }
+        SoftCard {
+            Text("Google Sans Flex", style = MaterialTheme.typography.titleMedium)
+            Text("Schriftart der App", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         MenuCard {
             SwitchRow("Android-Farben", "Farbpalette aus dem Hintergrundbild", state.dynamicColor, model::setDynamic)
@@ -113,7 +92,7 @@ internal fun AppearanceScreen(state: UiState, model: UsageViewModel) {
 internal fun AboutScreen() {
     val uri = LocalUriHandler.current
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(Modifier.fillMaxWidth().orionSharedBounds("settings:ABOUT"), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.size(168.dp), contentAlignment = Alignment.Center) {
                 OrionSpinner(MaterialShapes.SoftBurst, MaterialTheme.colorScheme.primary.copy(.20f), 160.dp, periodMs = 30000)
                 Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer, shadowElevation = 6.dp) {
@@ -142,7 +121,6 @@ internal fun WidgetsScreen() {
     var ids by remember { mutableStateOf(manager.getAppWidgetIds(ComponentName(context, UsageWidgetProvider::class.java)).toList()) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { ids = manager.getAppWidgetIds(ComponentName(context, UsageWidgetProvider::class.java)).toList() }
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        PageHero(DesignPage.WIDGETS)
         if (ids.isEmpty()) Notice("Zum Hinzufügen den Homescreen lange drücken, Widgets öffnen und AI Usage auswählen. Größe und Platzierung legst du im Launcher fest.")
         ids.forEach { id ->
             val config = WidgetConfigStore.read(context, id)

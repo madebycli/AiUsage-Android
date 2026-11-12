@@ -427,13 +427,14 @@ class UiSmokeTest {
             screenshot("orion-page-" + com.madebycli.aiusage.ui.DesignPage.entries.first { it.title == title }.name.lowercase())
             compose.onNodeWithContentDescription("Zurück").performClick()
         }
+        compose.onNodeWithTag("settings-hub-header").performScrollTo()
         screenshot("orion-settings-full")
     }
-    @Test fun `settings search expands filters and still opens the selected destination`() {
+    @Test fun `persistent settings search filters and opens the selected destination`() {
         val model = model()
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
         compose.onNodeWithContentDescription("Einstellungen").performClick()
-        compose.onNodeWithContentDescription("Einstellungen suchen").performClick()
+        compose.onNode(hasSetTextAction()).performClick()
         compose.onNode(hasSetTextAction()).performTextInput("widget")
         compose.onNode(hasText("Anmeldungen") and hasClickAction()).assertDoesNotExist()
         compose.onNode(hasText("Widgets") and hasClickAction()).performClick()
@@ -454,10 +455,13 @@ class UiSmokeTest {
         }
         compose.onNodeWithText("43%").assertIsDisplayed()
     }
-    @Test fun `Orion page decoration actually keeps rotating`() {
+    @Test fun `Orion settings decoration actually keeps rotating`() {
+        val model = model()
         compose.mainClock.autoAdvance = false
-        compose.setContent { AniHyouTheme(dynamicColor = false) { com.madebycli.aiusage.ui.PageHero(com.madebycli.aiusage.ui.DesignPage.APPEARANCE) } }
-        compose.mainClock.advanceTimeBy(100)
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.mainClock.advanceTimeBy(1200)
         val first = compose.onRoot().captureToImage().asAndroidBitmap()
         compose.mainClock.advanceTimeBy(3100)
         val next = compose.onRoot().captureToImage().asAndroidBitmap()
@@ -482,7 +486,7 @@ class UiSmokeTest {
         assert(saved?.windowLayout == com.madebycli.aiusage.widget.WidgetWindowLayout.STACKED)
     }
 
-    @Test fun `record real settings morph and expanding search frames`() {
+    @Test fun `record real settings opening closing and search frames`() {
         val model = model()
         compose.mainClock.autoAdvance = false
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
@@ -492,9 +496,11 @@ class UiSmokeTest {
         compose.onNode(hasText("Erscheinungsbild") and hasClickAction()).performClick()
         repeat(28) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-subpage-%02d".format(i)) }
         compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.mainClock.advanceTimeBy(1200)
-        compose.onNodeWithContentDescription("Einstellungen suchen").performClick()
+        repeat(28) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-return-%02d".format(i)) }
+        compose.onNode(hasSetTextAction()).performTextInput("widget")
         repeat(16) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-search-%02d".format(i)) }
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        repeat(28) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-settings-close-%02d".format(i)) }
     }
 
     @Test fun `all settings tile titles fit on a single line with long German labels`() {
@@ -506,6 +512,55 @@ class UiSmokeTest {
             compose.onNodeWithText(title, useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
             assert(results.single().lineCount == 1 && !results.single().hasVisualOverflow) { title }
         }
+    }
+
+    @Test fun `all material typography slots use Google Sans Flex including emphasized text`() {
+        val t = com.axiel7.anihyou.core.ui.theme.UsageTypography
+        val family = t.bodyLarge.fontFamily
+        assert(family != null)
+        listOf(t.displayLarge, t.displayMedium, t.displaySmall, t.headlineLarge, t.headlineMedium, t.headlineSmall, t.titleLarge, t.titleMedium, t.titleSmall, t.bodyLarge, t.bodyMedium, t.bodySmall, t.labelLarge, t.labelMedium, t.labelSmall, t.displayLargeEmphasized, t.displayMediumEmphasized, t.displaySmallEmphasized, t.headlineLargeEmphasized, t.headlineMediumEmphasized, t.headlineSmallEmphasized, t.titleLargeEmphasized, t.titleMediumEmphasized, t.titleSmallEmphasized, t.bodyLargeEmphasized, t.bodyMediumEmphasized, t.bodySmallEmphasized, t.labelLargeEmphasized, t.labelMediumEmphasized, t.labelSmallEmphasized).forEach { assert(it.fontFamily == family) }
+    }
+    @Test fun `home and settings subpages have ordinary titles without the removed banners`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithText("Dein Verbrauch").assertDoesNotExist()
+        compose.onNodeWithText("Alle Accounts und ihre Zeitfenster.").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNode(hasText("Benachrichtigungen") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithText("Resets und Aktualisierung im Blick.").assertDoesNotExist()
+        compose.onNodeWithText("Benachrichtigungen").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNode(hasText("Erscheinungsbild") and hasClickAction()).performScrollTo().performClick()
+        compose.onNodeWithText("Google Sans Flex").assertIsDisplayed()
+        compose.onNodeWithText("Farben und Kontraste für deinen Alltag.").assertDoesNotExist()
+    }
+    @Test fun `settings bento geometry uses one wide tile then a tall tile beside two short tiles`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        val accounts = compose.onNode(hasText("Anmeldungen") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val look = compose.onNode(hasText("Erscheinungsbild") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val notifications = compose.onNode(hasText("Benachrichtigungen") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        val widgets = compose.onNode(hasText("Widgets") and hasClickAction()).fetchSemanticsNode().boundsInRoot
+        assert(accounts.width > look.width * 1.8f)
+        assert(look.height > notifications.height * 1.8f)
+        assert(look.left < notifications.left && notifications.top < widgets.top)
+    }
+
+    @Test fun `Orion settings cards trade slots and persist after a long drag`() {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val prefs = context.getSharedPreferences("appearance", 0)
+        prefs.edit().remove("settings-order").commit()
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        val source = compose.onNode(hasText("Anmeldungen") and hasClickAction())
+        val from = source.fetchSemanticsNode().boundsInRoot.center
+        val to = compose.onNode(hasText("Erscheinungsbild") and hasClickAction()).fetchSemanticsNode().boundsInRoot.center
+        source.performTouchInput { down(center); advanceEventTime(800); moveBy(to - from); up() }
+        compose.waitForIdle()
+        assert(prefs.getString("settings-order", "").orEmpty().startsWith("APPEARANCE,ACCOUNTS"))
+        screenshot("orion-settings-reordered")
     }
 
 }

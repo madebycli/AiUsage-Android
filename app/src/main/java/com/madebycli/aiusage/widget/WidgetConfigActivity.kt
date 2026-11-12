@@ -93,7 +93,6 @@ internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight:
         }
     ) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            com.madebycli.aiusage.ui.PageHero(com.madebycli.aiusage.ui.DesignPage.WIDGETS)
             Label("Vorlage anwenden")
             SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { it.title })
             Preview(bitmap, previewW, previewH, sizeIndex) { sizeIndex = it }
