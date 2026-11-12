@@ -1,6 +1,6 @@
 # Iris design in AI Usage
 
-Current expanded review: [AI Usage 0.9.4 gallery](orion-preview/README.md) and [Orion screen reference map](ORION_SCREEN_MAP.md). The sections below record the initial 0.9.2 integration.
+Current expanded review: [AI Usage 0.9.5 native Pixel 9 gallery](pixel9-audit/README.md) and [Orion screen reference map](ORION_SCREEN_MAP.md). The sections below record the initial 0.9.2 integration.
 
 Reference: [Iris brain/v2-beta, Build 102](https://github.com/madebycli/Iris/tree/60bbb256e588103ad18f9776ed8acfdde7c6f156).
 Iris is read-only for this task. Earlier unpublished local work is not the reference.

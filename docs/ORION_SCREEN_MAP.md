@@ -8,8 +8,8 @@ The table distinguishes reused components from visual references. Account authen
 |---|---|---|
 | Settings hub | [Settings.kt:655](https://github.com/RookieEnough/Orion-Store/blob/e561e91e9409d9d9b437ab7acf919cd115769d7e/app/src/main/java/com/orion/store/ui/Settings.kt#L655), `Bento` at 857, category hues at 217 | Six destinations with Orion’s fixed bento slots, saved local menu, long-press drag/trade and spring glide; integrated title/search follow the supplied image. |
 | Settings search | [Root.kt:386](https://github.com/RookieEnough/Orion-Store/blob/e561e91e9409d9d9b437ab7acf919cd115769d7e/app/src/main/java/com/orion/store/ui/Root.kt#L386) | Persistent native Material TextField as in the supplied reference, filtering the six AI Usage categories; no separate expanding search banner. |
-| Appearance | Settings `Page` at 880, `ThemePicker` at 1130, `SRow`/`Toggle` at 235/245 | Ordinary toolbar title, connected theme selector and grouped toggle rows. Google Sans Flex is assigned to all normal and emphasized typography slots. |
-| Notifications and background settings | Settings `Page`, `SRow`, `Toggle`, `InfoCard` at 260 | Banner-free toolbar and groups; full-row accessible switches with native checked/unchecked thumb icons. Existing permissions and scheduling actions retained. |
+| Appearance | Settings `Page` at 880, `ThemePicker` at 1130, `SRow`/`Toggle` at 235/245 | Ordinary toolbar with a compact turning category emblem, connected theme selector and grouped tonal toggle rows. Google Sans Flex is assigned to all normal and emphasized typography slots. |
+| Notifications and background settings | Settings `Page`, `SRow`, `Toggle`, `InfoCard` at 260 | Banner-free toolbar with a turning category emblem; grouped native surface rows, 16 dp content spacing and full-row accessible switches with native checked/unchecked thumb icons. Existing permissions and scheduling actions retained. |
 | Navigation settings | Settings `LayoutPicker` at 1170 and grouped controls | New page presentation around the existing ordering/start controls. The actual bottom navigation implementation remains byte-for-byte unchanged. |
 | Widget management | Settings `Page`, grouped `SRow` | Real placed-widget IDs open their existing configuration activities; empty state explains launcher placement. |
 | Widget configuration | Settings `Page`, `Section`, `Toggle` and layout selection patterns | Native connected presets and layout choices; application-specific bitmap renderer and persistence. Orion does not supply this widget renderer. |
@@ -27,3 +27,7 @@ The table distinguishes reused components from visual references. Account authen
 ## Source and licensing
 
 `ui/SettingsScreen.kt` directly ports Orion’s settings controller, fixed slots and drag behavior. `ui/IrisDesign.kt` contains the attributed reusable source. Wide page banners and colored title stripes are removed throughout; separate destination heroes are intentionally omitted per user request. `DesignPages.kt` applies those components to AI Usage destinations. The complete upstream GPL text remains bundled in `assets/licenses/LICENSE-Orion-Store.txt` and accessible through About's source references. The normal app package and release signing identity are retained.
+
+## Native Pixel 9 comparison
+
+The [0.9.5 gallery and English self-review](pixel9-audit/README.md) compare unchanged 0.9.4 and corrected 0.9.5 in both themes at 1080 × 2424 px, alongside the unmodified official Orion 2.7.5 APK. The dark foreground provision, compact destination emblems and unified 16 dp gutters are documented there. AI Usage intentionally keeps its ordinary destination toolbar instead of Orion’s separate large destination hero.

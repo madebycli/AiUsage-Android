@@ -73,4 +73,4 @@ GPL-3.0, siehe [LICENSE](LICENSE). Inoffizielle App, unabhängig von OpenAI und 
 
 Designbausteine aus [Iris Build 102](https://github.com/madebycli/Iris/tree/60bbb256e588103ad18f9776ed8acfdde7c6f156) und [Orion Store](https://github.com/RookieEnough/Orion-Store) (RookieEnough und Mitwirkende), GPL-3.0. [Übernahmen und Umfang](docs/IRIS_DESIGN.md). Die untere Navigation bleibt erhalten.
 
-[AI Usage 0.9.4: English preview gallery, motion recordings and detailed self-review](docs/orion-preview/README.md).
+[AI Usage 0.9.5: native Pixel 9 dark/light gallery and detailed English self-review](docs/pixel9-audit/README.md).

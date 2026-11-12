@@ -1,0 +1,13 @@
+{
+  "ro.build.version.sdk": "35",
+  "ro.build.version.release": "15",
+  "ro.product.model": "sdk_gphone64_x86_64",
+  "ro.kernel.qemu": "1",
+  "size": "Physical size: 1080x2424",
+  "density": "Physical density: 420",
+  "avd_profile": "Google Pixel 9",
+  "hardware_acceleration_required": true,
+  "baseline_commit": "6b04ff2c91ca0ae97d3a814cac9b4f190c03d749",
+  "fixture_data": true,
+  "capture": "UiAutomation.takeScreenshot on a real Pixel 9 AVD"
+}

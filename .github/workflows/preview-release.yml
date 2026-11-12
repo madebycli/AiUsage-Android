@@ -87,7 +87,7 @@ jobs:
 
           Includes tests, lint, signature and application identity verification. No merge into main; the latest Stable release remains unchanged.
           NOTES
-          printf '\n[Preview gallery and detailed English review](https://github.com/%s/blob/%s/docs/orion-preview/README.md)\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> preview-notes.md
+          printf '\n[Preview gallery and detailed English review](https://github.com/%s/blob/%s/docs/pixel9-audit/README.md)\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> preview-notes.md
           gh release create "$PREVIEW_TAG" "AiUsage-$PREVIEW_TAG.apk" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "AI Usage ${PREVIEW_TAG#v}" --notes-file preview-notes.md --prerelease --latest=false
