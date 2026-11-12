@@ -5,7 +5,7 @@ on:
       tag:
         description: GitHub prerelease tag
         required: true
-        default: v0.9.4-preview.1
+        default: v0.9.5-preview.1
         type: string
 permissions:
   contents: write
@@ -81,7 +81,7 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
           sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
           cat > preview-notes.md <<'NOTES'
-          Preview of AI Usage 0.9.4: original Orion settings layout and full-page open/close transitions, removed banners/title stripes, Google Sans Flex across every typography style.
+          Preview of AI Usage 0.9.5: dark/light foreground fixes, consistent page gutters, native settings rows and animated category emblems. Includes the Pixel 9 before/after audit.
 
           Normal Android package: `com.madebycli.aiusage`. Signed with the same release certificate as Stable 0.9.1; optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate Android application.
 

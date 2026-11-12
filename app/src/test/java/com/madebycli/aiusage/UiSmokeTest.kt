@@ -3,6 +3,7 @@ package com.madebycli.aiusage
 import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.*
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -424,6 +425,7 @@ class UiSmokeTest {
         listOf("Anmeldungen", "Erscheinungsbild", "Benachrichtigungen", "Navigation & Start", "Widgets", "Über AI Usage").forEach { title ->
             compose.onNode(hasText(title) and hasClickAction()).performScrollTo().performClick()
             compose.onAllNodesWithText(title)[0].assertIsDisplayed()
+            compose.onNodeWithTag("settings-category-icon").assertIsDisplayed()
             screenshot("orion-page-" + com.madebycli.aiusage.ui.DesignPage.entries.first { it.title == title }.name.lowercase())
             compose.onNodeWithContentDescription("Zurück").performClick()
         }
@@ -519,6 +521,38 @@ class UiSmokeTest {
         val family = t.bodyLarge.fontFamily
         assert(family != null)
         listOf(t.displayLarge, t.displayMedium, t.displaySmall, t.headlineLarge, t.headlineMedium, t.headlineSmall, t.titleLarge, t.titleMedium, t.titleSmall, t.bodyLarge, t.bodyMedium, t.bodySmall, t.labelLarge, t.labelMedium, t.labelSmall, t.displayLargeEmphasized, t.displayMediumEmphasized, t.displaySmallEmphasized, t.headlineLargeEmphasized, t.headlineMediumEmphasized, t.headlineSmallEmphasized, t.titleLargeEmphasized, t.titleMediumEmphasized, t.titleSmallEmphasized, t.bodyLargeEmphasized, t.bodyMediumEmphasized, t.bodySmallEmphasized, t.labelLargeEmphasized, t.labelMediumEmphasized, t.labelSmallEmphasized).forEach { assert(it.fontFamily == family) }
+    }
+
+    @Test fun `root text inherits a readable foreground in light dark and AMOLED themes`() {
+        val mode = mutableStateOf(0)
+        var foreground = androidx.compose.ui.graphics.Color.Unspecified
+        var background = androidx.compose.ui.graphics.Color.Unspecified
+        var expected = androidx.compose.ui.graphics.Color.Unspecified
+        compose.setContent { AniHyouTheme(darkTheme = mode.value != 0, blackColors = mode.value == 2, dynamicColor = false) {
+            val fg = androidx.compose.material3.LocalContentColor.current
+            val cs = androidx.compose.material3.MaterialTheme.colorScheme
+            androidx.compose.runtime.SideEffect { foreground = fg; background = cs.background; expected = cs.onBackground }
+            androidx.compose.material3.Text("Readable root text")
+        } }
+        repeat(3) { next ->
+            compose.runOnIdle { mode.value = next }
+            compose.waitForIdle()
+            assert(foreground == expected)
+            assert(androidx.core.graphics.ColorUtils.calculateContrast(
+                foreground.toArgb(), background.toArgb()) >= 4.5)
+        }
+    }
+
+    @Test fun `the settings submenu category emblem rotates independently of its text`() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AniHyouTheme(darkTheme = true, dynamicColor = false) {
+            com.madebycli.aiusage.ui.SettingsPageTitle(com.madebycli.aiusage.ui.DesignPage.APPEARANCE)
+        } }
+        compose.mainClock.advanceTimeBy(1200)
+        val first = compose.onNodeWithTag("settings-category-icon").captureToImage().asAndroidBitmap()
+        compose.mainClock.advanceTimeBy(3100)
+        val next = compose.onNodeWithTag("settings-category-icon").captureToImage().asAndroidBitmap()
+        assert(!first.sameAs(next))
     }
     @Test fun `home and settings subpages have ordinary titles without the removed banners`() {
         val model = model()

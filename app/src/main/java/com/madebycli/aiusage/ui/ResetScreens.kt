@@ -43,7 +43,7 @@ internal fun ResetScreen(state: UiState, now: Long, provider: String, select: (S
     val names = state.connectedProviders
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
-        if (names.size > 1) Box(Modifier.padding(20.dp, 4.dp, 20.dp, 8.dp)) { ProviderTabs(names, active, select) }
+        if (names.size > 1) Box(Modifier.padding(16.dp, 8.dp, 16.dp, 8.dp)) { ProviderTabs(names, active, select) }
         androidx.compose.animation.AnimatedContent(active, transitionSpec = { androidx.compose.animation.fadeIn() togetherWith androidx.compose.animation.fadeOut() }, label = "provider-page") { shown ->
             ResetProviderBody(state, now, shown, open)
         }
@@ -56,7 +56,7 @@ private fun ResetProviderBody(state: UiState, now: Long, active: String, open: (
     val problems = outlook.sources.filter { it.state == SourceState.ERROR }
     val loaded = outlook.sources.any { it.state != SourceState.EMPTY }
     val banked = state.accountsOf(active).filter { entry -> entry.usage?.let { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null } == true }
-    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (state.intelLoading && !loaded) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
         if (problems.isNotEmpty()) item(key = "problems") {
             Notice(problems.joinToString("\n") { "${it.source.label}: ${it.error}" }, error = outlook.horizons.isEmpty() && outlook.timeline.isEmpty())

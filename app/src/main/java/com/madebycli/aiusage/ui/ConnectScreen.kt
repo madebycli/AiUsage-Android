@@ -36,7 +36,7 @@ internal fun ConnectScreen(provider: String, state: UiState, model: UsageViewMod
         try { uri.openUri(url); browserError = null }
         catch (_: Exception) { browserError = "Der Browser konnte nicht geöffnet werden." }
     }
-    Column(Modifier.widthIn(max = 560.dp).fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+    Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize().verticalScroll(rememberScrollState()).padding(screenPadding),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             BrandTile(provider, 56)

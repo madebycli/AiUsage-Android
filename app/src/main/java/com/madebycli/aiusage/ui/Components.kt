@@ -5,6 +5,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,20 +46,28 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal val cardShape = RoundedCornerShape(28.dp)
-internal val screenPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp)
+internal val screenPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp)
 internal val maxContentWidth = 680.dp
 
 @Composable
-internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(16.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     OrionGroupItem(0, 1, modifier = modifier) {
         Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+/** Orion settings Section/SRow surface: row insets belong to the row, not to a second surrounding card. */
+@Composable
+internal fun SettingsContent(content: @Composable ColumnScope.() -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }
 
 /** Connected surfaces have real transparent gaps; every segment owns its outline. */
 @Composable
 internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+    Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
 }
 
 @Composable
@@ -104,13 +113,17 @@ internal fun Disclosure(label: String, content: @Composable ColumnScope.() -> Un
 
 @Composable
 internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val accent = LocalSettingsCategory.current?.accent ?: MaterialTheme.colorScheme.primary
+    val (background, foreground) = orionTonal(accent)
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
         supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
-        leadingContent = { Icon(androidx.compose.material.icons.Icons.Rounded.Tune, null, tint = MaterialTheme.colorScheme.primary) },
+        leadingContent = { Box(Modifier.size(40.dp).background(background, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Icon(androidx.compose.material.icons.Icons.Rounded.Tune, null, Modifier.size(22.dp), tint = foreground)
+        } },
         trailingContent = { Switch(checked, null, thumbContent = { Icon(if (checked) androidx.compose.material.icons.Icons.Rounded.Check else androidx.compose.material.icons.Icons.Rounded.Close, null, Modifier.size(SwitchDefaults.IconSize)) }) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.fillMaxWidth().then(Modifier.toggleable(checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)))
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraSmall).then(Modifier.toggleable(checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)))
 
 }
 

@@ -69,10 +69,11 @@ internal fun SettingsScreen(state: UiState, model: UsageViewModel, onBack: () ->
                     val page = SETTINGS_ORDER.firstOrNull { it.name == target }
                     if (page == null) SettingsHub(state, { menu = it.name }, ::back)
                     else {
+                        CompositionLocalProvider(LocalSettingsCategory provides page) {
                         // Exactly the same shared key as the source card; this is the full page, not its title.
                         Scaffold(modifier = Modifier.orionSharedBounds("settings:${page.name}").fillMaxSize(),
                             containerColor = MaterialTheme.colorScheme.background,
-                            topBar = { TopAppBar(title = { Text(page.title) }, navigationIcon = {
+                            topBar = { TopAppBar(title = { SettingsPageTitle(page) }, expandedHeight = 88.dp, navigationIcon = {
                                 IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") }
                             }) }) { padding ->
                             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
@@ -86,6 +87,7 @@ internal fun SettingsScreen(state: UiState, model: UsageViewModel, onBack: () ->
                                     else -> Unit
                                 }
                             }
+                        }
                         }
                     }
                 }
@@ -186,7 +188,7 @@ private fun SettingsHub(state: UiState, open: (DesignPage) -> Unit, onBack: () -
                 }
                 TextField(query, { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Rounded.Search, null) },
                     placeholder = { Text("Einstellungen durchsuchen") }, shape = MaterialTheme.shapes.extraLarge,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                     colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
                         focusedContainerColor = colors.surfaceContainer, unfocusedContainerColor = colors.surfaceContainer))
                 if (query.isNotBlank()) {

@@ -24,8 +24,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.madebycli.aiusage.*
 import com.madebycli.aiusage.R
 import com.madebycli.aiusage.widget.*
@@ -44,6 +46,23 @@ enum class DesignPage(val title: String, val description: String, val icon: Imag
     HISTORY("Verlauf", "Gemeldete Resets im zeitlichen Überblick.", Icons.Rounded.History),
     SOURCES("Quellen", "Herkunft und Aktualität jeder Einschätzung.", Icons.Rounded.QueryStats),
     LOGIN("Verbinden", "Sicher über den Browser anmelden.", Icons.Rounded.Login)
+}
+
+internal val LocalSettingsCategory = compositionLocalOf<DesignPage?> { null }
+
+/** Orion Page's turning category emblem, kept in the ordinary toolbar without a separate hero card. */
+@Composable
+internal fun SettingsPageTitle(page: DesignPage) {
+    val (_, foreground) = orionTonal(page.accent)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(48.dp).testTag("settings-category-icon"), contentAlignment = Alignment.Center) {
+            OrionSpinner(page.shape, foreground.copy(alpha = .16f), 48.dp, periodMs = 18000)
+            Icon(page.icon, null, Modifier.size(26.dp), tint = foreground)
+        }
+        Text(page.title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmallEmphasized,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 18.sp, maxFontSize = 24.sp))
+    }
 }
 
 /** Same category hues as Orion Settings.CATS; native tonal conversion handles light and dark. */
@@ -74,13 +93,13 @@ val DesignPage.shape: androidx.graphics.shapes.RoundedPolygon get() = when (this
 internal fun AppearanceScreen(state: UiState, model: UsageViewModel) {
     Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionTitle("Farbschema")
-        SoftCard {
+        MenuCard { SettingsContent {
             SegmentedTabGroup(ThemeMode.entries, state.theme, model::setTheme, { when(it) { ThemeMode.SYSTEM -> "System"; ThemeMode.LIGHT -> "Hell"; ThemeMode.DARK -> "Dunkel" } }, fillEqually = true)
-        }
-        SoftCard {
+        } }
+        MenuCard { SettingsContent {
             Text("Google Sans Flex", style = MaterialTheme.typography.titleMedium)
             Text("Schriftart der App", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        } }
         MenuCard {
             SwitchRow("Android-Farben", "Farbpalette aus dem Hintergrundbild", state.dynamicColor, model::setDynamic)
             SwitchRow("Tiefschwarz", "Für den dunklen Modus", state.amoled, model::setAmoled)

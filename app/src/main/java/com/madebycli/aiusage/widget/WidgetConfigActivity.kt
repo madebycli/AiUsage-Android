@@ -92,7 +92,7 @@ internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight:
                 actions = { FilledTonalButton(onClick = { onSave(config) }) { Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Fertig") }; Spacer(Modifier.width(12.dp)) })
         }
     ) { padding ->
-        Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Label("Vorlage anwenden")
             SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { it.title })
             Preview(bitmap, previewW, previewH, sizeIndex) { sizeIndex = it }

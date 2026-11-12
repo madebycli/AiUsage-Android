@@ -63,8 +63,8 @@ internal fun AccountCard(entry: AccountState, now: Long, index: Int, modifier: M
     val windows = entry.windows()
     val source = remember { MutableInteractionSource() }
     Surface(onClick = open, interactionSource = source, modifier = modifier.fillMaxWidth().staggeredEntrance(index, entry.id).pressScale(source),
-        shape = cardShape, color = colors.surfaceContainerLow) {
-        Column(Modifier.padding(20.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        shape = cardShape, color = colors.surfaceContainerHigh) {
+        Column(Modifier.padding(16.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BrandIcon(entry.provider)
                 Column(Modifier.weight(1f)) {

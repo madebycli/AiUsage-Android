@@ -67,11 +67,11 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
     val failures = values["bg.failures"] as? Int ?: 0
     val reads = values["bg.reads"] as? Int ?: 0
 
-    Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         SectionTitle("Hintergrund")
-        SoftCard {
+        MenuCard {
             SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik", checked("daily", true)) { update("daily", it) }
-            if (checked("daily", true)) {
+            if (checked("daily", true)) SettingsContent {
                 Text("Intervall", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SegmentedTabGroup(AccountRefresh.choices, (values["hours"] as? Int)?.toLong()?.takeIf { it in AccountRefresh.choices } ?: AccountRefresh.DEFAULT_HOURS, { hours ->
                     prefs.edit().putInt("hours", hours.toInt()).apply(); revision++; model.syncBackground()
@@ -89,31 +89,35 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
             }
         }
         SectionTitle("Reset-Hinweise")
-        SoftCard {
+        MenuCard {
             SwitchRow("Reset-Hinweise", "Meldung, wenn ein Limit zurückgesetzt wird", checked("enabled", false)) { enabled ->
                 if (enabled && !allowed) requestPermission() else update("enabled", enabled)
             }
-            StatusLine("Android-Freigabe", if (allowed) "Erteilt" else "Fehlt")
-            if (!allowed) FilledTonalButton(onClick = { requestPermission() }) { Text("Benachrichtigungen erlauben") }
+            SettingsContent {
+                StatusLine("Android-Freigabe", if (allowed) "Erteilt" else "Fehlt")
+                if (!allowed) FilledTonalButton(onClick = { requestPermission() }) { Text("Benachrichtigungen erlauben") }
+            }
             SwitchRow("Nur bei Nutzung", "Nicht für Zeitfenster ohne Verbrauch", checked("usedOnly", true)) { update("usedOnly", it) }
             SwitchRow("Früher Reset", "Meldung, wenn der Anbieter ein Limit vor dem Termin zurücksetzt, zum Beispiel bei einem globalen Reset", checked("spontaneous", true)) { update("spontaneous", it) }
+            SettingsContent {
             val exact = ResetAlarms.canScheduleExact(context)
             StatusLine("Genauigkeit", if (exact) "Exakte Alarme erlaubt: Hinweise kommen zur gemeldeten Minute" else "Android darf Hinweise im Ruhemodus um einige Minuten verschieben")
             if (!exact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) FilledTonalButton(onClick = {
                 try { context.startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))) }
                 catch (_: ActivityNotFoundException) { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }
             }) { Text("Exakte Alarme erlauben") }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = { ResetNotifier.sendTest(context) }, enabled = allowed) { Text("Test senden") }
                 TextButton(onClick = { notificationSettings() }) { Text("Android-Einstellungen") }
+            }
             }
         }
         state.connectedProviders.forEach { provider ->
             SectionTitle(provider)
-            SoftCard {
+            MenuCard {
                 ResetAlerts.rules.filter { it.provider == provider }.forEachIndexed { index, rule ->
-                    if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
                     SwitchRow(rule.title, "Zum gemeldeten Reset-Zeitpunkt", checked("rule.${rule.key}", true)) { update("rule.${rule.key}", it) }
+                    SettingsContent {
                     Text("Benachrichtigen", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     val lead = values["lead.${rule.key}"] as? Int ?: 0
                     SegmentedTabGroup(listOf(0, 5, 15, 30, 60), lead, { selected ->
@@ -127,6 +131,7 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
                         ResetAlerts.channels(context)
                         context.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName).putExtra(Settings.EXTRA_CHANNEL_ID, rule.channel))
                     }, contentPadding = PaddingValues(0.dp)) { Icon(Icons.Rounded.Notifications, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Ton, Vibration & Anzeige") }
+                    }
                 }
             }
         }
