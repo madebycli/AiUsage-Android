@@ -1,6 +1,7 @@
 package com.madebycli.aiusage
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -55,7 +56,17 @@ class Pixel9VisualAuditTest {
     private fun capture(name: String) {
         compose.waitForIdle()
         instrumentation.waitForIdleSync()
-        val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        // Wait for the actual SurfaceFlinger buffer after a Compose update, not merely a semantics update.
+        var bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        repeat(5) {
+            val pixels = IntArray(bitmap.width * bitmap.height)
+            bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            if (pixels.indices.step(251).map { pixels[it] }.distinct().size <= 8) {
+                bitmap.recycle()
+                SystemClock.sleep(300)
+                bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            }
+        }
         check(bitmap.width == 1080 && bitmap.height == 2424) { "Expected Pixel 9 1080x2424, got ${bitmap.width}x${bitmap.height}" }
         val pixels = IntArray(bitmap.width * bitmap.height)
         bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -77,6 +88,7 @@ class Pixel9VisualAuditTest {
             activity.enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
             activity.setContent { AniHyouTheme(darkTheme = dark, dynamicColor = false) { UsageApp(state.value, model) } }
         }
+        compose.onNodeWithText("Privat").assertIsDisplayed()
         capture("usage")
         compose.onNodeWithText("Privat").performClick()
         capture("account")

@@ -1,6 +1,6 @@
 # Pixel 9 visual audit · work in progress
 
-This audit compares the unchanged 0.9.4 source (`6b04ff2`) with the corrected 0.9.5 source. The requested device profile is Google Pixel 9, 1080 × 2424 px at 420 dpi, using an Android 15/API 35 AOSP test image. Both light and dark themes are included, with dark mode reviewed first.
+This audit compares the unchanged 0.9.4 source (`6b04ff2`) with the corrected 0.9.5 source. The requested device profile is Google Pixel 9, 1080 × 2424 px at 420 dpi, using an Android 15/API 35 Google APIs system image. Both light and dark themes are included, with dark mode reviewed first.
 
 Screenshots are accepted only from `UiAutomation.takeScreenshot` on a running Android emulator. Blank startup frames are rejected. Account names, quotas and reset forecasts are labelled fixtures; they are not live account access or current predictions. The native test harness renders production screens and callbacks inside the app activity. No illustration or host rendering is presented as an emulator screenshot.
 

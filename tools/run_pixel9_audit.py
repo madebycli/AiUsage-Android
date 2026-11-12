@@ -79,7 +79,8 @@ for theme in ['dark', 'light']:
         'com.madebycli.aiusage.test/androidx.test.runner.AndroidJUnitRunner'], capture_output=True, text=True)
     log = result.stdout + result.stderr
     (OUTPUT / f'orion-{theme}-instrumentation.txt').write_text(log)
-    adb('pull', '/sdcard/Android/data/com.madebycli.aiusage/files/visual-audit/orion', str(OUTPUT / 'orion'), check=False)
+    (OUTPUT / 'orion').mkdir(exist_ok=True)
+    adb('pull', f'/sdcard/Android/data/com.madebycli.aiusage/files/visual-audit/orion/{theme}', str(OUTPUT / 'orion' / theme), check=False)
     print(log, flush=True)
     assert 'OK (1 test)' in log, 'Original Orion reference capture failed; inspect uploaded logs'
 reference.unlink()
