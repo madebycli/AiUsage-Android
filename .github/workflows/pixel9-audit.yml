@@ -31,11 +31,24 @@ jobs:
         with:
           packages: 'platform-tools'
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
       - name: Install compile SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: actions/cache/restore@v4
+        id: baseline-apk
+        with:
+          path: baseline/app/build/outputs/apk/debug/app-debug.apk
+          key: pixel9-baseline-6b04ff2-debug-v1
       - name: Build unchanged 0.9.4 baseline
+        if: steps.baseline-apk.outputs.cache-hit != 'true'
         working-directory: baseline
         run: ./gradlew :app:assembleDebug --no-daemon --max-workers=1 -Dorg.gradle.jvmargs='-Xmx1536m -Dfile.encoding=UTF-8' -Pkotlin.compiler.execution.strategy=in-process
+      - uses: actions/cache/save@v4
+        if: steps.baseline-apk.outputs.cache-hit != 'true'
+        with:
+          path: baseline/app/build/outputs/apk/debug/app-debug.apk
+          key: pixel9-baseline-6b04ff2-debug-v1
       - name: Test and build corrected app and device tests
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --max-workers=1 -Dorg.gradle.jvmargs='-Xmx1536m -Dfile.encoding=UTF-8' -Pkotlin.compiler.execution.strategy=in-process
       - name: Enable runner KVM device

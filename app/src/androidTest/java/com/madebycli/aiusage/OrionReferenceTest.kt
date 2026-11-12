@@ -19,6 +19,8 @@ class OrionReferenceTest {
         val device = UiDevice.getInstance(instrumentation)
         val theme = InstrumentationRegistry.getArguments().getString("referenceTheme") ?: "dark"
         fun capture(name: String) {
+            device.waitForIdle(2000)
+            SystemClock.sleep(150)
             val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "visual-audit/orion/$theme").apply { mkdirs() }
             val bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
             check(bitmap.width == 1080 && bitmap.height == 2424)

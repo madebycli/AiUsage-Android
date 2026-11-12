@@ -2,6 +2,7 @@ package com.madebycli.aiusage
 
 import android.graphics.Bitmap
 import android.os.SystemClock
+import android.os.Build
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -20,6 +21,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Real emulator screenshots of production UI. Accounts/measurements are fixtures, never live logins. */
 @RunWith(AndroidJUnit4::class)
@@ -56,27 +59,35 @@ class Pixel9VisualAuditTest {
     private fun capture(name: String) {
         compose.waitForIdle()
         instrumentation.waitForIdleSync()
-        // Wait for the actual SurfaceFlinger buffer after a Compose update, not merely a semantics update.
+        // Semantics can be current while SurfaceFlinger still displays the preceding page.
+        val committed = CountDownLatch(1)
+        val view = compose.activity.window.decorView
+        instrumentation.runOnMainSync {
+            check(view.isHardwareAccelerated)
+            if (Build.VERSION.SDK_INT >= 29) view.viewTreeObserver.registerFrameCommitCallback { committed.countDown() }
+            else error("Native visual audit requires Android 10+ frame-commit callbacks")
+            view.invalidate()
+        }
+        check(committed.await(10, TimeUnit.SECONDS)) { "No hardware-rendered frame was committed for $name" }
+        SystemClock.sleep(50)
         var bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-        repeat(5) {
+        var colorCount = 0
+        for (attempt in 0..4) {
             val pixels = IntArray(bitmap.width * bitmap.height)
             bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-            if (pixels.indices.step(251).map { pixels[it] }.distinct().size <= 8) {
-                bitmap.recycle()
-                SystemClock.sleep(300)
-                bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
-            }
+            colorCount = pixels.indices.step(251).map { pixels[it] }.distinct().size
+            if (colorCount > 8) break
+            bitmap.recycle()
+            SystemClock.sleep(300)
+            bitmap = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         }
         check(bitmap.width == 1080 && bitmap.height == 2424) { "Expected Pixel 9 1080x2424, got ${bitmap.width}x${bitmap.height}" }
-        val pixels = IntArray(bitmap.width * bitmap.height)
-        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
-        check(pixels.indices.step(251).map { pixels[it] }.distinct().size > 8) { "Blank startup frame is not a valid screenshot: $name" }
+        check(colorCount > 8) { "Blank startup frame is not a valid screenshot: $name" }
         val directory = File(instrumentation.targetContext.getExternalFilesDir(null), "visual-audit/$phase/$mode").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
     private fun back() = compose.onNodeWithContentDescription("Zurück").performClick()
-    private fun scrollTo(text: String) = compose.onNodeWithText(text).performScrollTo()
     private fun audit(dark: Boolean) {
         mode = if (dark) "dark" else "light"
         val activity = compose.activity
@@ -104,7 +115,7 @@ class Pixel9VisualAuditTest {
                 capture("notifications-bottom")
             }
             if (file == "navigation") {
-                scrollTo("Statistik-Standard")
+                compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Zeitraum"))
                 capture("navigation-bottom")
             }
             if (file == "accounts") {
