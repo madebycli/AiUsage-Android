@@ -4,10 +4,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <application android:label="AI Usage" android:theme="@style/Theme.AiUsage"
+    <application android:label="${appLabel}" android:theme="@style/Theme.AiUsage"
         android:icon="@drawable/ic_launcher" android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules"
         android:supportsRtl="true" android:usesCleartextTraffic="false">
+        <meta-data android:name="com.madebycli.aiusage.PREVIEW" android:value="${previewBuild}" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

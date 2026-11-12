@@ -1,0 +1,15 @@
+{
+  "version": "0.9.2-preview",
+  "versionCode": 13,
+  "applicationId": "com.madebycli.aiusage.preview",
+  "label": "AI Usage Preview",
+  "preview": true,
+  "debuggable": false,
+  "minified": true,
+  "resourceShrinking": true,
+  "bytes": 2260539,
+  "sha256": "034936d047a1e7296f8bfbc98a21fdbcd65bfb29d0ef0f9135230d2a77b046af",
+  "certificateSha256": "42ec6e36170f952e63d301cacdfe8a4132b8ed4bc65923d020fa13c39d5039b2",
+  "signatureV2Verified": true,
+  "debugCertificate": false
+}
