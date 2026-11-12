@@ -188,7 +188,7 @@ class UiSmokeTest {
         compose.onNodeWithText("Claude Max").assertIsDisplayed()
         screenshot("accounts-page")
         compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.onNodeWithText("Darstellung").assertIsDisplayed()
+        compose.onNodeWithText("Erscheinungsbild").assertIsDisplayed()
         compose.onNodeWithText("Homescreen-Widget").assertDoesNotExist()
     }
 
@@ -270,7 +270,7 @@ class UiSmokeTest {
         compose.onNodeWithText("3 h").assertIsDisplayed()
         screenshot("notifications-dark")
         compose.onNodeWithContentDescription("Zurück").performClick()
-        compose.onNodeWithText("Darstellung").assertIsDisplayed()
+        compose.onNodeWithText("Erscheinungsbild").assertIsDisplayed()
     }
 
     @Test fun `the home screen has no add button and the claude page shows the date only history`() {
@@ -332,7 +332,8 @@ class UiSmokeTest {
         compose.onNodeWithText("Untere Leiste").assertIsDisplayed()
         compose.onNodeWithText("Immer sichtbar").assertIsDisplayed()
         compose.onNodeWithText("Zuletzt geöffnet").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Statistik-Standard").performScrollTo().assertIsDisplayed()
+        scrollTo("Statistik-Standard")
+        compose.onNodeWithText("Statistik-Standard").assertIsDisplayed()
         screenshot("navigation-settings")
     }
 
@@ -384,4 +385,34 @@ class UiSmokeTest {
         scrollTo("Wochentage")
         compose.onNodeWithText("Wochentage").assertIsDisplayed()
     }
+    @Test fun `Iris settings remain usable with large text and keep bottom navigation intact`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 1.6f)) {
+                UsageApp(ui(codex("Privat")), model)
+            }
+        } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNodeWithText("Anmeldungen").assertIsDisplayed()
+        compose.onNodeWithText("Navigation & Start").assertIsDisplayed()
+        screenshot("iris-settings-large")
+        compose.onNodeWithText("Anmeldungen").performClick()
+        compose.onNodeWithText("Privat").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.onNode(hasText("Resets") and hasClickAction()).assertIsDisplayed()
+        compose.onNode(hasText("Statistiken") and hasClickAction()).assertIsDisplayed()
+    }
+    @Test fun `Iris settings show source attribution in about`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        screenshot("iris-settings")
+        compose.onNodeWithText("Über AI Usage", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Iris · Designreferenz").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Orion Store · UI-Quellen & Lizenz").performScrollTo().assertIsDisplayed()
+        screenshot("iris-attribution")
+    }
+
 }

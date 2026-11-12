@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -51,6 +52,12 @@ fun AniHyouTheme(
     }
     MaterialExpressiveTheme(
         typography = UsageTypography,
+        shapes = androidx.compose.material3.Shapes(
+            extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+            small = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+            medium = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            large = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)),
         colorScheme = if (blackColors && darkTheme) colors.copy(background = Color.Black, surface = Color.Black) else colors,
         content = content
     )

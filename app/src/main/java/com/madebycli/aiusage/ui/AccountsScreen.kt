@@ -32,7 +32,7 @@ internal fun AccountsScreen(state: UiState, model: UsageViewModel, sort: (() -> 
     LazyColumn(Modifier.widthIn(max = 560.dp).fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!state.anyConnected) item(key = "welcome") { Welcome() }
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
-            AccountCard(entry, state.login(entry.provider).busy, Modifier.animateItem(),
+            AccountCard(entry, state.login(entry.provider).busy, Modifier.animateItem().staggeredEntrance(index, entry.id),
                 rename = { renaming = entry.id }, signInAgain = { model.connect(entry.provider, entry.id) }, disconnect = { confirm = entry.id },
                 reload = { model.refresh(entry.id) })
         }

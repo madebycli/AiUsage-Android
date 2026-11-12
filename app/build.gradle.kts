@@ -11,8 +11,8 @@ android {
         applicationId = "com.madebycli.aiusage"
         minSdk = 26
         targetSdk = 37
-        versionCode = 12
-        versionName = "0.9.1"
+        versionCode = 13
+        versionName = "0.9.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Public test key, intentionally shared. Never use this key for a release.
@@ -84,6 +84,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3:1.5.0-beta01")
+    implementation("androidx.graphics:graphics-shapes:1.1.0")
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")

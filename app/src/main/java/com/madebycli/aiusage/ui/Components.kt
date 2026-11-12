@@ -43,28 +43,30 @@ internal val maxContentWidth = 680.dp
 
 @Composable
 internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
+    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
         Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 
-/** Rows without their own padding, separated by hairlines; used for menus. */
+/** Connected surfaces have real transparent gaps; every segment owns its outline. */
 @Composable
-internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) = SoftCard(PaddingValues(0.dp)) {
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp), content = content)
+internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
 }
 
 @Composable
-internal fun MenuDivider() = HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+internal fun MenuDivider() = Unit
 
 @Composable
-internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null, open: () -> Unit) {
-    Surface(onClick = open, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(20.dp, 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null, index: Int = 0, count: Int = 1, open: () -> Unit) {
+    OrionGroupItem(index, count, onClick = open) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(10.dp).size(22.dp))
+            }
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -72,16 +74,11 @@ internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null,
 }
 
 @Composable
-internal fun SectionTitle(text: String) {
-    Row(Modifier.padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.size(4.dp, 22.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
-        Text(text, style = MaterialTheme.typography.titleLarge)
-    }
-}
+internal fun SectionTitle(text: String) = OrionHubHeader(text)
 
 @Composable
 internal fun Notice(text: String, error: Boolean = false) {
-    Surface(shape = RoundedCornerShape(18.dp), color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
+    Surface(shape = MaterialTheme.shapes.large, color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
         contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
     }
@@ -188,7 +185,7 @@ internal fun RangeBar(value: Double, low: Double?, high: Double?, color: Color, 
 
 @Composable
 internal fun BrandTile(provider: String, size: Int = 76) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) { BrandIcon(provider, Modifier.size((size / 2).dp)) }
     }
 }

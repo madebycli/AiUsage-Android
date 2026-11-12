@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalHapticFeedback
 
@@ -60,7 +61,7 @@ fun <T> SegmentedTabGroup(
                 checked = selected == option,
                 onCheckedChange = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onSelect(option)
+                    if (selected != option) onSelect(option)
                 },
                 modifier = if (fillEqually) Modifier.weight(1f) else Modifier,
                 shapes = shapes
@@ -72,7 +73,10 @@ fun <T> SegmentedTabGroup(
                 Text(
                     text = label(option),
                     style = labelStyle,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = 14.sp)
                 )
             }
         }
