@@ -1,6 +1,6 @@
 name: Preview Release
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       tag:
         description: GitHub prerelease tag
