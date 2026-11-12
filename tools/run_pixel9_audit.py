@@ -58,7 +58,7 @@ for phase, apk in [('before', 'baseline/app/build/outputs/apk/debug/app-debug.ap
 reference = OUTPUT / 'orion-official-2.7.5.apk'
 urllib.request.urlretrieve('https://github.com/RookieEnough/Orion-Store/releases/download/2.7.5/app-release.apk', reference)
 assert hashlib.sha256(reference.read_bytes()).hexdigest() == 'adcce30c43d033a183a4b5f3079becc5c8ecea7277819dc95dc5135a18e8d5df'
-adb('install', '-r', str(reference))
+adb('install', '-r', '-g', str(reference))
 adb('root')
 adb('wait-for-device')
 assert adb('shell', 'id', '-u').strip() == '0', 'AOSP test emulator root is needed to configure reference-only preferences'
@@ -74,11 +74,18 @@ for theme in ['dark', 'light']:
     adb('push', str(settings), f'{root}/files/settings.json')
     adb('shell', 'chown', '-R', f'{uid}:{uid}', f'{root}/files')
     adb('shell', 'restorecon', '-R', f'{root}/files')
+    adb('logcat', '-c')
     result = subprocess.run(['adb', 'shell', 'am', 'instrument', '-w', '-e', 'class',
         'com.madebycli.aiusage.OrionReferenceTest', '-e', 'referenceTheme', theme,
         'com.madebycli.aiusage.test/androidx.test.runner.AndroidJUnitRunner'], capture_output=True, text=True)
     log = result.stdout + result.stderr
     (OUTPUT / f'orion-{theme}-instrumentation.txt').write_text(log)
+    (OUTPUT / f'orion-{theme}-logcat.txt').write_text(adb('logcat', '-d'))
+    if 'OK (1 test)' not in log:
+        adb('shell', 'uiautomator', 'dump', '/sdcard/orion-failure.xml', check=False)
+        adb('pull', '/sdcard/orion-failure.xml', str(OUTPUT / f'orion-{theme}-failure.xml'), check=False)
+        with (OUTPUT / f'orion-{theme}-failure.png').open('wb') as frame:
+            subprocess.run(['adb', 'exec-out', 'screencap', '-p'], stdout=frame, check=True)
     (OUTPUT / 'orion').mkdir(exist_ok=True)
     adb('pull', f'/sdcard/Android/data/com.madebycli.aiusage/files/visual-audit/orion/{theme}', str(OUTPUT / 'orion' / theme), check=False)
     print(log, flush=True)

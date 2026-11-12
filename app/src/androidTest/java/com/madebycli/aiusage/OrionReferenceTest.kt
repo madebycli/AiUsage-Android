@@ -27,8 +27,15 @@ class OrionReferenceTest {
             File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             bitmap.recycle()
         }
-        device.executeShellCommand("am start -W -n com.orion.store/.MainActivity")
-        check(device.wait(Until.hasObject(By.pkg("com.orion.store")), 30000))
+        // Start the exported activity directly; launcher aliases can vary with icon preferences.
+        val start = device.executeShellCommand("am start -W -n com.orion.store/.OrionActivity")
+        check("Error:" !in start) { start }
+        // Android permission dialogs belong to permissioncontroller, not the app package.
+        device.wait(Until.hasObject(By.pkg("com.orion.store")), 5000)
+        listOf("Allow", "While using the app", "Don't allow").forEach { label ->
+            device.findObject(By.text(label))?.click()
+        }
+        check(device.wait(Until.hasObject(By.pkg("com.orion.store")), 30000)) { "Original Orion did not become visible: $start" }
         repeat(8) {
             listOf("Let's go", "Not now", "Later", "Skip", "Got it", "Maybe later", "No thanks").forEach { label ->
                 device.findObject(By.text(label))?.click()
