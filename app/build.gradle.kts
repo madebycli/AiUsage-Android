@@ -13,29 +13,16 @@ android {
         targetSdk = 37
         versionCode = 13
         versionName = "0.9.2"
-        buildConfigField("boolean", "PREVIEW", "false")
-        manifestPlaceholders["appLabel"] = "AI Usage"
-        manifestPlaceholders["previewBuild"] = "false"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Public test key, intentionally shared. Never use this key for a release.
     val releaseKeystore: String? = System.getenv("ANDROID_KEYSTORE_PATH")
-    val previewKeystore = providers.environmentVariable("AIUSAGE_PREVIEW_KEYSTORE_PATH").orNull
-    val previewPasswordFile = providers.environmentVariable("AIUSAGE_PREVIEW_PASSWORD_FILE").orNull
     signingConfigs {
         create("stableDebug") {
             storeFile = file("debug-signing.p12")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"
-        }
-        if (previewKeystore != null && previewPasswordFile != null) {
-            create("preview") {
-                storeFile = file(previewKeystore)
-                storePassword = file(previewPasswordFile).readText().trim()
-                keyAlias = "aiusage-preview"
-                keyPassword = storePassword
-            }
         }
         // Release key from CI secrets. Without them the release APK stays unsigned instead of falling back to the test key.
         releaseKeystore?.let {
@@ -54,18 +41,6 @@ android {
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             releaseKeystore?.let { signingConfig = signingConfigs.getByName("release") }
-        }
-        // Release optimisation with an independent, private preview signer and installation.
-        create("preview") {
-            initWith(getByName("release"))
-            matchingFallbacks += listOf("release")
-            applicationIdSuffix = ".preview"
-            versionNameSuffix = "-preview"
-            isDebuggable = false
-            buildConfigField("boolean", "PREVIEW", "true")
-            manifestPlaceholders["appLabel"] = "AI Usage Preview"
-            manifestPlaceholders["previewBuild"] = "true"
-            signingConfig = signingConfigs.findByName("preview")
         }
         // Optimised build for daily use: R8 shrinking, not debuggable, same public test signer as debug,
         // so it installs over the debug build.
@@ -128,14 +103,3 @@ dependencies {
 }
 
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
-
-// A preview must never silently fall back to an unsigned APK or the public debug certificate.
-val verifyPreviewSigning by tasks.registering {
-    doLast {
-        check(providers.environmentVariable("AIUSAGE_PREVIEW_KEYSTORE_PATH").isPresent &&
-            providers.environmentVariable("AIUSAGE_PREVIEW_PASSWORD_FILE").isPresent) {
-            "Preview requires AIUSAGE_PREVIEW_KEYSTORE_PATH and AIUSAGE_PREVIEW_PASSWORD_FILE."
-        }
-    }
-}
-tasks.matching { it.name == "prePreviewBuild" }.configureEach { dependsOn(verifyPreviewSigning) }

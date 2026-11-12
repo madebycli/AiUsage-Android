@@ -24,3 +24,7 @@ The existing palette, account authentication, reset calculations, background sch
 The screenshot identified the failed Claude Reset Tracker. On 12 November 2026 the old `codexreset.vercel.app` endpoints for **both** providers return HTTP 308 to `pingreset.com`. The public HTML client correctly rejects cross-origin redirects. The source URLs now use the canonical HTTPS domain directly; the redirect restriction remains intact. Both final pages returned HTTP 200 and preserve the existing parser contract. Trimmed real-response fixtures cover both migrated pages. Missing/invalid data still raises errors; no zero-percent fallback is introduced.
 
 The Android 17 log excerpt itself contains lifecycle and scheduling events, without a crash stack trace. The reproducible URL migration, rather than that log, establishes the cause of the tracker failure.
+
+## GitHub Preview release
+
+Preview denotes a GitHub prerelease, not a different Android package. The normal release APK uses `com.madebycli.aiusage` and the existing Stable signing certificate. The manually triggered `preview-release.yml` builds and verifies it before publishing `v0.9.2-preview.1` as a prerelease with `latest=false`. The separate `.preview` application variant and branch APK were removed after clarification.
