@@ -11,6 +11,20 @@ class IntelTest {
     private fun at(text: String) = Instant.parse(text).epochSecond
     private val now = at("2026-10-24T11:20:00Z")
 
+    @Test fun `trackers use the current canonical domain and parse both migrated pages`() {
+        assertEquals("https://pingreset.com/en", IntelSource.CODEX_TRACKER.site)
+        assertEquals("https://pingreset.com/en/claude", IntelSource.CLAUDE_TRACKER.site)
+        val at = at("2026-11-12T11:54:00Z")
+        val codex = IntelParser.tracker(IntelSource.CODEX_TRACKER, fixture("tracker_codex_pingreset.html"), at)
+        val claude = IntelParser.tracker(IntelSource.CLAUDE_TRACKER, fixture("tracker_claude_pingreset.html"), at)
+        assertEquals(Chance(48, 45.0), codex.chances.single())
+        assertEquals(Chance(48, 17.0), claude.chances.single())
+        assertNotNull(codex.publishedAt)
+        assertNotNull(claude.validUntil)
+        assertTrue(codex.entries.isNotEmpty())
+        assertTrue(claude.entries.isNotEmpty())
+    }
+
     // ---- codex-reset.com ------------------------------------------------------------------------------
 
     @Test fun `codex-reset forecast keeps ranges rhythm and the usual hours of the day`() {

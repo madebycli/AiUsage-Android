@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package com.madebycli.aiusage.ui
 
 import androidx.compose.animation.*
@@ -20,22 +21,14 @@ internal const val PAGE_MILLIS = 320
 /** Cards rise and fade in one after another the first time they appear. */
 @Composable
 internal fun Modifier.staggeredEntrance(index: Int, key: Any = Unit): Modifier {
-    val progress = remember(key) { Animatable(0f) }
-    LaunchedEffect(key) {
-        delay((index.coerceAtMost(8) * 55).toLong())
-        progress.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
-    }
-    return graphicsLayer {
-        alpha = progress.value
-        translationY = (1f - progress.value) * 36.dp.toPx()
-    }
+    return androidx.compose.runtime.key(key) { orionReveal(index) }
 }
 
 /** Slight shrink while a card is pressed. */
 @Composable
-internal fun Modifier.pressScale(source: MutableInteractionSource, pressed: Float = 0.975f): Modifier {
+internal fun Modifier.pressScale(source: MutableInteractionSource, pressed: Float = 0.94f): Modifier {
     val isPressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (isPressed) pressed else 1f, quickSpring, label = "press")
+    val scale by animateFloatAsState(if (isPressed) pressed else 1f, androidx.compose.material3.MaterialTheme.motionScheme.fastSpatialSpec(), label = "press")
     return graphicsLayer { scaleX = scale; scaleY = scale }
 }
 
@@ -55,15 +48,14 @@ internal fun rememberFillProgress(target: Float, delayMillis: Int = 0): State<Fl
 internal fun rememberCountingPercent(target: Double): String {
     val value = remember { Animatable(0f) }
     LaunchedEffect(target) { value.animateTo(target.toFloat(), tween(700, easing = FastOutSlowInEasing)) }
-    val shown = value.value.toDouble()
-    return formatPercent(if (kotlin.math.abs(shown - target) < 0.05) target else Math.round(shown * 10) / 10.0)
+    return formatPercent(value.value.toDouble())
 }
 
 /** A page counts as deeper the more routes lie above the main screen. */
 internal data class Screen(val key: String, val depth: Int)
 
 internal fun pageTransition(): AnimatedContentTransitionScope<Screen>.() -> ContentTransform = {
-    val spec = tween<IntOffset>(PAGE_MILLIS, easing = FastOutSlowInEasing)
+    val spec = spring<IntOffset>(dampingRatio = .92f, stiffness = 450f)
     when {
         // The page above slides over the one below. Both stay fully opaque, so nothing shows through and no ghost images appear.
         targetState.depth > initialState.depth ->

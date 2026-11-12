@@ -29,10 +29,10 @@ import com.madebycli.aiusage.UsageViewModel
 internal fun AccountsScreen(state: UiState, model: UsageViewModel, sort: (() -> Unit)? = null) {
     var confirm by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<String?>(null) }
-    LazyColumn(Modifier.widthIn(max = 560.dp).fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxSize(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (!state.anyConnected) item(key = "welcome") { Welcome() }
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
-            AccountCard(entry, state.login(entry.provider).busy, Modifier.animateItem(),
+            AccountCard(entry, state.login(entry.provider).busy, Modifier.animateItem().staggeredEntrance(index, entry.id),
                 rename = { renaming = entry.id }, signInAgain = { model.connect(entry.provider, entry.id) }, disconnect = { confirm = entry.id },
                 reload = { model.refresh(entry.id) })
         }
@@ -43,10 +43,8 @@ internal fun AccountsScreen(state: UiState, model: UsageViewModel, sort: (() -> 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.animateContentSize()) {
                 if (state.anyConnected) SectionTitle("Account hinzufügen")
                 Providers.all.forEach { provider ->
-                    FilledTonalButton(onClick = { model.connect(provider) }, enabled = !state.login(provider).busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                        BrandIcon(provider, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp))
-                        Text(if (state.accountsOf(provider).isEmpty()) "Mit $provider verbinden" else "Weiteren $provider-Account hinzufügen")
-                    }
+                    OrionCtaButton(if (state.accountsOf(provider).isEmpty()) "Mit $provider verbinden" else "Weiteren $provider-Account hinzufügen",
+                        { model.connect(provider) }, enabled = !state.login(provider).busy, tonal = true)
                 }
                 Text("Du kannst mehrere Accounts desselben Anbieters verbinden, zum Beispiel privat und beruflich.", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -87,8 +85,8 @@ internal fun RenameDialog(entry: AccountState, dismiss: () -> Unit, save: (Strin
 @Composable
 private fun Welcome() {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("AI Usage", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) { Providers.all.forEach { BrandTile(it) } }
-        Text("Dein Verbrauch.\nDein Überblick.", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
         Text("Verbinde Codex und Claude Code mit deinem Konto, auch mehrere pro Anbieter. Die Daten kommen direkt vom Anbieter.",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }

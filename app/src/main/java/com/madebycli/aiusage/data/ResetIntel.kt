@@ -11,8 +11,8 @@ import org.jsoup.parser.Parser
 enum class IntelSource(val label: String, val provider: String, val site: String, val minimumSeconds: Long, val method: String) {
     CODEX_RESET("codex-reset.com", "Codex", "https://codex-reset.com", 120, "Modell aus der Reset-Historie"),
     LUNARWERX("LunarWerx", "Codex", "https://codex.lunarwerx.com", 300, "Statistisches Modell mit Unsicherheitsbereich"),
-    CODEX_TRACKER("Codex Reset Tracker", "Codex", "https://codexreset.vercel.app/en", 1800, "Spielerische Schätzung aus dem Rhythmus"),
-    CLAUDE_TRACKER("Claude Reset Tracker", "Claude Code", "https://codexreset.vercel.app/en/claude", 1800, "Spielerische Schätzung aus dem Rhythmus"),
+    CODEX_TRACKER("Codex Reset Tracker", "Codex", "https://pingreset.com/en", 1800, "Spielerische Schätzung aus dem Rhythmus"),
+    CLAUDE_TRACKER("Claude Reset Tracker", "Claude Code", "https://pingreset.com/en/claude", 1800, "Spielerische Schätzung aus dem Rhythmus"),
     CLAUDE_RESETS("claude-resets.net", "Claude Code", "https://claude-resets.net/", 1800, "Einschätzung der Community-Seite")
 }
 

@@ -1,0 +1,77 @@
+name: Pixel 9 visual audit
+on:
+  push:
+    branches: ['design/iris-ui']
+    paths:
+      - '.github/workflows/pixel9-audit.yml'
+      - 'app/src/**'
+      - 'core/ui/src/**'
+      - 'tools/run_pixel9_audit.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pixel9-visual-audit
+  cancel-in-progress: false
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: 6b04ff2c91ca0ae97d3a814cac9b4f190c03d749
+          path: baseline
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+      - name: Install compile SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - uses: actions/cache/restore@v4
+        id: baseline-apk
+        with:
+          path: baseline/app/build/outputs/apk/debug/app-debug.apk
+          key: pixel9-baseline-6b04ff2-debug-v1
+      - name: Build unchanged 0.9.4 baseline
+        if: steps.baseline-apk.outputs.cache-hit != 'true'
+        working-directory: baseline
+        run: ./gradlew :app:assembleDebug --no-daemon --max-workers=1 -Dorg.gradle.jvmargs='-Xmx1536m -Dfile.encoding=UTF-8' -Pkotlin.compiler.execution.strategy=in-process
+      - uses: actions/cache/save@v4
+        if: steps.baseline-apk.outputs.cache-hit != 'true'
+        with:
+          path: baseline/app/build/outputs/apk/debug/app-debug.apk
+          key: pixel9-baseline-6b04ff2-debug-v1
+      - name: Test and build corrected app and device tests
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --max-workers=1 -Dorg.gradle.jvmargs='-Xmx1536m -Dfile.encoding=UTF-8' -Pkotlin.compiler.execution.strategy=in-process
+      - name: Enable runner KVM device
+        run: sudo chmod a+rw /dev/kvm
+      - name: Run both builds on the Pixel 9 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_9
+          cores: 2
+          ram-size: 2048M
+          force-avd-creation: true
+          disable-animations: false
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect -accel on -skin 1080x2424
+          script: python3 tools/run_pixel9_audit.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pixel9-before-after
+          retention-days: 14
+          path: |
+            pixel9-artifacts/
+            app/build/reports/
+            app/build/test-results/

@@ -68,7 +68,7 @@ internal fun formatLimits(points: Double): String {
 }
 
 internal fun formatUsage(value: Double, metric: StatsMetric): String =
-    if (metric == StatsMetric.FIVE) formatLimits(value) else "${number(value, if (value < 10) 1 else 0)} %"
+    if (metric == StatsMetric.FIVE) formatLimits(value) else "${percent(value)} %"
 
 private fun shortUsage(value: Double, metric: StatsMetric): String =
     if (metric == StatsMetric.FIVE) number(value / 100, 1) else number(value, 0)

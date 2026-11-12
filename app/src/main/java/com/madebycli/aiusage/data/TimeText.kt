@@ -51,7 +51,8 @@ object TimeText {
 }
 
 /** "42" or "42,5": whole numbers stay whole. */
-fun formatPercent(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else String.format(Locale.GERMAN, "%.1f", value)
+/** Whole display percentages everywhere; the underlying measurements retain their precision. */
+fun formatPercent(value: Double): String = if (value.isFinite()) Math.round(value).toString() else "–"
 
 /** More German wording for the reset pages. */
 object Words {

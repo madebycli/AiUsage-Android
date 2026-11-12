@@ -63,8 +63,8 @@ internal fun AccountCard(entry: AccountState, now: Long, index: Int, modifier: M
     val windows = entry.windows()
     val source = remember { MutableInteractionSource() }
     Surface(onClick = open, interactionSource = source, modifier = modifier.fillMaxWidth().staggeredEntrance(index, entry.id).pressScale(source),
-        shape = cardShape, color = colors.surfaceContainerLow) {
-        Column(Modifier.padding(20.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        shape = cardShape, color = colors.surfaceContainerHigh) {
+        Column(Modifier.padding(16.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BrandIcon(entry.provider)
                 Column(Modifier.weight(1f)) {
@@ -90,7 +90,7 @@ private fun WindowColumn(window: UsageWindow, now: Long, index: Int, modifier: M
     val progress by rememberFillProgress((window.usedPercent / 100).toFloat(), 120 + index * 90)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(window.title, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-        Text("${rememberCountingPercent(window.usedPercent)}%", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+        Text("${rememberCountingPercent(window.usedPercent)}%", style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"), fontWeight = FontWeight.Bold, maxLines = 1)
         Canvas(Modifier.fillMaxWidth().height(6.dp)) {
             val track = colors.surfaceContainerHighest
             drawLine(track, Offset(size.height / 2, center.y), Offset(size.width - size.height / 2, center.y), size.height, StrokeCap.Round)
@@ -139,8 +139,7 @@ internal fun SortList(accounts: List<AccountState>, commit: (List<String>) -> Un
     }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(sortGap)) {
         item(key = "hint") {
-            Text("Ziehe die Karten am Griff oder nutze die Pfeile. Die Reihenfolge gilt für die Startseite und das Widget.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+            Text("Am Griff ziehen oder mit den Pfeilen verschieben.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         items(order, key = { it }) { id ->
             val entry = accounts.firstOrNull { it.id == id } ?: return@items
@@ -149,7 +148,7 @@ internal fun SortList(accounts: List<AccountState>, commit: (List<String>) -> Un
             Surface(
                 modifier = (if (active) Modifier else Modifier.animateItem()).fillMaxWidth().height(sortRowHeight).zIndex(if (active) 1f else 0f)
                     .graphicsLayer { translationY = if (active) offset else 0f; scaleX = 1f + .02f * lift; scaleY = 1f + .02f * lift },
-                shape = RoundedCornerShape(22.dp), color = if (active) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.extraLarge, color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
                 shadowElevation = (8 * lift).dp
             ) {
                 Row(Modifier.padding(start = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {

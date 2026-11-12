@@ -1,0 +1,96 @@
+name: Preview Release
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: GitHub prerelease tag
+        required: true
+        default: v0.9.5-preview.1
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: preview-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == 'refs/heads/design/iris-ui'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate preview tag
+        env:
+          PREVIEW_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          source = pathlib.Path('app/build.gradle.kts').read_text()
+          version = re.search(r'versionName = "([^"]+)"', source).group(1)
+          assert re.fullmatch('v' + re.escape(version) + r'-preview\.[1-9][0-9]*', os.environ['PREVIEW_TAG']), 'Invalid preview tag'
+          PY
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install SDK
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - name: Decode existing release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          python3 - <<'PY'
+          import base64, os, pathlib
+          key = base64.b64decode(os.environ['KEYSTORE_BASE64'], validate=True)
+          assert key, 'Release keystore is not configured'
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'release.p12'
+          path.write_bytes(key)
+          path.chmod(0o600)
+          PY
+      - name: Build normal signed release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.p12
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew testDebugUnitTest lintRelease assembleRelease --max-workers=1 -Pkotlin.compiler.execution.strategy=in-process --stacktrace
+      - name: Verify update signature and normal application identity
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess, zipfile
+          tools = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools/37.0.0'
+          apk = 'app/build/outputs/apk/release/app-release.apk'
+          signature = subprocess.check_output([str(tools/'apksigner'), 'verify', '--print-certs', apk], text=True)
+          assert 'fb8511da61b10b3a66be83f0c3183f1b0bad3db8969c6a0723b0c9d101a2174e' in signature, 'Signer differs from Stable 0.9.1'
+          package = subprocess.check_output([str(tools/'aapt2'), 'dump', 'badging', apk], text=True)
+          assert "package: name='com.madebycli.aiusage'" in package
+          assert "application-label:'AI Usage'" in package
+          assert 'application-debuggable' not in package
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None
+          print('Stable signer, normal package identity and APK integrity verified.')
+          PY
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_TAG: ${{ inputs.tag }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
+          sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
+          cat > preview-notes.md <<'NOTES'
+          Preview of AI Usage 0.9.5: dark/light foreground fixes, consistent page gutters, native settings rows and animated category emblems. Includes the Pixel 9 before/after audit.
+
+          Normal Android package: `com.madebycli.aiusage`. Signed with the same release certificate as Stable 0.9.1; optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate Android application.
+
+          Includes tests, lint, signature and application identity verification. No merge into main; the latest Stable release remains unchanged.
+          NOTES
+          printf '\n[Preview gallery and detailed English review](https://github.com/%s/blob/%s/docs/pixel9-audit/README.md)\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> preview-notes.md
+          gh release create "$PREVIEW_TAG" "AiUsage-$PREVIEW_TAG.apk" SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "AI Usage ${PREVIEW_TAG#v}" --notes-file preview-notes.md --prerelease --latest=false
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.p12"

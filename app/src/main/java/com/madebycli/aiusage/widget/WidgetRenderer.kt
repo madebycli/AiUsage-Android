@@ -176,26 +176,38 @@ object WidgetRenderer {
         if (row.state(now) == State.LIVE) usageColor(p, config, row.seconds, row.window!!.usedPercent) else p.muted
 
     /** Smallest tile a style needs, in dp: (width, height). Below this height a tile falls back to the one-line layout. */
+    internal fun columnCount(config: WidgetConfig, width: Float, minimum: Float, accounts: Int): Int {
+        val fits = floor((width + 8f) / (minimum + 8f)).toInt().coerceIn(1, accounts.coerceAtLeast(1))
+        return when (config.arrangement) { WidgetArrangement.AUTO -> fits; WidgetArrangement.STACK -> 1; WidgetArrangement.GRID -> fits.coerceAtMost(2) }
+    }
+
     private fun minTile(config: WidgetConfig, rows: Int): Pair<Float, Float> = when (config.style) {
         WidgetStyle.BARS -> (if (rows > 1) 150f else 130f) to (if (rows > 1) 74f else 54f)
         WidgetStyle.COMPACT -> (if (rows > 1) 210f else 160f) to 34f
-        WidgetStyle.PERCENT -> (if (rows > 1) 104f else 72f) to 62f
-        WidgetStyle.RINGS -> (if (rows > 1) 104f else 72f) to 80f
+        WidgetStyle.PERCENT -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 104f else 72f) to (if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 48f else 62f)
+        WidgetStyle.RINGS -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 104f else 72f) to (if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 68f else 74f)
     }
 
     private fun maxTileHeight(config: WidgetConfig, rows: Int) = when (config.style) {
         WidgetStyle.BARS -> 22f + rows * 38f + 18f
         WidgetStyle.COMPACT -> 44f
-        WidgetStyle.PERCENT -> 96f
-        WidgetStyle.RINGS -> 118f
+        WidgetStyle.PERCENT -> if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 78f else 96f
+        WidgetStyle.RINGS -> if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 100f else 118f
     }
 
     /** Natural size of one tile in dp: (width, tallest useful height). Bigger tiles draw everything larger instead of leaving space. */
     private fun naturalTile(config: WidgetConfig, rows: Int): Pair<Float, Float> = when (config.style) {
         WidgetStyle.BARS -> (if (rows > 1) 190f else 170f) to maxTileHeight(config, rows)
         WidgetStyle.COMPACT -> (if (rows > 1) 250f else 200f) to maxTileHeight(config, rows)
-        WidgetStyle.PERCENT -> (if (rows > 1) 150f else 100f) to 82f
-        WidgetStyle.RINGS -> (if (rows > 1) 150f else 100f) to 104f
+        WidgetStyle.PERCENT -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 150f else 100f) to maxTileHeight(config, rows)
+        WidgetStyle.RINGS -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 150f else 100f) to maxTileHeight(config, rows)
+    }
+
+    internal fun effectiveStyle(config: WidgetConfig, widthDp: Int, heightDp: Int): WidgetStyle {
+        val pad = if (heightDp < 90 || widthDp < 120) 8f else 12f
+        val header = if ((config.showRefresh || config.showUpdated) && heightDp >= 100) 18f else 0f
+        val minimum = minTile(config, if (config.windows == WidgetWindows.BOTH) 2 else 1).second
+        return if (heightDp - 2 * pad - header < minimum - 1) WidgetStyle.COMPACT else config.style
     }
 
     /** Largest enlargement of the content in big widgets. */
@@ -223,9 +235,9 @@ object WidgetRenderer {
         val top = pad + headerHeight
         val contentW = width - pad * 2
         // A style that cannot fit even one tile in this height shows the one-line layout for the whole widget.
-        val style = if (height - pad - top < minTile(config, rowCount).second - 1f) WidgetStyle.COMPACT else config.style
+        val style = effectiveStyle(config, widthDp, heightDp)
         val (minW, minH) = minTile(config.copy(style = style), rowCount)
-        val wouldOverflow = accounts.size > floor((contentW + gap) / (minW + gap)).toInt().coerceIn(1, max(1, accounts.size)) *
+        val wouldOverflow = accounts.size > columnCount(config, contentW, minW, accounts.size) *
             max(1, floor((height - pad - top + gap) / (minH + gap)).toInt())
         // The "+N" marker lives in the header; widgets without one reserve a thin strip when there is room.
         val stripHeight = if (wouldOverflow && !hasHeader && height >= 70f) 16f else 0f
@@ -234,7 +246,7 @@ object WidgetRenderer {
             painter.text(if (all.isEmpty()) "Noch kein Account verbunden" else "Kein Account gewählt", width / 2, height / 2 + 4, 12f, painter.medium, palette.muted, Paint.Align.CENTER, contentW)
             return bitmap
         }
-        val columns = floor((contentW + gap) / (minW + gap)).toInt().coerceIn(1, accounts.size)
+        val columns = columnCount(config, contentW, minW, accounts.size)
         val fittingRows = max(1, floor((contentH + gap) / (minH + gap)).toInt())
         val capacity = columns * fittingRows
         val shown = accounts.take(capacity)
@@ -408,18 +420,20 @@ object WidgetRenderer {
         val colors = p.palette
         p.brand(a.provider, x, y, 12f)
         p.text(nameOf(a), x + 17f, y + 10f, 11f, p.bold, colors.text, maxWidth = w - 17f)
-        val top = y + 14f
-        val column = w / rows.size
-        val sizes = if (h >= 64f) listOf(24f, 21f, 18f, 16f, 14f, 12f) else listOf(20f, 18f, 16f, 14f, 12f)
+        val stacked = p.config.windowLayout == WidgetWindowLayout.STACKED
+        val cellHeight = if (stacked) (h - 14f) / rows.size else h
+        val column = if (stacked) w else w / rows.size
+        val sizes = if (cellHeight >= 64f) listOf(24f, 21f, 18f, 16f, 14f, 12f) else listOf(20f, 18f, 16f, 14f, 12f)
         // One size for all columns of a tile, so the numbers line up.
         val big = rows.minOf { p.fitSize(percentText(it, now), column - 6f, p.bold, sizes) }
         rows.forEachIndexed { i, row ->
-            val cx = x + column * i + column / 2
+            val cx = x + column * (if (stacked) 0 else i) + column / 2
+            val top = y + 14f + if (stacked) i * cellHeight else 0f
             val live = row.state(now) == State.LIVE
             p.text(percentText(row, now), cx, top + 3f + big * 0.9f, big, p.bold, if (live) accent(colors, p.config, row, now) else colors.muted, Paint.Align.CENTER)
             var line = top + big * 0.9f + 3f + 12f
             p.text(row.label, cx, line, 9.5f, p.medium, colors.muted, Paint.Align.CENTER, column - 2f)
-            if (h >= 62f) {
+            if (cellHeight >= 62f) {
                 line += 11.5f
                 val options = resetOptions(row, now, p.config).let { if (p.config.reset == ResetFormat.BOTH) it.drop(1) + it.last() else it }
                 p.text(p.fit(options, column - 2f, 9.5f, p.regular), cx, line, 9.5f, p.regular, colors.muted, Paint.Align.CENTER, column - 2f)
@@ -431,21 +445,24 @@ object WidgetRenderer {
         val colors = p.palette
         p.brand(a.provider, x, y, 12f)
         p.text(nameOf(a), x + 17f, y + 10f, 11f, p.bold, colors.text, maxWidth = w - 17f)
-        val column = w / rows.size
-        val labelRoom = if (h >= 70f) 24f else 12f
-        val diameter = min(min(column - 8f, h - 16f - labelRoom), 60f).coerceAtLeast(26f)
-        val cy = y + 16f + diameter / 2
+        val stacked = p.config.windowLayout == WidgetWindowLayout.STACKED
+        val cellHeight = if (stacked) (h - 16f) / rows.size else h
+        val column = if (stacked) w else w / rows.size
+        val labelRoom = if (cellHeight >= 70f) 24f else 12f
+        val diameter = min(min(column - 8f, cellHeight - 16f - labelRoom), 60f).coerceAtLeast(26f)
         rows.forEachIndexed { i, row ->
-            val cx = x + column * i + column / 2
+            val rowTop = y + if (stacked) i * cellHeight else 0f
+            val cy = rowTop + 16f + diameter / 2
+            val cx = x + column * (if (stacked) 0 else i) + column / 2
             val live = row.state(now) == State.LIVE
             p.ring(cx, cy, diameter / 2 - 3f, 5f, progress(row, now), accent(colors, p.config, row, now))
             val text = percentText(row, now)
             val size = p.fitSize(text, diameter - 14f, p.bold, listOf(12f, 11f, 10f, 9f, 8f))
             p.text(text, cx, cy + size * 0.35f, size, p.bold, if (live) colors.text else colors.muted, Paint.Align.CENTER)
-            p.text(row.label, cx, y + 16f + diameter + 10f, 9.5f, p.medium, colors.muted, Paint.Align.CENTER, column - 2f)
-            if (h >= 70f) {
+            p.text(row.label, cx, rowTop + 16f + diameter + 10f, 9.5f, p.medium, colors.muted, Paint.Align.CENTER, column - 2f)
+            if (cellHeight >= 70f) {
                 val options = resetOptions(row, now, p.config).let { if (p.config.reset == ResetFormat.BOTH) it.drop(1) + it.last() else it }
-                p.text(p.fit(options, column - 2f, 9.5f, p.regular), cx, y + 16f + diameter + 21f, 9.5f, p.regular, colors.muted, Paint.Align.CENTER, column - 2f)
+                p.text(p.fit(options, column - 2f, 9.5f, p.regular), cx, rowTop + 16f + diameter + 21f, 9.5f, p.regular, colors.muted, Paint.Align.CENTER, column - 2f)
             }
         }
     }

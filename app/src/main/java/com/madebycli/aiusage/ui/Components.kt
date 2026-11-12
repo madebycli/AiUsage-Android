@@ -5,9 +5,17 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -38,33 +46,43 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 internal val cardShape = RoundedCornerShape(28.dp)
-internal val screenPadding = PaddingValues(20.dp, 8.dp, 20.dp, 24.dp)
+internal val screenPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp)
 internal val maxContentWidth = 680.dp
 
 @Composable
-internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = cardShape, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
+internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(16.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    OrionGroupItem(0, 1, modifier = modifier) {
         Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 
-/** Rows without their own padding, separated by hairlines; used for menus. */
+/** Orion settings Section/SRow surface: row insets belong to the row, not to a second surrounding card. */
 @Composable
-internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) = SoftCard(PaddingValues(0.dp)) {
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp), content = content)
+internal fun SettingsContent(content: @Composable ColumnScope.() -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
+/** Connected surfaces have real transparent gaps; every segment owns its outline. */
+@Composable
+internal fun MenuCard(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraLarge), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
 }
 
 @Composable
-internal fun MenuDivider() = HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .5f))
+internal fun MenuDivider() = Unit
 
 @Composable
-internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null, open: () -> Unit) {
-    Surface(onClick = open, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(20.dp, 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null, index: Int = 0, count: Int = 1, open: () -> Unit) {
+    OrionGroupItem(index, count, onClick = open) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(10.dp).size(22.dp))
+            }
             Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -72,16 +90,11 @@ internal fun MenuRow(title: String, icon: ImageVector, subtitle: String? = null,
 }
 
 @Composable
-internal fun SectionTitle(text: String) {
-    Row(Modifier.padding(top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.size(4.dp, 22.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50)))
-        Text(text, style = MaterialTheme.typography.titleLarge)
-    }
-}
+internal fun SectionTitle(text: String) = OrionHubHeader(text)
 
 @Composable
 internal fun Notice(text: String, error: Boolean = false) {
-    Surface(shape = RoundedCornerShape(18.dp), color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
+    Surface(shape = MaterialTheme.shapes.large, color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
         contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
     }
@@ -94,19 +107,24 @@ internal fun Disclosure(label: String, content: @Composable ColumnScope.() -> Un
         TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
             Text(label); Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(18.dp))
         }
-        if (expanded) Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        AnimatedVisibility(expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content) }
     }
 }
 
 @Composable
 internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked, onChange, modifier = Modifier.semantics { contentDescription = title })
-    }
+    val accent = LocalSettingsCategory.current?.accent ?: MaterialTheme.colorScheme.primary
+    val (background, foreground) = orionTonal(accent)
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
+        leadingContent = { Box(Modifier.size(40.dp).background(background, androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+            Icon(androidx.compose.material.icons.Icons.Rounded.Tune, null, Modifier.size(22.dp), tint = foreground)
+        } },
+        trailingContent = { Switch(checked, null, thumbContent = { Icon(if (checked) androidx.compose.material.icons.Icons.Rounded.Check else androidx.compose.material.icons.Icons.Rounded.Close, null, Modifier.size(SwitchDefaults.IconSize)) }) },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraSmall).then(Modifier.toggleable(checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)))
+
 }
 
 @Composable
@@ -154,7 +172,7 @@ internal fun RingGauge(progress: Float, color: Color, text: String, caption: Str
             drawArc(track, start, sweep, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
             if (animated > 0f) drawArc(color, start, sweep * animated, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
         }
-        val factor = if (text.length >= 5) .19f else if (text.length == 4) .22f else .27f
+        val factor = .22f // Reserve the same type size for 0% through 100%, including animation frames.
         val fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size.toPx() * factor).toSp() }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.titleLarge.copy(fontSize = fontSize), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1, softWrap = false)
@@ -188,7 +206,7 @@ internal fun RangeBar(value: Double, low: Double?, high: Double?, color: Color, 
 
 @Composable
 internal fun BrandTile(provider: String, size: Int = 76) {
-    Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Box(Modifier.size(size.dp), contentAlignment = Alignment.Center) { BrandIcon(provider, Modifier.size((size / 2).dp)) }
     }
 }

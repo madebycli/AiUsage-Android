@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package com.axiel7.anihyou.core.ui.theme
 
 import androidx.compose.material3.Typography
@@ -17,9 +18,9 @@ val UsageTypography = Typography(
     displayLarge = base.displayLarge.copy(fontFamily = rounded),
     displayMedium = base.displayMedium.copy(fontFamily = rounded),
     displaySmall = base.displaySmall.copy(fontFamily = rounded),
-    headlineLarge = base.headlineLarge.copy(fontFamily = rounded, fontWeight = FontWeight.Medium),
-    headlineMedium = base.headlineMedium.copy(fontFamily = rounded, fontWeight = FontWeight.Medium),
-    headlineSmall = base.headlineSmall.copy(fontFamily = rounded, fontWeight = FontWeight.Medium),
+    headlineLarge = base.headlineLarge.copy(fontFamily = rounded),
+    headlineMedium = base.headlineMedium.copy(fontFamily = rounded),
+    headlineSmall = base.headlineSmall.copy(fontFamily = rounded),
     titleLarge = base.titleLarge.copy(fontFamily = rounded),
     titleMedium = base.titleMedium.copy(fontFamily = rounded),
     titleSmall = base.titleSmall.copy(fontFamily = rounded),
@@ -28,5 +29,20 @@ val UsageTypography = Typography(
     bodySmall = base.bodySmall.copy(fontFamily = rounded),
     labelLarge = base.labelLarge.copy(fontFamily = rounded),
     labelMedium = base.labelMedium.copy(fontFamily = rounded),
-    labelSmall = base.labelSmall.copy(fontFamily = rounded)
+    labelSmall = base.labelSmall.copy(fontFamily = rounded),
+    displayLargeEmphasized = base.displayLargeEmphasized.copy(fontFamily = rounded),
+    displayMediumEmphasized = base.displayMediumEmphasized.copy(fontFamily = rounded),
+    displaySmallEmphasized = base.displaySmallEmphasized.copy(fontFamily = rounded),
+    headlineLargeEmphasized = base.headlineLargeEmphasized.copy(fontFamily = rounded),
+    headlineMediumEmphasized = base.headlineMediumEmphasized.copy(fontFamily = rounded),
+    headlineSmallEmphasized = base.headlineSmallEmphasized.copy(fontFamily = rounded),
+    titleLargeEmphasized = base.titleLargeEmphasized.copy(fontFamily = rounded),
+    titleMediumEmphasized = base.titleMediumEmphasized.copy(fontFamily = rounded),
+    titleSmallEmphasized = base.titleSmallEmphasized.copy(fontFamily = rounded),
+    bodyLargeEmphasized = base.bodyLargeEmphasized.copy(fontFamily = rounded),
+    bodyMediumEmphasized = base.bodyMediumEmphasized.copy(fontFamily = rounded),
+    bodySmallEmphasized = base.bodySmallEmphasized.copy(fontFamily = rounded),
+    labelLargeEmphasized = base.labelLargeEmphasized.copy(fontFamily = rounded),
+    labelMediumEmphasized = base.labelMediumEmphasized.copy(fontFamily = rounded),
+    labelSmallEmphasized = base.labelSmallEmphasized.copy(fontFamily = rounded),
 )

@@ -3,6 +3,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: GitHub preview tag (preview branch only)
+        required: true
+        default: v0.9.5-preview.1
+        type: string
 permissions:
   contents: write
 concurrency:
@@ -54,3 +60,10 @@ jobs:
           gh release create "$tag" "AiUsage-$version.apk" \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "AI Usage $version" --generate-notes --latest
+
+  preview:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/design/iris-ui'
+    uses: ./.github/workflows/preview-release.yml
+    with:
+      tag: ${{ inputs.tag }}
+    secrets: inherit

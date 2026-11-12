@@ -105,4 +105,28 @@ class WidgetRendererTest {
         assertFalse(WidgetConfigStore.has(context, 42))
         assertEquals(WidgetConfig(), WidgetConfigStore.read(context, 42))
     }
+    @Test fun `vertical and grid arrangements preserve their selected columns`() {
+        assertEquals(1, WidgetRenderer.columnCount(WidgetConfig(arrangement = WidgetArrangement.STACK), 600f, 100f, 4))
+        assertEquals(2, WidgetRenderer.columnCount(WidgetConfig(arrangement = WidgetArrangement.GRID), 600f, 100f, 4))
+        assertEquals(4, WidgetRenderer.columnCount(WidgetConfig(), 600f, 100f, 4))
+        assertEquals(1, WidgetRenderer.columnCount(WidgetConfig(arrangement = WidgetArrangement.GRID), 90f, 100f, 4))
+    }
+    @Test fun `applied detailed preset and window layout survive storing and rendering`() {
+        val config = WidgetPreset.DETAILED.applyTo(WidgetConfig(accounts = listOf("a1", "c1")))
+        WidgetConfigStore.write(context, 701, config)
+        assertEquals(config, WidgetConfigStore.read(context, 701))
+        assertEquals(listOf("a1", "c1"), config.accounts)
+        draw("vertical-detailed-2x4", config, 160, 280)
+        val side = draw("window-side-by-side", WidgetConfig(style = WidgetStyle.RINGS), 250, 260, accounts.take(1))
+        val stack = draw("window-stacked", WidgetConfig(style = WidgetStyle.RINGS, windowLayout = WidgetWindowLayout.STACKED), 250, 260, accounts.take(1))
+        assertFalse(side.sameAs(stack))
+    }
+
+    @Test fun `ring preset fits a standard four by two widget instead of falling back to compact`() {
+        val preset = WidgetPreset.RINGS.applyTo(WidgetConfig())
+        assertEquals(WidgetStyle.RINGS, WidgetRenderer.effectiveStyle(preset, 250, 120))
+        assertEquals(WidgetStyle.COMPACT, WidgetRenderer.effectiveStyle(preset, 110, 55))
+        draw("rings-preset-4x2", preset, 250, 120)
+    }
+
 }
