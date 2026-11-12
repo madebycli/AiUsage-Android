@@ -5,7 +5,7 @@ on:
       tag:
         description: GitHub prerelease tag
         required: true
-        default: v0.9.2-preview.1
+        default: v0.9.3-preview.1
         type: string
 permissions:
   contents: write
@@ -81,15 +81,16 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
           sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
           cat > preview-notes.md <<'NOTES'
-          Preview of AI Usage 0.9.2 with the Iris UI and the Codex/Claude tracker domain fix.
+          Preview of AI Usage 0.9.3: Orion UI throughout, whole-number percentages, working widget presets and vertical layouts.
 
           Normal Android package: `com.madebycli.aiusage`. Signed with the same release certificate as Stable 0.9.1; optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate Android application.
 
           Includes tests, lint, signature and application identity verification. No merge into main; the latest Stable release remains unchanged.
           NOTES
+          printf '\n[Preview gallery and detailed English review](https://github.com/%s/blob/%s/docs/orion-preview/README.md)\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> preview-notes.md
           gh release create "$PREVIEW_TAG" "AiUsage-$PREVIEW_TAG.apk" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "AI Usage 0.9.2 Preview" --notes-file preview-notes.md --prerelease --latest=false
+            --title "AI Usage ${PREVIEW_TAG#v}" --notes-file preview-notes.md --prerelease --latest=false
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/release.p12"

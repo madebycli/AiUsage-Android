@@ -33,6 +33,9 @@ private object Route {
     const val ACCOUNTS = "accounts"
     const val NOTIFICATIONS = "notifications"
     const val NAVIGATION = "navigation"
+    const val APPEARANCE = "appearance"
+    const val WIDGETS = "widgets"
+    const val ABOUT = "about"
     fun account(id: String) = "account|$id"
     fun reset(provider: String, page: String) = "reset|$provider|$page"
     fun accountId(route: String): String? = route.takeIf { it.startsWith("account|") }?.substringAfter('|')
@@ -87,7 +90,7 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
 
     @Composable fun Page(title: String, actions: @Composable RowScope.() -> Unit = {}, content: @Composable () -> Unit) =
         DefaultScaffoldWithSmallTopAppBar(
-            title = title, scrollBehavior = detailScroll,
+            title = if (title != DesignPage.ABOUT.title && DesignPage.entries.any { it.title == title }) "" else title, scrollBehavior = detailScroll,
             modifier = Modifier.nestedScroll(detailScroll.nestedScrollConnection),
             navigationIcon = { IconButton(onClick = ::back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
             actions = actions
@@ -101,16 +104,19 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
         else -> Screen("main", 0)
     }
 
+    androidx.compose.animation.SharedTransitionLayout {
+    val shared = this
     // A solid base under every page and transition: nothing can shine through while pages move.
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     AnimatedContent(screen, transitionSpec = pageTransition(), label = "pages") { target ->
+        OrionSharedScreen(shared, this) {
         val key = target.key
         when {
             key == "init" -> Scaffold { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) { LoadingIndicator() } }
             key.startsWith("login:") -> {
                 val provider = key.removePrefix("login:")
                 DefaultScaffoldWithSmallTopAppBar(
-                    title = "$provider verbinden", scrollBehavior = detailScroll,
+                    title = "", scrollBehavior = detailScroll,
                     navigationIcon = { IconButton(onClick = { model.cancelLogin(provider) }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } }
                 ) { padding -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) { ConnectScreen(provider, state, model) } }
             }
@@ -119,8 +125,11 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
                 val current = key.removePrefix("route:")
                 when {
                     current == Route.SETTINGS -> Page("Einstellungen") {
-                        SettingsScreen(state, model, { stack.add(Route.ACCOUNTS) }, { stack.add(Route.NOTIFICATIONS) }, { stack.add(Route.NAVIGATION) })
+                        SettingsScreen(state, model, { stack.add(Route.ACCOUNTS) }, { stack.add(Route.NOTIFICATIONS) }, { stack.add(Route.NAVIGATION) }, { stack.add(Route.APPEARANCE) }, { stack.add(Route.WIDGETS) }, { stack.add(Route.ABOUT) })
                     }
+                    current == Route.APPEARANCE -> Page("Erscheinungsbild") { AppearanceScreen(state, model) }
+                    current == Route.WIDGETS -> Page("Widgets") { WidgetsScreen() }
+                    current == Route.ABOUT -> Page("Über AI Usage") { AboutScreen() }
                     current == Route.ACCOUNTS -> Page("Anmeldungen") { AccountsScreen(state, model, sort = { tab = AppTab.USAGE; stack.clear(); sorting = true }) }
                     current == Route.NOTIFICATIONS -> Page("Benachrichtigungen") { NotificationSettings(state, model) }
                     current == Route.NAVIGATION -> Page("Navigation & Start") { NavigationSettings(state, model) }
@@ -180,6 +189,8 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
         }
     }
     }
+    }
+    }
 }
 
 /** One account: its limits and, in the menu, rename, sign in again and disconnect. */
@@ -189,7 +200,7 @@ private fun AccountPage(entry: com.madebycli.aiusage.AccountState, state: UiStat
     var renaming by remember { mutableStateOf(false) }
     var confirm by remember { mutableStateOf(false) }
     DefaultScaffoldWithSmallTopAppBar(
-        title = entry.title, scrollBehavior = scroll,
+        title = "", scrollBehavior = scroll,
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         navigationIcon = { IconButton(onClick = back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Zurück") } },
         actions = {

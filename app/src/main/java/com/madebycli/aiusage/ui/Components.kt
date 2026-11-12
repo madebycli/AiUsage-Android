@@ -8,6 +8,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -43,7 +50,7 @@ internal val maxContentWidth = 680.dp
 
 @Composable
 internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(20.dp), modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = modifier.fillMaxWidth()) {
+    OrionGroupItem(0, 1, modifier = modifier) {
         Column(Modifier.padding(contentPadding), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
@@ -91,19 +98,20 @@ internal fun Disclosure(label: String, content: @Composable ColumnScope.() -> Un
         TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
             Text(label); Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(18.dp))
         }
-        if (expanded) Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+        AnimatedVisibility(expanded, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) { Column(verticalArrangement = Arrangement.spacedBy(8.dp), content = content) }
     }
 }
 
 @Composable
 internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked, onChange, modifier = Modifier.semantics { contentDescription = title })
-    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = { Text(subtitle, style = MaterialTheme.typography.bodySmall) },
+        leadingContent = { Icon(androidx.compose.material.icons.Icons.Rounded.Tune, null, tint = MaterialTheme.colorScheme.primary) },
+        trailingContent = { Switch(checked, null, thumbContent = { Icon(if (checked) androidx.compose.material.icons.Icons.Rounded.Check else androidx.compose.material.icons.Icons.Rounded.Close, null, Modifier.size(SwitchDefaults.IconSize)) }) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.fillMaxWidth().then(Modifier.toggleable(checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)))
+
 }
 
 @Composable
@@ -151,7 +159,7 @@ internal fun RingGauge(progress: Float, color: Color, text: String, caption: Str
             drawArc(track, start, sweep, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
             if (animated > 0f) drawArc(color, start, sweep * animated, false, Offset(inset, inset), bounds, style = androidx.compose.ui.graphics.drawscope.Stroke(width, cap = StrokeCap.Round))
         }
-        val factor = if (text.length >= 5) .19f else if (text.length == 4) .22f else .27f
+        val factor = .22f // Reserve the same type size for 0% through 100%, including animation frames.
         val fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size.toPx() * factor).toSp() }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.titleLarge.copy(fontSize = fontSize), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1, softWrap = false)

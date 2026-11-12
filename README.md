@@ -72,3 +72,5 @@ GPL-3.0, siehe [LICENSE](LICENSE). Inoffizielle App, unabhängig von OpenAI und 
 ## Iris UI
 
 Designbausteine aus [Iris Build 102](https://github.com/madebycli/Iris/tree/60bbb256e588103ad18f9776ed8acfdde7c6f156) und [Orion Store](https://github.com/RookieEnough/Orion-Store) (RookieEnough und Mitwirkende), GPL-3.0. [Übernahmen und Umfang](docs/IRIS_DESIGN.md). Die untere Navigation bleibt erhalten.
+
+[AI Usage 0.9.3: English preview gallery, motion recordings and detailed self-review](docs/orion-preview/README.md).

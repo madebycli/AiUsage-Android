@@ -73,9 +73,11 @@ class WidgetConfigActivity : ComponentActivity() {
 private val previewSizes = listOf("Breit" to (250 to 120), "Hoch" to (160 to 230), "Groß" to (250 to 260), "Schmal" to (250 to 62))
 
 @Composable
-private fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight: Int, onCancel: () -> Unit, onSave: (WidgetConfig) -> Unit) {
+internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight: Int, onCancel: () -> Unit, onSave: (WidgetConfig) -> Unit) {
     val context = LocalContext.current
-    var config by remember { mutableStateOf(initial) }
+    var config by androidx.compose.runtime.saveable.rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<WidgetConfig, String>(
+        save = { com.madebycli.aiusage.data.appJson.encodeToString(WidgetConfig.serializer(), it) },
+        restore = { com.madebycli.aiusage.data.appJson.decodeFromString(WidgetConfig.serializer(), it) })) { mutableStateOf(initial) }
     val accounts by produceState(emptyList<WidgetAccount>()) { value = withContext(Dispatchers.IO) { WidgetData.load(context) } }
     var sizeIndex by remember { mutableIntStateOf(-1) }
     val (previewW, previewH) = if (sizeIndex < 0) widgetWidth to widgetHeight else previewSizes[sizeIndex].second
@@ -91,37 +93,48 @@ private fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight: 
         }
     ) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            com.madebycli.aiusage.ui.PageHero(com.madebycli.aiusage.ui.DesignPage.WIDGETS)
+            Label("Vorlage anwenden")
+            SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { it.title })
             Preview(bitmap, previewW, previewH, sizeIndex) { sizeIndex = it }
+            if (WidgetRenderer.effectiveStyle(config, widgetWidth, widgetHeight) != config.style)
+                Text("Für diese Darstellung das Widget im Launcher höher ziehen. In der aktuellen Größe wird es kompakt angezeigt.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Section("Accounts") {
                 if (accounts.isEmpty()) Text("Es ist noch kein Account verbunden. Verbinde zuerst einen Account in der App.", style = MaterialTheme.typography.bodyMedium)
-                else AccountPicker(accounts, config) { config = it }
+                else AccountPicker(accounts, config) { config = it.copy(preset = WidgetPreset.CUSTOM) }
             }
             Section("Anzeige") {
                 Label("Darstellung")
-                SegmentedTabGroup(WidgetStyle.entries, config.style, { config = config.copy(style = it) }, { it.title })
+                SegmentedTabGroup(WidgetStyle.entries, config.style, { config = config.copy(preset = WidgetPreset.CUSTOM, style = it) }, { it.title })
                 Text(config.style.hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Label("Accounts anordnen")
+                SegmentedTabGroup(WidgetArrangement.entries, config.arrangement, { config = config.copy(preset = WidgetPreset.CUSTOM, arrangement = it) }, { it.title })
+                if (config.style == WidgetStyle.RINGS || config.style == WidgetStyle.PERCENT) {
+                    Label("Zeitfenster anordnen")
+                    SegmentedTabGroup(WidgetWindowLayout.entries, config.windowLayout, { config = config.copy(preset = WidgetPreset.CUSTOM, windowLayout = it) }, { it.title })
+                }
                 Label("Zeitfenster")
-                SegmentedTabGroup(WidgetWindows.entries, config.windows, { config = config.copy(windows = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(WidgetWindows.entries, config.windows, { config = config.copy(preset = WidgetPreset.CUSTOM, windows = it) }, { it.title }, fillEqually = true)
                 Label("Reset-Zeit")
-                SegmentedTabGroup(ResetFormat.entries, config.reset, { config = config.copy(reset = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(ResetFormat.entries, config.reset, { config = config.copy(preset = WidgetPreset.CUSTOM, reset = it) }, { it.title }, fillEqually = true)
                 Text(when (config.reset) { ResetFormat.CLOCK -> "z. B. 17:40"; ResetFormat.RELATIVE -> "z. B. in 2 Std. 50 Min."; ResetFormat.BOTH -> "z. B. 17:40 · in 2 Std. 50 Min." },
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Label("Balkenfarbe")
-                SegmentedTabGroup(WidgetColors.entries, config.colors, { config = config.copy(colors = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(WidgetColors.entries, config.colors, { config = config.copy(preset = WidgetPreset.CUSTOM, colors = it) }, { it.title }, fillEqually = true)
                 Text(if (config.colors == WidgetColors.TRAFFIC) "Grün bis 70 %, Gelb bis 90 %, danach Rot" else "Farben der App", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Section("Farben & Form") {
                 Label("Hintergrund")
-                SegmentedTabGroup(WidgetTheme.entries, config.theme, { config = config.copy(theme = it) }, { it.title }, fillEqually = true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SwitchLine("Android-Farben", "Palette aus dem Hintergrundbild", config.dynamic) { config = config.copy(dynamic = it) }
-                SliderLine("Deckkraft", "${config.opacity} %", config.opacity.toFloat(), 20f..100f) { config = config.copy(opacity = it.toInt()) }
-                SliderLine("Ecken", "${config.corner} dp", config.corner.toFloat(), 0f..40f) { config = config.copy(corner = it.toInt()) }
-                SliderLine("Schriftgröße", "${config.textScale} %", config.textScale.toFloat(), 80f..140f) { config = config.copy(textScale = it.toInt() / 5 * 5) }
+                SegmentedTabGroup(WidgetTheme.entries, config.theme, { config = config.copy(preset = WidgetPreset.CUSTOM, theme = it) }, { it.title }, fillEqually = true)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SwitchLine("Android-Farben", "Palette aus dem Hintergrundbild", config.dynamic) { config = config.copy(preset = WidgetPreset.CUSTOM, dynamic = it) }
+                SliderLine("Deckkraft", "${config.opacity} %", config.opacity.toFloat(), 20f..100f) { config = config.copy(preset = WidgetPreset.CUSTOM, opacity = it.toInt()) }
+                SliderLine("Ecken", "${config.corner} dp", config.corner.toFloat(), 0f..40f) { config = config.copy(preset = WidgetPreset.CUSTOM, corner = it.toInt()) }
+                SliderLine("Schriftgröße", "${config.textScale} %", config.textScale.toFloat(), 80f..140f) { config = config.copy(preset = WidgetPreset.CUSTOM, textScale = it.toInt() / 5 * 5) }
             }
             Section("Elemente") {
-                SwitchLine("Aktualisieren-Knopf", "Liest die Accounts sofort neu", config.showRefresh) { config = config.copy(showRefresh = it) }
-                SwitchLine("Zeit der letzten Messung", "„Stand 14:05“, warnt bei veralteten Daten", config.showUpdated) { config = config.copy(showUpdated = it) }
-                SwitchLine("Tarif anzeigen", "Plus, Max 5x und so weiter", config.showPlan) { config = config.copy(showPlan = it) }
+                SwitchLine("Aktualisieren-Knopf", "Liest die Accounts sofort neu", config.showRefresh) { config = config.copy(preset = WidgetPreset.CUSTOM, showRefresh = it) }
+                SwitchLine("Zeit der letzten Messung", "„Stand 14:05“, warnt bei veralteten Daten", config.showUpdated) { config = config.copy(preset = WidgetPreset.CUSTOM, showUpdated = it) }
+                SwitchLine("Tarif anzeigen", "Plus, Max 5x und so weiter", config.showPlan) { config = config.copy(preset = WidgetPreset.CUSTOM, showPlan = it) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -133,18 +146,19 @@ private fun Preview(bitmap: Bitmap?, widthDp: Int, heightDp: Int, selected: Int,
     val dark = isSystemInDarkTheme()
     val wallpaper = if (dark) listOf(Color(0xFF2B3A55), Color(0xFF4A3B5C), Color(0xFF1E2A3A)) else listOf(Color(0xFF9DB8E8), Color(0xFFD9C3F0), Color(0xFFF2D6C4))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(Modifier.fillMaxWidth().animateContentSize().background(Brush.linearGradient(wallpaper), RoundedCornerShape(28.dp)).padding(18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().animateContentSize().background(Brush.linearGradient(wallpaper), MaterialTheme.shapes.extraLarge).padding(18.dp), contentAlignment = Alignment.Center) {
             val image = bitmap
             if (image != null) Image(image.asImageBitmap(), "Vorschau", Modifier.width(widthDp.dp).height(heightDp.dp))
             else Box(Modifier.width(widthDp.dp).height(heightDp.dp))
         }
+        Text("Größe testen · Die echte Größe änderst du im Launcher.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         SegmentedTabGroup((-1 until previewSizes.size).toList(), selected, select, { if (it < 0) "Dein Widget" else previewSizes[it].first })
     }
 }
 
 @Composable
 private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    com.madebycli.aiusage.ui.OrionGroupItem(0, 1) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             content()
@@ -156,13 +170,8 @@ private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) 
 
 @Composable
 private fun SwitchLine(title: String, subtitle: String, checked: Boolean, change: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked, change)
-    }
+    com.madebycli.aiusage.ui.SwitchRow(title, subtitle, checked, change)
+
 }
 
 @Composable

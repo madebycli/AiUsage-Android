@@ -68,7 +68,7 @@ internal fun formatLimits(points: Double): String {
 }
 
 internal fun formatUsage(value: Double, metric: StatsMetric): String =
-    if (metric == StatsMetric.FIVE) formatLimits(value) else "${number(value, if (value < 10) 1 else 0)} %"
+    if (metric == StatsMetric.FIVE) formatLimits(value) else "${percent(value)} %"
 
 private fun shortUsage(value: Double, metric: StatsMetric): String =
     if (metric == StatsMetric.FIVE) number(value / 100, 1) else number(value, 0)
@@ -105,6 +105,7 @@ internal fun StatsTab(state: UiState, now: Long, scope: String, select: (String)
     val byDate = remember(days) { days.associateBy { it.date } }
 
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxSize(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item(key = "hero") { PageHero(DesignPage.STATS, compact = true) }
         if (accounts.size > 1) item(key = "scope") {
             val ids = listOf(ALL_ACCOUNTS) + accounts.map { it.id }
             SegmentedTabGroup(ids, if (active != null) active.id else ALL_ACCOUNTS, select, { id -> if (id == ALL_ACCOUNTS) "Alle" else accounts.first { it.id == id }.title },

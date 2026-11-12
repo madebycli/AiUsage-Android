@@ -12,6 +12,18 @@ enum class WidgetStyle(val title: String, val hint: String) {
     RINGS("Ringe", "Runde Anzeige pro Account")
 }
 
+enum class WidgetArrangement(val title: String) { AUTO("Automatisch"), STACK("Untereinander"), GRID("Raster") }
+enum class WidgetWindowLayout(val title: String) { SIDE_BY_SIDE("Nebeneinander"), STACKED("Untereinander") }
+enum class WidgetPreset(val title: String) {
+    CUSTOM("Eigene"), DETAILED("Detailliert"), COMPACT("Kompakt"), RINGS("Ringe");
+    fun applyTo(config: WidgetConfig): WidgetConfig = when (this) {
+        CUSTOM -> config.copy(preset = this)
+        DETAILED -> config.copy(preset = this, style = WidgetStyle.BARS, arrangement = WidgetArrangement.STACK, windowLayout = WidgetWindowLayout.STACKED, windows = WidgetWindows.BOTH, showPlan = true, reset = ResetFormat.BOTH)
+        COMPACT -> config.copy(preset = this, style = WidgetStyle.COMPACT, arrangement = WidgetArrangement.STACK, windows = WidgetWindows.BOTH, textScale = 100)
+        RINGS -> config.copy(preset = this, style = WidgetStyle.RINGS, arrangement = WidgetArrangement.STACK, windowLayout = WidgetWindowLayout.SIDE_BY_SIDE, windows = WidgetWindows.BOTH)
+    }
+}
+
 enum class WidgetWindows(val title: String) { FIVE("5 Stunden"), WEEK("Woche"), BOTH("Beide") }
 enum class ResetFormat(val title: String) { CLOCK("Uhrzeit"), RELATIVE("Restzeit"), BOTH("Beides") }
 enum class WidgetTheme(val title: String) { SYSTEM("System"), LIGHT("Hell"), DARK("Dunkel"), BLACK("Schwarz") }
@@ -22,6 +34,9 @@ data class WidgetConfig(
     /** Accounts in the order shown. Empty means every account in the order of the home screen. */
     val accounts: List<String> = emptyList(),
     val style: WidgetStyle = WidgetStyle.BARS,
+    val preset: WidgetPreset = WidgetPreset.CUSTOM,
+    val arrangement: WidgetArrangement = WidgetArrangement.AUTO,
+    val windowLayout: WidgetWindowLayout = WidgetWindowLayout.SIDE_BY_SIDE,
     val windows: WidgetWindows = WidgetWindows.BOTH,
     val reset: ResetFormat = ResetFormat.BOTH,
     val theme: WidgetTheme = WidgetTheme.SYSTEM,

@@ -7,6 +7,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalUriHandler
@@ -25,41 +27,46 @@ internal val AppTab.icon: ImageVector get() = when (this) {
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-internal fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -> Unit, notifications: () -> Unit, navigation: () -> Unit) {
-    val uri = LocalUriHandler.current
-    Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding),
-        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        SectionTitle("App & Konten")
+internal fun SettingsScreen(state: UiState, model: UsageViewModel, accounts: () -> Unit, notifications: () -> Unit, navigation: () -> Unit,
+    appearance: () -> Unit, widgets: () -> Unit, about: () -> Unit) {
+    var search by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
+    var query by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    androidx.activity.compose.BackHandler(search) { search = false; query = "" }
+    val tiles = listOf(
+        Triple(DesignPage.ACCOUNTS, "${state.accounts.size} Accounts", accounts),
+        Triple(DesignPage.APPEARANCE, "Theme, Android-Farben, Tiefschwarz", appearance),
+        Triple(DesignPage.NOTIFICATIONS, "Resets, Berechtigungen, Aktualisierung", notifications),
+        Triple(DesignPage.NAVIGATION, "Untere Leiste, Startseite, Standardansichten", navigation),
+        Triple(DesignPage.WIDGETS, "Vorlagen und Homescreen-Anzeige", widgets),
+        Triple(DesignPage.ABOUT, "Version, Quellcode und Lizenzen", about))
+    Column(Modifier.widthIn(max = maxContentWidth).fillMaxWidth().verticalScroll(rememberScrollState()).padding(screenPadding), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PageHero(DesignPage.SETTINGS)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("Deine App", style = MaterialTheme.typography.titleSmallEmphasized, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
+            FilledTonalIconButton(onClick = { search = !search; if (!search) query = "" }, shapes = IconButtonDefaults.shapes()) { Icon(if (search) Icons.Rounded.Close else Icons.Rounded.Search, "Einstellungen suchen") }
+        }
+        androidx.compose.animation.AnimatedVisibility(search, enter = androidx.compose.animation.expandVertically() + androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.shrinkVertically() + androidx.compose.animation.fadeOut()) {
+            TextField(query, { query = it }, singleLine = true, leadingIcon = { Icon(Icons.Rounded.Search, null) }, placeholder = { Text("Einstellungen suchen") },
+                shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth())
+        }
+        val found = tiles.filter { (page, desc, _) -> (page.title + " " + desc).contains(query.trim(), true) }
+        if (found.isEmpty()) Notice("Keine passenden Einstellungen")
         BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val stacked = maxWidth < 320.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f
-            val tiles: @Composable (Modifier) -> Unit = { tile ->
-                OrionBento("Anmeldungen", when (state.accounts.size) { 0 -> "Kein Account verbunden"; 1 -> "1 Account"; else -> "${state.accounts.size} Accounts" },
-                    Icons.Rounded.Key, MaterialTheme.colorScheme.primary, MaterialShapes.Cookie9Sided, accounts,
-                    tile.height(if (stacked) 168.dp else 180.dp).staggeredEntrance(0))
-                OrionBento("Navigation & Start", "Startseite und Standardansichten", Icons.Rounded.Tune,
-                    MaterialTheme.colorScheme.tertiary, MaterialShapes.Sunny, navigation,
-                    tile.height(if (stacked) 168.dp else 180.dp).staggeredEntrance(1))
+            val columns = if (maxWidth < 320.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.3f) 1 else 2
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                found.chunked(columns).forEachIndexed { row, group ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        group.forEachIndexed { i, (page, desc, click) ->
+                            androidx.compose.runtime.key(page) {
+                                OrionBento(page.title, desc, page.icon, page.accent,
+                                    page.shape, click,
+                                    Modifier.weight(1f).height(if (columns == 1) 220.dp else 180.dp).staggeredEntrance(row * columns + i, page), sharedKey = "settings:${page.name}")
+                            }
+                        }
+                        if (group.size < columns) Spacer(Modifier.weight(1f))
+                    }
+                }
             }
-            if (stacked) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { tiles(Modifier.fillMaxWidth()) }
-            else Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { tiles(Modifier.weight(1f)) }
-        }
-
-        MenuCard {
-            MenuRow("Benachrichtigungen & Aktualisierung", Icons.Rounded.Notifications, open = notifications)
-        }
-        SectionTitle("Erscheinungsbild")
-        SoftCard {
-            SegmentedTabGroup(listOf(ThemeMode.SYSTEM, ThemeMode.LIGHT, ThemeMode.DARK), state.theme, model::setTheme,
-                { when (it) { ThemeMode.SYSTEM -> "System"; ThemeMode.LIGHT -> "Hell"; ThemeMode.DARK -> "Dunkel" } }, fillEqually = true)
-            SwitchRow("Android-Farben", "Farbpalette aus dem Hintergrundbild", state.dynamicColor, model::setDynamic)
-            SwitchRow("Tiefschwarz", "Für den dunklen Modus", state.amoled, model::setAmoled)
-        }
-        Disclosure("Über AI Usage · ${BuildConfig.VERSION_NAME}") {
-            Text("Inoffizielle App, unabhängig von OpenAI und Anthropic. Basis: AniHyou (GPL-3.0). UI-Bausteine aus Iris und Orion Store (GPL-3.0). Schrift Google Sans Flex (OFL-1.1).", style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { uri.openUri("https://github.com/madebycli/AiUsage-Android") }) { Text("Quellcode") }
-            Text("Iris · madebycli · GPL-3.0\nOrion Store · RookieEnough und Mitwirkende · GPL-3.0", style = MaterialTheme.typography.bodySmall)
-            TextButton(onClick = { uri.openUri("https://github.com/madebycli/Iris/tree/60bbb256e588103ad18f9776ed8acfdde7c6f156") }) { Text("Iris · Designreferenz") }
-            TextButton(onClick = { uri.openUri("https://github.com/RookieEnough/Orion-Store/tree/e561e91e9409d9d9b437ab7acf919cd115769d7e") }) { Text("Orion Store · UI-Quellen & Lizenz") }
         }
     }
 }

@@ -26,7 +26,7 @@ internal fun Modifier.staggeredEntrance(index: Int, key: Any = Unit): Modifier {
 
 /** Slight shrink while a card is pressed. */
 @Composable
-internal fun Modifier.pressScale(source: MutableInteractionSource, pressed: Float = 0.975f): Modifier {
+internal fun Modifier.pressScale(source: MutableInteractionSource, pressed: Float = 0.94f): Modifier {
     val isPressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) pressed else 1f, androidx.compose.material3.MaterialTheme.motionScheme.fastSpatialSpec(), label = "press")
     return graphicsLayer { scaleX = scale; scaleY = scale }
@@ -48,8 +48,7 @@ internal fun rememberFillProgress(target: Float, delayMillis: Int = 0): State<Fl
 internal fun rememberCountingPercent(target: Double): String {
     val value = remember { Animatable(0f) }
     LaunchedEffect(target) { value.animateTo(target.toFloat(), tween(700, easing = FastOutSlowInEasing)) }
-    val shown = value.value.toDouble()
-    return formatPercent(if (kotlin.math.abs(shown - target) < 0.05) target else Math.round(shown * 10) / 10.0)
+    return formatPercent(value.value.toDouble())
 }
 
 /** A page counts as deeper the more routes lie above the main screen. */

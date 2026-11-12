@@ -104,7 +104,7 @@ fun OrionSpinner(shape: RoundedPolygon, color: Color, size: Dp, modifier: Modifi
 fun OrionBento(title: String, desc: String, icon: ImageVector, accent: Color, shape: RoundedPolygon, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false, selected: Boolean = false, badge: String? = null, sharedKey: String? = null) {
     val (bg, fg) = orionTonal(accent)
     val outline = RoundedCornerShape(28.dp)
-    Box(modifier.orionSpringClick(outline, onClick = onClick).background(bg).then(if (selected) Modifier.border(2.dp, fg, outline) else Modifier)) {
+    Box(modifier.orionSharedBounds(sharedKey).orionSpringClick(outline, onClick = onClick).background(bg).then(if (selected) Modifier.border(2.dp, fg, outline) else Modifier)) {
         OrionSpinner(shape, fg.copy(.1f), if (compact) 120.dp else 168.dp, Modifier.align(Alignment.BottomEnd).offset(36.dp, 36.dp))
         CompositionLocalProvider(LocalContentColor provides fg) {
             Column(Modifier.fillMaxSize().padding(18.dp)) {
@@ -135,3 +135,43 @@ fun OrionHubHeader(title: String, modifier: Modifier = Modifier, hint: String? =
         action()
     }
 
+
+/** Medium (56dp) M3E button: the screen's completion action. */
+@Composable
+fun OrionCtaButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, tonal: Boolean = false, loading: Boolean = false) {
+    val h = ButtonDefaults.MediumContainerHeight
+    val content: @Composable RowScope.() -> Unit = {
+        if (loading) LoadingIndicator(Modifier.size(ButtonDefaults.iconSizeFor(h) + 8.dp), color = LocalContentColor.current)
+        else icon?.let { Icon(it, null, Modifier.size(ButtonDefaults.iconSizeFor(h))) }
+        if (loading || icon != null) Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(h)))
+        Text(text, style = ButtonDefaults.textStyleFor(h), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    val m = modifier.fillMaxWidth().heightIn(min = h)
+    if (tonal) FilledTonalButton(onClick, modifier = m, enabled = enabled && !loading, shapes = ButtonDefaults.shapesFor(h), contentPadding = ButtonDefaults.contentPaddingFor(h), content = content)
+    else Button(onClick, modifier = m, enabled = enabled && !loading, shapes = ButtonDefaults.shapesFor(h), contentPadding = ButtonDefaults.contentPaddingFor(h), content = content)
+}
+
+
+// region tile-to-page transition (Orion ui/Settings.kt: the hub tile and its page share bounds)
+val LocalOrionShared = staticCompositionLocalOf<androidx.compose.animation.SharedTransitionScope?> { null }
+val LocalOrionVisibility = compositionLocalOf<androidx.compose.animation.AnimatedVisibilityScope?> { null }
+
+/** Makes the shared-transition scopes of a navigation destination available to [orionSharedBounds] inside [content]. */
+@Composable
+fun OrionSharedScreen(shared: androidx.compose.animation.SharedTransitionScope, visibility: androidx.compose.animation.AnimatedVisibilityScope, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalOrionShared provides shared, LocalOrionVisibility provides visibility, content = content)
+
+/** Pages are measured once and scaled through the container transform; remeasuring every frame was the jank. Orion PAGE_RESIZE. */
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+private val PageResize = androidx.compose.animation.SharedTransitionScope.ResizeMode.scaleToBounds(androidx.compose.ui.layout.ContentScale.FillWidth, Alignment.TopCenter)
+
+/** The tile with [key] and the page with the same key grow into each other. Outside a shared screen, or with motion off, nothing happens. */
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
+@Composable
+fun Modifier.orionSharedBounds(key: String?): Modifier {
+    val shared = LocalOrionShared.current; val visibility = LocalOrionVisibility.current
+    val motion = true
+    if (shared == null || visibility == null || key == null || !motion) return this
+    return with(shared) { this@orionSharedBounds.sharedBounds(rememberSharedContentState(key), visibility, resizeMode = PageResize) }
+}
+// endregion

@@ -35,7 +35,12 @@ class TimeTextTest {
 
     @Test fun `percent keeps whole numbers whole`() {
         assertEquals("42", formatPercent(42.0))
-        assertEquals("42,5", formatPercent(42.5))
+        assertEquals("43", formatPercent(42.5))
+        assertEquals("10", formatPercent(10.49))
+        assertEquals("11", formatPercent(10.5))
+        assertEquals("100", formatPercent(99.9))
+        assertEquals("0", formatPercent(0.1))
+        assertEquals("–", formatPercent(Double.NaN))
     }
 
     @Test fun `reset times with numeric offsets parse like Z times`() {

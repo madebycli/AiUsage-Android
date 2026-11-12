@@ -7,7 +7,7 @@ on:
       tag:
         description: GitHub preview tag (preview branch only)
         required: true
-        default: v0.9.2-preview.1
+        default: v0.9.3-preview.1
         type: string
 permissions:
   contents: write

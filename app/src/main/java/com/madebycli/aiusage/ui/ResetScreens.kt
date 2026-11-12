@@ -2,6 +2,8 @@
 
 package com.madebycli.aiusage.ui
 
+import androidx.compose.animation.togetherWith
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -40,44 +42,52 @@ import java.time.ZoneOffset
 internal fun ResetScreen(state: UiState, now: Long, provider: String, select: (String) -> Unit, open: (String, String) -> Unit) {
     val names = state.connectedProviders
     val active = provider.takeIf { it in names } ?: names.firstOrNull() ?: return
+    Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
+        if (names.size > 1) Box(Modifier.padding(20.dp, 4.dp, 20.dp, 8.dp)) { ProviderTabs(names, active, select) }
+        androidx.compose.animation.AnimatedContent(active, transitionSpec = { androidx.compose.animation.fadeIn() togetherWith androidx.compose.animation.fadeOut() }, label = "provider-page") { shown ->
+            ResetProviderBody(state, now, shown, open)
+        }
+    }
+}
+
+@Composable
+private fun ResetProviderBody(state: UiState, now: Long, active: String, open: (String, String) -> Unit) {
     val outlook = remember(state.intel, active, now / 30) { ResetOutlookBuilder.build(active, state.intel, now) }
     val problems = outlook.sources.filter { it.state == SourceState.ERROR }
     val loaded = outlook.sources.any { it.state != SourceState.EMPTY }
     val banked = state.accountsOf(active).filter { entry -> entry.usage?.let { it.availableResets != null || it.resetCredits.isNotEmpty() || it.creditsWarning != null } == true }
-    Column(Modifier.widthIn(max = maxContentWidth).fillMaxSize()) {
-        if (names.size > 1) Box(Modifier.padding(20.dp, 4.dp, 20.dp, 8.dp)) { ProviderTabs(names, active, select) }
-        LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (state.intelLoading && !loaded) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            if (problems.isNotEmpty()) item(key = "problems") {
-                Notice(problems.joinToString("\n") { "${it.source.label}: ${it.error}" }, error = outlook.horizons.isEmpty() && outlook.timeline.isEmpty())
-            }
-            item(key = "last") { LastResetCard(outlook, now, active, loaded || state.intelLoading) }
-            if (outlook.horizons.isNotEmpty()) {
-                item(key = "outlook-title") { SectionTitle("Wahrscheinlichkeit") }
-                item(key = "outlook") { OutlookCard(outlook, now) }
-            }
-            if (outlook.hints.isNotEmpty()) item(key = "hints") { HintsCard(outlook) }
-            if (outlook.resets.isNotEmpty()) {
-                item(key = "history-title") { SectionTitle("Verlauf") }
-                item(key = "history") {
-                    SoftCard {
-                        val shown = outlook.resets.take(5)
-                        val gaps = ResetOutlookBuilder.gapsDays(outlook.resets)
-                        shown.forEachIndexed { index, entry ->
-                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .3f))
-                            ResetRow(entry, gaps[index])
-                        }
-                        TextButton(onClick = { open(active, "Verlauf") }, contentPadding = PaddingValues(0.dp)) {
-                            Icon(Icons.Rounded.History, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Gesamten Verlauf ansehen")
-                        }
+    LazyColumn(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp, 4.dp, 20.dp, 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item(key = "hero") { PageHero(DesignPage.RESETS, compact = true) }
+        if (state.intelLoading && !loaded) item(key = "loading") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        if (problems.isNotEmpty()) item(key = "problems") {
+            Notice(problems.joinToString("\n") { "${it.source.label}: ${it.error}" }, error = outlook.horizons.isEmpty() && outlook.timeline.isEmpty())
+        }
+        item(key = "last") { LastResetCard(outlook, now, active, loaded || state.intelLoading) }
+        if (outlook.horizons.isNotEmpty()) {
+            item(key = "outlook-title") { SectionTitle("Wahrscheinlichkeit") }
+            item(key = "outlook") { OutlookCard(outlook, now) }
+        }
+        if (outlook.hints.isNotEmpty()) item(key = "hints") { HintsCard(outlook) }
+        if (outlook.resets.isNotEmpty()) {
+            item(key = "history-title") { SectionTitle("Verlauf") }
+            item(key = "history") {
+                SoftCard {
+                    val shown = outlook.resets.take(5)
+                    val gaps = ResetOutlookBuilder.gapsDays(outlook.resets)
+                    shown.forEachIndexed { index, entry ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .3f))
+                        ResetRow(entry, gaps[index])
+                    }
+                    TextButton(onClick = { open(active, "Verlauf") }, contentPadding = PaddingValues(0.dp)) {
+                        Icon(Icons.Rounded.History, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Gesamten Verlauf ansehen")
                     }
                 }
             }
-            item(key = "sources") { MenuCard { MenuRow("Quellen", Icons.Rounded.QueryStats, "${outlook.sources.count { it.state == SourceState.FRESH }} von ${outlook.sources.size} aktuell") { open(active, "Quellen") } } }
-            if (banked.isNotEmpty()) item(key = "stock-title") { SectionTitle("Dein Vorrat") }
-            banked.forEach { entry ->
-                item(key = "stock:${entry.id}") { BankedCard(entry.usage!!, now, entry.creditsLoading, title = if (state.accountsOf(active).size > 1) entry.title else null) }
-            }
+        }
+        item(key = "sources") { MenuCard { MenuRow("Quellen", Icons.Rounded.QueryStats, "${outlook.sources.count { it.state == SourceState.FRESH }} von ${outlook.sources.size} aktuell") { open(active, "Quellen") } } }
+        if (banked.isNotEmpty()) item(key = "stock-title") { SectionTitle("Dein Vorrat") }
+        banked.forEach { entry ->
+            item(key = "stock:${entry.id}") { BankedCard(entry.usage!!, now, entry.creditsLoading, title = if (state.accountsOf(active).size > 1) entry.title else null) }
         }
     }
 }
@@ -248,6 +258,7 @@ private fun HistoryList(outlook: ResetOutlook) {
     val entries = outlook.timeline.filter { when (filter) { HistoryFilter.ALL -> true; HistoryFilter.RESETS -> it.kind != ResetKind.BANKED; HistoryFilter.BANKED -> it.kind == ResetKind.BANKED } }
     val gaps = ResetOutlookBuilder.gapsDays(outlook.timeline.filter { it.kind != ResetKind.BANKED }).let { list -> outlook.timeline.filter { it.kind != ResetKind.BANKED }.zip(list).toMap() }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item(key = "hero") { PageHero(DesignPage.HISTORY, compact = true) }
         item(key = "filter") { SegmentedTabGroup(HistoryFilter.entries, filter, { filter = it }, { it.title }, fillEqually = true) }
         if (entries.isEmpty()) item { SoftCard { Text("Noch keine Meldungen", style = MaterialTheme.typography.titleMedium) } }
         val byMonth = entries.groupBy { Instant.ofEpochSecond(it.at).atZone(ZoneId.systemDefault()).let { d -> d.year to d.monthValue } }
@@ -274,6 +285,7 @@ private fun SourcesList(outlook: ResetOutlook, now: Long) {
     val uri = LocalUriHandler.current
     val colors = MaterialTheme.colorScheme
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item(key = "hero") { PageHero(DesignPage.SOURCES, compact = true) }
         items(outlook.sources, key = { it.source.name }) { status ->
             SoftCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {

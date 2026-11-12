@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.lifecycle.ViewModelStore
 import androidx.test.core.app.ApplicationProvider
@@ -265,7 +267,7 @@ class UiSmokeTest {
         compose.onAllNodesWithText("Gutschrift", substring = true).assertCountEquals(1 + compose.onAllNodesWithText("Gutschrift", substring = true).fetchSemanticsNodes().size - 1)
         compose.onNodeWithContentDescription("Zurück").performClick()
         compose.onNodeWithContentDescription("Einstellungen").performClick()
-        compose.onNodeWithText("Benachrichtigungen & Aktualisierung").performClick()
+        compose.onNode(hasText("Benachrichtigungen") and hasClickAction()).performClick()
         compose.onNodeWithText("Im Hintergrund aktualisieren").assertIsDisplayed()
         compose.onNodeWithText("3 h").assertIsDisplayed()
         screenshot("notifications-dark")
@@ -395,7 +397,7 @@ class UiSmokeTest {
         } }
         compose.onNodeWithContentDescription("Einstellungen").performClick()
         compose.onNodeWithText("Anmeldungen").assertIsDisplayed()
-        compose.onNodeWithText("Navigation & Start").assertIsDisplayed()
+        compose.onNodeWithText("Navigation & Start").performScrollTo().assertIsDisplayed()
         screenshot("iris-settings-large")
         compose.onNodeWithText("Anmeldungen").performClick()
         compose.onNodeWithText("Privat").assertIsDisplayed()
@@ -409,10 +411,101 @@ class UiSmokeTest {
         compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
         compose.onNodeWithContentDescription("Einstellungen").performClick()
         screenshot("iris-settings")
-        compose.onNodeWithText("Über AI Usage", substring = true).performScrollTo().performClick()
+        compose.onNode(hasText("Über AI Usage") and hasClickAction()).performScrollTo().performClick()
         compose.onNodeWithText("Iris · Designreferenz").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Orion Store · UI-Quellen & Lizenz").performScrollTo().assertIsDisplayed()
         screenshot("iris-attribution")
+    }
+
+    @Test fun `every settings tile opens a real Orion page and returns without losing navigation`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex("Privat")), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        listOf("Anmeldungen", "Erscheinungsbild", "Benachrichtigungen", "Navigation & Start", "Widgets", "Über AI Usage").forEach { title ->
+            compose.onNode(hasText(title) and hasClickAction()).performScrollTo().performClick()
+            compose.onAllNodesWithText(title)[0].assertIsDisplayed()
+            screenshot("orion-page-" + com.madebycli.aiusage.ui.DesignPage.entries.first { it.title == title }.name.lowercase())
+            compose.onNodeWithContentDescription("Zurück").performClick()
+        }
+        screenshot("orion-settings-full")
+    }
+    @Test fun `settings search expands filters and still opens the selected destination`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNodeWithContentDescription("Einstellungen suchen").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("widget")
+        compose.onNode(hasText("Anmeldungen") and hasClickAction()).assertDoesNotExist()
+        compose.onNode(hasText("Widgets") and hasClickAction()).performClick()
+        compose.onNodeWithText("Zum Hinzufügen den Homescreen", substring = true).assertIsDisplayed()
+    }
+    @Test fun `percentage count frames contain whole numbers with one stable text size`() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AniHyouTheme(dynamicColor = false) {
+            com.madebycli.aiusage.ui.RingGauge(.425f, androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                com.madebycli.aiusage.ui.rememberCountingPercent(42.5) + "%", size = 144.dp,
+                modifier = androidx.compose.ui.Modifier.testTag("counter"))
+        } }
+        repeat(24) { frame ->
+            compose.mainClock.advanceTimeBy(40)
+            screenshot("motion-counter-%02d".format(frame))
+            val text = compose.onNode(hasText("%", substring = true)).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].single().text
+            assert(text.matches(Regex("[0-9]+%"))) { text }
+        }
+        compose.onNodeWithText("43%").assertIsDisplayed()
+    }
+    @Test fun `Orion page decoration actually keeps rotating`() {
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AniHyouTheme(dynamicColor = false) { com.madebycli.aiusage.ui.PageHero(com.madebycli.aiusage.ui.DesignPage.APPEARANCE) } }
+        compose.mainClock.advanceTimeBy(100)
+        val first = compose.onRoot().captureToImage().asAndroidBitmap()
+        compose.mainClock.advanceTimeBy(3100)
+        val next = compose.onRoot().captureToImage().asAndroidBitmap()
+        assert(!first.sameAs(next)) { "The decorative shape must rotate" }
+    }
+    @Test fun `widget presets apply to saved configuration rather than just the preview size`() {
+        var saved: com.madebycli.aiusage.widget.WidgetConfig? = null
+        val restorer = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+        restorer.setContent { AniHyouTheme(dynamicColor = false) {
+            com.madebycli.aiusage.widget.ConfigScreen(com.madebycli.aiusage.widget.WidgetConfig(), 250, 260, {}, { saved = it })
+        } }
+        compose.onNodeWithText("Detailliert").performClick()
+        restorer.emulateSavedInstanceStateRestore()
+        screenshot("orion-widget-config")
+        compose.onNodeWithText("Accounts anordnen").performScrollTo()
+        screenshot("orion-widget-layout")
+        compose.onNodeWithText("Schriftgröße").performScrollTo()
+        screenshot("orion-widget-appearance")
+        compose.onNodeWithText("Fertig").performClick()
+        assert(saved?.preset == com.madebycli.aiusage.widget.WidgetPreset.DETAILED)
+        assert(saved?.arrangement == com.madebycli.aiusage.widget.WidgetArrangement.STACK)
+        assert(saved?.windowLayout == com.madebycli.aiusage.widget.WidgetWindowLayout.STACKED)
+    }
+
+    @Test fun `record real settings morph and expanding search frames`() {
+        val model = model()
+        compose.mainClock.autoAdvance = false
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.mainClock.advanceTimeBy(1500)
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        repeat(28) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-settings-%02d".format(i)) }
+        compose.onNode(hasText("Erscheinungsbild") and hasClickAction()).performClick()
+        repeat(28) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-subpage-%02d".format(i)) }
+        compose.onNodeWithContentDescription("Zurück").performClick()
+        compose.mainClock.advanceTimeBy(1200)
+        compose.onNodeWithContentDescription("Einstellungen suchen").performClick()
+        repeat(16) { i -> compose.mainClock.advanceTimeBy(40); screenshot("motion-search-%02d".format(i)) }
+    }
+
+    @Test fun `all settings tile titles fit on a single line with long German labels`() {
+        val model = model()
+        compose.setContent { AniHyouTheme(dynamicColor = false) { UsageApp(ui(codex()), model) } }
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        listOf("Anmeldungen", "Erscheinungsbild", "Benachrichtigungen", "Navigation & Start", "Widgets", "Über AI Usage").forEach { title ->
+            val results = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            compose.onNodeWithText(title, useUnmergedTree = true).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(results) }
+            assert(results.single().lineCount == 1 && !results.single().hasVisualOverflow) { title }
+        }
     }
 
 }
