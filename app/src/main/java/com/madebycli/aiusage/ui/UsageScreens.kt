@@ -59,7 +59,6 @@ import java.time.ZoneId
 internal fun UsageScreen(state: UiState, now: Long, sorting: Boolean, open: (String) -> Unit, reorder: (List<String>) -> Unit) {
     if (sorting) { SortList(state.accounts, reorder); return }
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxWidth(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (state.homeStyle == HomeStyle.PLAYFUL) item(key = "next") { NextResetChip(state, now) }
         itemsIndexed(state.accounts, key = { _, entry -> entry.id }) { index, entry ->
             if (state.homeStyle == HomeStyle.PLAYFUL) PlayfulCard(entry, now, index, Modifier.animateItem()) { open(entry.id) }
             else AccountCard(entry, now, index, Modifier.animateItem()) { open(entry.id) }
@@ -133,28 +132,11 @@ internal fun windowColor(window: UsageWindow, colors: ColorScheme) =
 
 // ---- Playful home ---------------------------------------------------------------------------------------
 
-/** The nearest reset of all accounts, as one line on top of the playful home. */
-@Composable
-private fun NextResetChip(state: UiState, now: Long) {
-    val res = LocalResources.current
-    val next = state.accounts.flatMap { entry -> entry.windows().filter { it.usedPercent > 0 }.mapNotNull { w -> w.resetAt?.takeIf { it > now }?.let { entry to it } } }
-        .minByOrNull { it.second } ?: return
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer) {
-        Row(Modifier.padding(start = 6.dp, end = 16.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ProviderBadge(next.first.provider, 32.dp)
-            Text(stringResource(R.string.usage_now_next, next.first.title, "${Fmt.clock(res, next.second, now)} · ${Fmt.remaining(res, next.second - now)}"),
-                style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
 @Composable
 private fun PlayfulCard(entry: AccountState, now: Long, index: Int, modifier: Modifier = Modifier, open: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val windows = entry.windows().take(2)
-    val tint = orionTonal(providerAccent(entry.provider)).first
     Box(modifier.fillMaxWidth().orionReveal(index).orionSpringClick(cardShape, onClick = open).background(colors.panel)) {
-        OrionSpinner(MaterialShapes.Cookie12Sided, tint.copy(.35f), 200.dp, Modifier.align(Alignment.TopEnd).offset(70.dp, (-70).dp), periodMs = 50_000)
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             CardHeader(entry, now)
             if (windows.isEmpty()) Text(stringResource(if (entry.usage == null) R.string.usage_no_reading else R.string.usage_no_windows), color = colors.onSurfaceVariant)
@@ -182,7 +164,7 @@ private fun PlayfulCard(entry: AccountState, now: Long, index: Int, modifier: Mo
  * the shape turns a little. The wave stops when the window is full.
  */
 @Composable
-private fun LiquidShape(shape: RoundedPolygon, level: Float, color: Color, size: Dp, index: Int, content: @Composable BoxScope.() -> Unit) {
+internal fun LiquidShape(shape: RoundedPolygon, level: Float, color: Color, size: Dp, index: Int, content: @Composable BoxScope.() -> Unit) {
     val fill by rememberFillProgress(level.coerceIn(0f, 1f), 150 + index * 120)
     val waves = rememberInfiniteTransition(label = "liquid")
     val phase by waves.animateFloat(0f, (2 * Math.PI).toFloat(), infiniteRepeatable(tween(2600 + index * 400, easing = LinearEasing)), label = "phase")
@@ -205,7 +187,7 @@ private fun LiquidShape(shape: RoundedPolygon, level: Float, color: Color, size:
                     }
                     lineTo(this@clipPath.size.width, this@clipPath.size.height); close()
                 }
-                drawPath(wave, color.copy(alpha = .85f))
+                drawPath(wave, color.copy(alpha = .6f))
             }
         }
         content()

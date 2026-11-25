@@ -96,9 +96,9 @@ internal fun StatsTab(state: UiState, now: Long, scope: String, select: (String)
         item(key = "controls") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (accounts.size > 1) AccountPicker(accounts, active, select, Modifier.weight(1f))
-                    Box(Modifier.weight(if (accounts.size > 1) 1.2f else 1f)) {
-                        ConnectedChoice(StatsMetric.entries, metric, { metric = it }) { stringResource(if (it == StatsMetric.FIVE) R.string.window_five else R.string.range_week) }
+                    if (accounts.size > 1) AccountPicker(accounts, active, select, Modifier.weight(.8f))
+                    Box(Modifier.weight(if (accounts.size > 1) 1.4f else 1f)) {
+                        ConnectedChoice(StatsMetric.entries, metric, { metric = it }) { stringResource(if (it == StatsMetric.FIVE) R.string.window_five else R.string.metric_week) }
                     }
                 }
                 ConnectedChoice(StatsRange.entries, range, { range = it; offset = 0; selectedDay = null }) { stringResource(it.label) }
@@ -150,7 +150,7 @@ private fun AccountPicker(accounts: List<AccountState>, active: AccountState?, s
         Surface(onClick = { open = true }, shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.panelRaised, modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (active != null) BrandIcon(active.provider, Modifier.size(20.dp)) else Icon(Icons.Rounded.Groups, null, Modifier.size(20.dp))
-                Text(active?.title ?: stringResource(R.string.stats_all), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(active?.title ?: stringResource(R.string.stats_all_short), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(Icons.Rounded.ArrowDropDown, null)
             }
         }

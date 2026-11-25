@@ -413,4 +413,15 @@
     <string name="phase_usage">Verbrauch wird geladen</string>
     <string name="welcome_title">AI Usage</string>
     <string name="welcome_text">Limits von Codex, Claude Code und Gemini auf dem Handy.</string>
+    <string name="stats_all_short">Alle</string>
+    <string name="plan_day_empty">Nichts geplant</string>
+    <string name="plan_reset_row">Wochenreset · %1$s</string>
+    <string name="plan_then_list">Danach: %1$s</string>
+    <string name="plan_today">Heute</string>
+    <string name="plan_tomorrow">Morgen</string>
+    <string name="plan_fact_week">Woche frei</string>
+    <string name="plan_fact_reset">Wochenreset</string>
+    <string name="plan_fact_five">5 Stunden</string>
+    <string name="plan_fact_free">frei</string>
+    <string name="plan_fact_full">voll</string>
 </resources>

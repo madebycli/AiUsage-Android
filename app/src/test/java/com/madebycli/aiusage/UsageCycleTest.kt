@@ -108,6 +108,28 @@ class UsageCycleTest {
         assertEquals("measured values stay as measured", 210.0, day.five, 0.0001)
     }
 
+    @Test fun `fully watched cycles never produce an estimate, even with a capped weekly value`() {
+        val readings = mutableListOf<UsageSnapshot>()
+        val week = at("2026-11-27T00:00:00Z")
+        var weekly = 0.0
+        for (i in 0 until 14) {
+            val start = at("2026-11-20T00:00:00Z") + i * (FIVE_HOURS + 1800)
+            val end = start + FIVE_HOURS
+            weekly = (weekly + 4).coerceAtMost(100.0)
+            readings += snap(start + 900, five = 40.0 to end, week = weekly to week)
+            weekly = (weekly + 6).coerceAtMost(100.0)
+            readings += snap(end - 180, five = 100.0 to end, week = weekly to week)
+        }
+        val ledger = feed(readings)
+        LedgerStats.days(ledger, utc).values.forEach { assertEquals("${it.date}", 0.0, it.fiveEstimate ?: 0.0, 0.0) }
+        LedgerStats.days(ledger, utc).values.forEach { assertEquals(0.0, it.fiveOpen, 0.0) }
+    }
+
+    @Test fun `a running cycle is not a lower bound`() {
+        val ledger = feed(listOf(snap(at("2026-11-20T10:00:00Z"), five = 30.0 to at("2026-11-20T14:00:00Z"))))
+        assertEquals(0.0, ledger.on("2026-11-20").fiveOpen, 0.0)
+    }
+
     @Test fun `without calibration there is no estimate`() {
         val ledger = feed(listOf(snap(at("2026-11-20T10:00:00Z"), five = 10.0 to at("2026-11-20T14:00:00Z"), week = 1.0 to at("2026-11-27T00:00:00Z"))))
         assertNull(ledger.on("2026-11-20").fiveEstimate)

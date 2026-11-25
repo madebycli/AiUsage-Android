@@ -135,6 +135,7 @@ object UsageTracker {
     const val MAX_DAYS = 800
     const val MAX_FIVE_CYCLES = 2000
     const val MAX_WEEK_CYCLES = 160
+    const val WEEK_CAP = 99.0
 
     private class Closed(val at: Long, val early: Boolean, val peak: Double, val endsAt: Long)
     private class Outcome(var run: LedgerRun?, var added: Double = 0.0, var started: Boolean = false,
@@ -221,14 +222,17 @@ object UsageTracker {
 
         val fiveContinued = base.fiveRun != null && five.resets.isEmpty() && !five.started && five.present
         val weekContinued = base.weekRun != null && week.resets.isEmpty() && !week.started && week.present
+        // A weekly value at its cap no longer rises with use; such readings say nothing about the ratio of the two windows.
+        val weekCapped = (week.run?.peak ?: 0.0) >= WEEK_CAP
         var calibration = base.calibration
         // Both windows inside the same cycles: their increments belong together.
-        if (fiveContinued && weekContinued) calibration = calibration.add(five.added, week.added)
-        // A 5-hour boundary was crossed without seeing the old cycle to its end: weekly points may hide unseen cycles.
+        if (fiveContinued && weekContinued && !weekCapped) calibration = calibration.add(five.added, week.added)
+        // Weekly points may hide unseen 5-hour cycles only when a cycle ended without its end being read, or when no cycle was
+        // known since a reading long enough ago. A cycle change read just before the old end and after the new start hides nothing.
         val previousFive = base.fiveCycles.firstOrNull { it.closedAt == null }
         val lostEnd = five.resets.isNotEmpty() && (previousFive == null || previousFive.lastSeen < previousFive.end - CycleRecord.COMPLETE_SECONDS)
         val unseenStart = base.fiveRun == null && base.lastReadAt > 0 && at - base.lastReadAt > CycleRecord.COMPLETE_SECONDS
-        val gap = weekContinued && (lostEnd || unseenStart || (five.started && base.fiveRun != null))
+        val gap = weekContinued && !weekCapped && (lostEnd || unseenStart)
 
         edit(today) { it.copy(reads = it.reads + 1, week = it.week + week.added, weekRuns = it.weekRuns + if (week.started) 1 else 0,
             gapWeek = it.gapWeek + if (gap) week.added else 0.0, gapFive = it.gapFive + if (gap) five.added else 0.0) }
@@ -332,6 +336,8 @@ data class RangeSummary(
 }
 
 object LedgerStats {
+    /** Smallest unexplained amount per day, in 5-hour points, that counts as an estimate. */
+    const val MIN_ESTIMATE = 25.0
     private fun localDate(epoch: Long, zone: ZoneId) = Instant.ofEpochSecond(epoch).atZone(zone).toLocalDate()
 
     /** Every day of one ledger. */
@@ -341,14 +347,17 @@ object LedgerStats {
         val result = HashMap<LocalDate, DayUsage>()
         upgraded.days.forEach { day ->
             val date = runCatching { LocalDate.parse(day.date) }.getOrNull() ?: return@forEach
-            val estimate = k?.let { ((day.gapWeek / it) * 100 - day.gapFive).coerceAtLeast(0.0) }
+            // Below a quarter limit the difference is rounding of the reported percentages, not unseen use.
+            val estimate = k?.let { ((day.gapWeek / it) * 100 - day.gapFive).takeIf { e -> e >= MIN_ESTIMATE } ?: 0.0 }
             result[date] = DayUsage(date, day.five, 0.0, estimate, day.week, day.fiveRuns, day.weekRuns, day.fiveResets, day.weekResets,
                 day.peak, day.reads, day.legacy)
         }
         upgraded.fiveCycles.forEach { cycle ->
             val date = localDate(cycle.start(FIVE_HOURS), zone)
             val old = result[date] ?: DayUsage(date, 0.0, 0.0, k?.let { 0.0 }, 0.0, 0, 0, 0, 0, 0.0, 0, false)
-            result[date] = old.copy(five = old.five + cycle.counted, fiveOpen = old.fiveOpen + if (cycle.complete) 0.0 else cycle.counted,
+            // A running cycle is not missing anything yet; only ended cycles without a read end are lower bounds.
+            val open = cycle.closedAt != null && !cycle.complete
+            result[date] = old.copy(five = old.five + cycle.counted, fiveOpen = old.fiveOpen + if (open) cycle.counted else 0.0,
                 fiveCycles = old.fiveCycles + if (cycle.migrated) 0 else 1, peak = maxOf(old.peak, cycle.peak))
         }
         return result

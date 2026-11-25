@@ -145,8 +145,11 @@ object Planner {
                         resets[b.accountId] = reset + ONE_WEEK
                     }
                 }
-                val pick = budgets.filter { calibrated[it.accountId] != null && (left[it.accountId] ?: 0.0) >= .25 && (busyUntil[it.accountId] ?: now) <= slot }
-                    .minByOrNull { resets[it.accountId] ?: Long.MAX_VALUE } ?: continue
+                // The budget that expires first; among resets within an hour of each other, the one with the most left,
+                // so a slot is filled as far as possible.
+                val candidates = budgets.filter { calibrated[it.accountId] != null && (left[it.accountId] ?: 0.0) >= .25 && (busyUntil[it.accountId] ?: now) <= slot }
+                val soonest = candidates.minOfOrNull { resets[it.accountId] ?: Long.MAX_VALUE } ?: continue
+                val pick = candidates.filter { (resets[it.accountId] ?: Long.MAX_VALUE) - soonest <= 3600 }.maxByOrNull { left[it.accountId] ?: 0.0 } ?: continue
                 val share = floor(minOf(1.0, left.getValue(pick.accountId)) * 100) / 100
                 sessions += Session(pick.accountId, slot, slot + FIVE_HOURS, share, current = false)
                 taken += slot to slot + FIVE_HOURS
