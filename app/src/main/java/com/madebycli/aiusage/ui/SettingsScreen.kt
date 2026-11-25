@@ -392,8 +392,9 @@ private fun androidx.compose.foundation.lazy.LazyListScope.notificationsPage(sta
             SwitchSettingsItem(stringResource(R.string.alerts_enabled), checked("enabled", false), { on -> if (on && !allowed) request() else update("enabled", on) },
                 subtitle = stringResource(R.string.alerts_enabled_desc), icon = Icons.Rounded.NotificationsActive)
             SettingsItem(stringResource(R.string.alerts_permission), if (allowed) null else ({ request() }),
-                subtitle = stringResource(if (allowed) R.string.alerts_permission_granted else R.string.alerts_permission_missing), icon = Icons.Rounded.VerifiedUser) {
-                if (!allowed) FilledTonalButton({ request() }) { Text(stringResource(R.string.alerts_permission_allow)) }
+                subtitle = stringResource(if (allowed) R.string.alerts_permission_granted else R.string.alerts_permission_allow), icon = Icons.Rounded.VerifiedUser,
+                titleColor = if (allowed) Color.Unspecified else MaterialTheme.colorScheme.error) {
+                if (!allowed) Icon(Icons.Rounded.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             SwitchSettingsItem(stringResource(R.string.alerts_used_only), checked("usedOnly", true), { update("usedOnly", it) },
                 subtitle = stringResource(R.string.alerts_used_only_desc), icon = Icons.Rounded.FilterAlt)
@@ -414,6 +415,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.notificationsPage(sta
                         icon = if (rule.seconds == com.madebycli.aiusage.data.FIVE_HOURS) Icons.Rounded.Timelapse else Icons.Rounded.DateRange)
                     SettingsBlock {
                         val lead = values["lead.${rule.key}"] as? Int ?: 0
+                        Text(stringResource(R.string.alerts_lead), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         ConnectedChoice(listOf(0, 5, 15, 30, 60), lead, { prefs.edit().putInt("lead.${rule.key}", it).apply(); revision++; model.rescheduleAlerts() }) {
                             if (it == 0) stringResource(R.string.alerts_at_reset) else stringResource(R.string.interval_minutes, it)
                         }

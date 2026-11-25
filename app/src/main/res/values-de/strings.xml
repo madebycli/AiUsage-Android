@@ -140,7 +140,6 @@
     <string name="alerts_test">Test senden</string>
     <string name="alerts_android_settings">Android-Einstellungen</string>
     <string name="alerts_sound">Ton und Anzeige</string>
-    <string name="alerts_at_reset">Zum Reset</string>
     <string name="alerts_none_planned">Nichts geplant</string>
     <string name="window_five">5 Stunden</string>
     <string name="window_week">Wöchentlich</string>
@@ -521,4 +520,6 @@
     <string name="wc_narrow">Schmal</string>
     <string name="wc_all_accounts">Alle Accounts</string>
     <string name="wc_all_accounts_desc">In der Reihenfolge der Startseite, neue kommen dazu</string>
+    <string name="alerts_lead">Vorlauf</string>
+    <string name="alerts_at_reset">0 Min.</string>
 </resources>

@@ -59,29 +59,36 @@ internal fun ResetScreen(state: UiState, now: Long, provider: String, select: (S
     }
 }
 
-/** Every running window of every account, soonest first: account, window, clock time and time left. */
+/** One row per account with its running windows side by side; accounts whose next reset is soonest come first. */
 @Composable
 private fun PersonalTimeline(state: UiState, now: Long) {
     val res = LocalResources.current
     val cs = MaterialTheme.colorScheme
-    val rows = state.accounts.flatMap { entry -> entry.windows().filter { it.usedPercent > 0 && (it.resetAt ?: 0) > now }.map { entry to it } }
-        .sortedBy { it.second.resetAt }
+    val rows = state.accounts.mapNotNull { entry ->
+        val running = entry.windows().filter { it.usedPercent > 0 && (it.resetAt ?: 0) > now }.sortedBy { it.seconds }
+        if (running.isEmpty()) null else entry to running
+    }.sortedBy { (_, windows) -> windows.minOf { it.resetAt!! } }
     Column {
         SettingsSectionLabel(stringResource(R.string.resets_yours))
         SettingsGroup {
             if (rows.isEmpty()) SettingsBlock { Text(stringResource(R.string.resets_none_running), color = cs.onSurfaceVariant) }
-            rows.forEach { (entry, window) ->
-                val at = window.resetAt!!
+            rows.forEach { (entry, windows) ->
                 Surface(color = cs.panel, shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        ProviderBadge(entry.provider, 36.dp)
-                        Column(Modifier.weight(1f)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            BrandIcon(entry.provider, Modifier.size(22.dp))
                             Text(entry.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${windowTitle(window.seconds)} · ${Fmt.percent(window.usedPercent)} %", style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant)
                         }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(Fmt.clock(res, at, now), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text(Fmt.remaining(res, at - now), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            windows.take(2).forEach { window ->
+                                val at = window.resetAt!!
+                                Column(Modifier.weight(1f).background(cs.panelRaised, RoundedCornerShape(14.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                    Text("${windowTitle(window.seconds)} · ${Fmt.percent(window.usedPercent)} %", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, maxLines = 1)
+                                    Text(Fmt.clock(res, at, now), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                                    Text(Fmt.remaining(res, at - now), style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, maxLines = 1)
+                                }
+                            }
+                            if (windows.size == 1) Spacer(Modifier.weight(1f))
                         }
                     }
                 }

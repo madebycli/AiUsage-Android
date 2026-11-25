@@ -8,3 +8,4 @@ local.properties
 *.keystore
 *.p12
 *.password
+release-apk/

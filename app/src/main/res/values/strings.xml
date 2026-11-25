@@ -146,7 +146,6 @@
     <string name="alerts_test">Send test</string>
     <string name="alerts_android_settings">Android settings</string>
     <string name="alerts_sound">Sound and display</string>
-    <string name="alerts_at_reset">At reset</string>
     <string name="alerts_none_planned">Nothing planned</string>
     <string name="window_five">5 hours</string>
     <string name="window_week">Weekly</string>
@@ -527,4 +526,6 @@
     <string name="wc_narrow">Narrow</string>
     <string name="wc_all_accounts">All accounts</string>
     <string name="wc_all_accounts_desc">In home screen order; new ones are added</string>
+    <string name="alerts_lead">Lead time</string>
+    <string name="alerts_at_reset">0 min</string>
 </resources>

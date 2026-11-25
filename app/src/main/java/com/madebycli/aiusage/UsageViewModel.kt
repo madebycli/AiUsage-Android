@@ -23,7 +23,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(UiState(
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false),
-        homeStyle = enumValueOr(prefs.getString("homeStyle", null), HomeStyle.COMPACT),
+        homeStyle = enumValueOr(prefs.getString("homeStyle", null), HomeStyle.PLAYFUL),
         nav = readNav()
     ))
     val state = mutable.asStateFlow()

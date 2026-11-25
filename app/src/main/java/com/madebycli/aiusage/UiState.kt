@@ -87,7 +87,7 @@ data class UiState(
     val storageWarning: String? = null,
     val intel: Map<IntelSource, IntelResult> = emptyMap(), val intelLoading: Boolean = false,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false,
-    val homeStyle: HomeStyle = HomeStyle.COMPACT,
+    val homeStyle: HomeStyle = HomeStyle.PLAYFUL,
     val nav: NavSettings = NavSettings()
 ) {
     val initializing get() = !loaded
