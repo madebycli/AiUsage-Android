@@ -94,15 +94,16 @@ internal fun StatsTab(state: UiState, now: Long, scope: String, select: (String)
     val zone = ZoneId.systemDefault()
     val today = Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
     val days = remember(chosen.map { it.ledger }) { LedgerStats.merge(chosen.map { it.ledger }) }
+    val starts = remember(chosen.map { it.ledger }) { chosen.flatMap { a -> UsageTracker.upgraded(a.ledger).fiveCycles.filter { !it.migrated }.map { it.start(FIVE_HOURS) } } }
     val period = periodOf(range, today, offset)
-    val summary = remember(days, period, metric) { LedgerStats.summarize(days, period, metric) }
+    val summary = remember(days, period, metric) { LedgerStats.summarize(days, period, metric, starts) }
     val weekdayRange = when (range) {
         StatsRange.WEEK -> today.minusDays(55)..today
         else -> period.start..minOf(period.endInclusive, today)
     }
     val weekdays = remember(days, weekdayRange, metric) { LedgerStats.summarize(days, weekdayRange, metric) }
     val streak = remember(days, today, metric) { LedgerStats.currentStreak(days, today, metric) }
-    val byDate = remember(days) { days.associateBy { it.date } }
+    val byDate = remember(days) { days.mapKeys { it.key.toString() } }
 
     LazyColumn(Modifier.widthIn(max = maxContentWidth).fillMaxSize(), contentPadding = screenPadding, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         if (accounts.size > 1) item(key = "scope") {
@@ -112,12 +113,12 @@ internal fun StatsTab(state: UiState, now: Long, scope: String, select: (String)
         }
         item(key = "controls") {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SegmentedTabGroup(StatsMetric.entries, metric, { metric = it }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(StatsMetric.entries, metric, { metric = it }, { it.label }, fillEqually = true)
                 SegmentedTabGroup(StatsRange.entries, range, { range = it; offset = 0; selectedDay = null }, { it.title }, fillEqually = true)
             }
         }
         item(key = "period") { PeriodHeader(range, period, offset, today, onShift = { offset += it; selectedDay = null }) }
-        if (days.none { it.measured }) item(key = "empty") {
+        if (days.values.none { it.measured }) item(key = "empty") {
             SoftCard {
                 Text("Noch keine Messung", style = MaterialTheme.typography.headlineSmall)
                 Text("Jedes Mal, wenn du die App öffnest, und im Hintergrund hält sie fest, wie viel von deinem Limit verbraucht ist. Ein Reset-Zyklus zählt dabei nur einmal.",
@@ -187,8 +188,8 @@ private fun SummaryTiles(summary: RangeSummary, metric: StatsMetric, streak: Int
         Triple("Verbrauch", formatUsage(summary.total, metric), "im Zeitraum"),
         Triple("Resets", summary.resets.toString(), "$windowName zurückgesetzt"),
         Triple("Aktive Tage", "${summary.activeDays}", "von ${summary.measuredDays} gemessenen"),
-        Triple("Bester Tag", summary.bestDay?.let { formatUsage(it.value(metric), metric) } ?: "–", summary.bestDay?.let { LocalDate.parse(it.date).format(dayMonth) } ?: "keine Nutzung"),
-        Triple("Ø pro aktivem Tag", if (summary.activeDays == 0) "–" else formatUsage(summary.averagePerActiveDay, metric), "$windowName gestartet: ${summary.runs}"),
+        Triple("Bester Tag", summary.bestDay?.let { formatUsage(it.value(metric), metric) } ?: "–", summary.bestDay?.date?.format(dayMonth) ?: "keine Nutzung"),
+        Triple("Ø pro aktivem Tag", if (summary.activeDays == 0) "–" else formatUsage(summary.averagePerActiveDay, metric), "$windowName gestartet: ${summary.cycles}"),
         Triple("Serie", "$streak ${if (streak == 1) "Tag" else "Tage"}", "in Folge mit Nutzung")
     )
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -214,11 +215,11 @@ private fun StatTile(title: String, value: String, sub: String, modifier: Modifi
 }
 
 /** Intensity of a day between "measured, nothing used" and the busiest day of the view. */
-private fun intensity(day: LedgerDay?, metric: StatsMetric, scale: Double): Float? =
+private fun intensity(day: DayUsage?, metric: StatsMetric, scale: Double): Float? =
     if (day == null || !day.measured) null else (day.value(metric) / scale).toFloat().coerceIn(0f, 1f)
 
 @Composable
-private fun WeekChart(byDate: Map<String, LedgerDay>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
+private fun WeekChart(byDate: Map<String, DayUsage>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val days = List(7) { period.start.plusDays(it.toLong()) }
     val values = days.map { day -> byDate[day.toString()]?.takeIf { it.measured }?.value(metric) }
@@ -266,7 +267,7 @@ private fun WeekChart(byDate: Map<String, LedgerDay>, period: ClosedRange<LocalD
 }
 
 @Composable
-private fun MonthGrid(byDate: Map<String, LedgerDay>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
+private fun MonthGrid(byDate: Map<String, DayUsage>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val first = period.start
     val lead = first.dayOfWeek.value - 1
@@ -325,7 +326,7 @@ private fun LegendRow() {
 }
 
 @Composable
-private fun YearView(byDate: Map<String, LedgerDay>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
+private fun YearView(byDate: Map<String, DayUsage>, period: ClosedRange<LocalDate>, today: LocalDate, metric: StatsMetric, selected: String?, pick: (String) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val year = period.start.year
     val first = period.start.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -393,7 +394,7 @@ private fun YearView(byDate: Map<String, LedgerDay>, period: ClosedRange<LocalDa
 }
 
 @Composable
-private fun DayDetail(date: LocalDate, record: LedgerDay?, metric: StatsMetric, today: LocalDate) {
+private fun DayDetail(date: LocalDate, record: DayUsage?, metric: StatsMetric, today: LocalDate) {
     SoftCard {
         Text(date.format(dayLabel), style = MaterialTheme.typography.titleMedium)
         if (record == null || !record.measured) {
@@ -402,7 +403,7 @@ private fun DayDetail(date: LocalDate, record: LedgerDay?, metric: StatsMetric, 
             Text(formatUsage(record.value(metric), metric), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
             if (record.legacy) Text("Aus dem früheren Verlauf: höchster Wert des Tages.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                DetailFact("Fenster gestartet", record.runs(metric).toString())
+                DetailFact("Fenster gestartet", record.cycles(metric).toString())
                 DetailFact("Resets", record.resets(metric).toString())
                 if (metric == StatsMetric.FIVE) DetailFact("Spitze", "${percent(record.peak)} %")
                 DetailFact("Messungen", record.reads.toString())
@@ -423,7 +424,7 @@ private fun DetailFact(title: String, value: String) {
 @Composable
 private fun AccountShareCard(accounts: List<AccountState>, period: ClosedRange<LocalDate>, metric: StatsMetric) {
     val colors = MaterialTheme.colorScheme
-    val rows = accounts.map { it to LedgerStats.summarize(it.ledger.days, period, metric) }
+    val rows = accounts.map { it to LedgerStats.summarize(LedgerStats.days(it.ledger), period, metric) }
     val top = rows.maxOf { it.second.total }.coerceAtLeast(1.0)
     val sum = rows.sumOf { it.second.total }
     SoftCard {
@@ -504,3 +505,6 @@ internal fun MiniBars(values: List<Double?>, labels: List<String>, height: Int =
         }
     }
 }
+
+
+internal val StatsMetric.label: String get() = if (this == StatsMetric.FIVE) "5-Std.-Limit" else "Wochenlimit"

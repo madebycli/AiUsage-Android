@@ -21,7 +21,9 @@ class UsageLedgerTest {
     private fun feed(vararg readings: UsageSnapshot, provider: String = "Codex", zone: ZoneId = utc): UsageLedger =
         readings.fold(UsageLedger()) { ledger, reading -> UsageTracker.record(ledger, reading, provider, zone) }
 
-    private fun UsageLedger.day(date: String) = days.first { it.date == date }
+    private fun UsageLedger.day(date: String) = LedgerStats.days(this, utc)[LocalDate.parse(date)]!!
+    private val DayUsage.fiveRuns get() = fiveCycles
+    private val DayUsage.weekRuns get() = weekCycles
 
     // ---- the scenarios from the bug report ------------------------------------------------------------
 
@@ -177,12 +179,14 @@ class UsageLedgerTest {
 
     // ---- days and weeks -------------------------------------------------------------------------------
 
-    @Test fun `usage belongs to the local day of the reading`() {
+    @Test fun `a five hour cycle belongs to the local day it started`() {
         val berlin = ZoneId.of("Europe/Berlin")
-        val end = at("2026-10-24T23:50:00Z")
+        // Started 20:50 UTC = 22:50 Berlin on the 24th, read on both sides of midnight.
+        val end = at("2026-10-25T01:50:00Z")
         val ledger = feed(snap(at("2026-10-24T21:30:00Z"), five = 20.0 to end), snap(at("2026-10-24T22:30:00Z"), five = 60.0 to end), zone = berlin)
-        assertEquals(20.0, ledger.day("2026-10-24").five, 0.0001)
-        assertEquals(40.0, ledger.day("2026-10-25").five, 0.0001)
+        val days = LedgerStats.days(ledger, berlin)
+        assertEquals(60.0, days[LocalDate.parse("2026-10-24")]!!.five, 0.0001)
+        assertEquals(0.0, days[LocalDate.parse("2026-10-25")]?.five ?: 0.0, 0.0001)
     }
 
     @Test fun `five hour and weekly windows are tracked independently`() {
@@ -205,21 +209,22 @@ class UsageLedgerTest {
 
     // ---- reading side ---------------------------------------------------------------------------------
 
-    private fun day(date: String, five: Double = 0.0, reads: Int = 1, resets: Int = 0, runs: Int = 0) = LedgerDay(date, five = five, reads = reads, fiveResets = resets, fiveRuns = runs)
+    private fun day(date: String, five: Double = 0.0, reads: Int = 1, resets: Int = 0, runs: Int = 0) =
+        LocalDate.parse(date).let { it to DayUsage(it, five, 0.0, null, 0.0, runs, 0, resets, 0, 0.0, reads, false) }
+    private fun days(vararg list: Pair<LocalDate, DayUsage>) = list.toMap()
 
     @Test fun `summary counts usage resets and active days of a range`() {
-        val days = listOf(day("2026-10-19", 150.0, resets = 2, runs = 2), day("2026-10-20", 0.0), day("2026-10-21", 50.0, resets = 1, runs = 1), day("2026-11-01", 500.0))
+        val days = days(day("2026-10-19", 150.0, resets = 2, runs = 2), day("2026-10-20", 0.0), day("2026-10-21", 50.0, resets = 1, runs = 1), day("2026-11-01", 500.0))
         val summary = LedgerStats.summarize(days, LocalDate.parse("2026-10-19")..LocalDate.parse("2026-10-25"), StatsMetric.FIVE)
         assertEquals(200.0, summary.total, 0.0)
         assertEquals(2, summary.activeDays)
         assertEquals(3, summary.measuredDays)
         assertEquals(3, summary.resets)
-        assertEquals("2026-10-19", summary.bestDay!!.date)
+        assertEquals(LocalDate.parse("2026-10-19"), summary.bestDay!!.date)
     }
 
     @Test fun `busiest weekday uses the average of measured days only`() {
-        // Mondays: 10/19 (100) and 10/26 (not measured). Tuesday 10/20 measured with 60.
-        val days = listOf(day("2026-10-19", 100.0), day("2026-10-20", 60.0), day("2026-10-21", 0.0, reads = 3))
+        val days = days(day("2026-10-19", 100.0), day("2026-10-20", 60.0), day("2026-10-21", 0.0, reads = 3))
         val summary = LedgerStats.summarize(days, LocalDate.parse("2026-10-19")..LocalDate.parse("2026-11-01"), StatsMetric.FIVE)
         assertEquals(0, summary.busiestWeekday)
         assertEquals(100.0, summary.weekdayAverage[0]!!, 0.0)
@@ -228,21 +233,21 @@ class UsageLedgerTest {
     }
 
     @Test fun `no usage means no busiest weekday`() {
-        val summary = LedgerStats.summarize(listOf(day("2026-10-19", 0.0)), LocalDate.parse("2026-10-19")..LocalDate.parse("2026-10-25"), StatsMetric.FIVE)
+        val summary = LedgerStats.summarize(days(day("2026-10-19", 0.0)), LocalDate.parse("2026-10-19")..LocalDate.parse("2026-10-25"), StatsMetric.FIVE)
         assertNull(summary.busiestWeekday)
     }
 
     @Test fun `accounts add up per date`() {
-        val a = UsageLedger(listOf(day("2026-10-19", 40.0, resets = 1)))
-        val b = UsageLedger(listOf(day("2026-10-19", 70.0, resets = 2), day("2026-10-18", 10.0)))
-        val merged = LedgerStats.merge(listOf(a, b))
-        assertEquals(110.0, merged.first { it.date == "2026-10-19" }.five, 0.0)
-        assertEquals(3, merged.first { it.date == "2026-10-19" }.fiveResets)
-        assertEquals(listOf("2026-10-19", "2026-10-18"), merged.map { it.date })
+        val a = feed(snap(at("2026-10-19T10:00:00Z"), five = 40.0 to at("2026-10-19T14:00:00Z")))
+        val b = feed(snap(at("2026-10-19T11:00:00Z"), five = 70.0 to at("2026-10-19T15:00:00Z")), snap(at("2026-10-20T11:00:00Z"), five = 10.0 to at("2026-10-20T15:00:00Z")))
+        val merged = LedgerStats.merge(listOf(a, b), utc)
+        assertEquals(110.0, merged[LocalDate.parse("2026-10-19")]!!.five, 0.0)
+        assertEquals(2, merged[LocalDate.parse("2026-10-19")]!!.fiveCycles)
+        assertEquals(10.0, merged[LocalDate.parse("2026-10-20")]!!.five, 0.0)
     }
 
     @Test fun `streak counts consecutive days with usage ending today or yesterday`() {
-        val days = listOf(day("2026-10-24", 10.0), day("2026-10-23", 10.0), day("2026-10-22", 0.0), day("2026-10-21", 10.0))
+        val days = days(day("2026-10-24", 10.0), day("2026-10-23", 10.0), day("2026-10-22", 0.0), day("2026-10-21", 10.0))
         assertEquals(2, LedgerStats.currentStreak(days, LocalDate.parse("2026-10-24"), StatsMetric.FIVE))
         assertEquals(2, LedgerStats.currentStreak(days, LocalDate.parse("2026-10-25"), StatsMetric.FIVE))
         assertEquals(0, LedgerStats.currentStreak(days, LocalDate.parse("2026-10-26"), StatsMetric.FIVE))
@@ -256,6 +261,7 @@ class UsageLedgerTest {
         assertTrue(migrated.days.isEmpty())
         assertEquals(1, migrated.ledger.days.size)
         assertEquals(80.0, migrated.ledger.days.single().five, 0.0)
+        assertEquals(80.0, LedgerStats.days(migrated.ledger, utc)[LocalDate.parse("2026-10-10")]!!.five, 0.0)
         assertTrue(migrated.ledger.days.single().legacy)
         assertEquals(migrated, migrated.migrated())
     }

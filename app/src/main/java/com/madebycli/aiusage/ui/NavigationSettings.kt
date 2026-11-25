@@ -75,7 +75,7 @@ internal fun NavigationSettings(state: UiState, model: UsageViewModel) {
         item(key = "defaults") {
             SoftCard {
                 Text("Messwert", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SegmentedTabGroup(StatsMetric.entries, nav.statsMetric, model::setStatsMetric, { it.title }, fillEqually = true)
+                SegmentedTabGroup(StatsMetric.entries, nav.statsMetric, model::setStatsMetric, { it.label }, fillEqually = true)
                 Text("Zeitraum", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SegmentedTabGroup(StatsRange.entries, nav.statsRange, model::setStatsRange, { it.title }, fillEqually = true)
             }

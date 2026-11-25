@@ -161,7 +161,7 @@ object WidgetUpdater {
         val app = context.applicationContext
         val now = Instant.now().epochSecond
         val newest = WidgetData.load(app).mapNotNull { it.fetchedAt }.maxOrNull()
-        if (newest != null && now - newest < 2 * com.madebycli.aiusage.background.AccountRefresh.hours(app) * 3600) return
+        if (newest != null && now - newest < 2 * com.madebycli.aiusage.background.AccountRefresh.minutes(app) * 60) return
         if (AccountRegistry(app).list().isEmpty()) return
         val request = OneTimeWorkRequestBuilder<WidgetRefreshWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()

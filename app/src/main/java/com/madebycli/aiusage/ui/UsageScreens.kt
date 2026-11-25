@@ -228,7 +228,7 @@ internal fun AccountDetailScreen(state: UiState, now: Long, entry: AccountState,
                 spending.resetAt?.let { Text("Reset ${date(it)}", style = MaterialTheme.typography.labelMedium) }
             } } }
         }
-        if (entry.ledger.days.isNotEmpty() || stats != null) item { RecentUsageCard(entry, now, stats) }
+        if (entry.ledger.days.isNotEmpty() || entry.ledger.fiveCycles.isNotEmpty() || stats != null) item { RecentUsageCard(entry, now, stats) }
         usage?.let { item { Text("${if (entry.refreshing) "Aktualisiert… · " else ""}Stand ${date(it.fetchedAt, true)} (${age(now - it.fetchedAt)})",
             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
     }
@@ -238,7 +238,7 @@ internal fun AccountDetailScreen(state: UiState, now: Long, entry: AccountState,
 @Composable
 private fun RecentUsageCard(entry: AccountState, now: Long, stats: (() -> Unit)?) {
     val today = java.time.Instant.ofEpochSecond(now).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
-    val byDate = entry.ledger.days.associateBy { it.date }
+    val byDate = remember(entry.ledger) { LedgerStats.days(entry.ledger).mapKeys { it.key.toString() } }
     val days = List(7) { today.minusDays((6 - it).toLong()) }
     val values = days.map { byDate[it.toString()]?.takeIf { day -> day.measured }?.five }
     SoftCard {

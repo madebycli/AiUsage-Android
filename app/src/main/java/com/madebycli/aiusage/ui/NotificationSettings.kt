@@ -73,9 +73,9 @@ internal fun NotificationSettings(state: UiState, model: UsageViewModel) {
             SwitchRow("Im Hintergrund aktualisieren", "Limits, Reset-Termine, Widget und Statistik", checked("daily", true)) { update("daily", it) }
             if (checked("daily", true)) SettingsContent {
                 Text("Intervall", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SegmentedTabGroup(AccountRefresh.choices, (values["hours"] as? Int)?.toLong()?.takeIf { it in AccountRefresh.choices } ?: AccountRefresh.DEFAULT_HOURS, { hours ->
-                    prefs.edit().putInt("hours", hours.toInt()).apply(); revision++; model.syncBackground()
-                }, { "$it h" }, fillEqually = true)
+                SegmentedTabGroup(AccountRefresh.choices, AccountRefresh.minutes(context), { minutes ->
+                    AccountRefresh.setMinutes(context, minutes); revision++; model.syncBackground()
+                }, { if (it < 60) "$it min" else "${it / 60} h" }, fillEqually = true)
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
                 StatusLine("Letzte Abfrage", when {
                     last == null -> "Noch keine im Hintergrund"

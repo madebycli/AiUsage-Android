@@ -47,6 +47,13 @@ object ResetAlarms {
         return false
     }
 
+    fun cancelIntent(context: Context, intent: Intent) {
+        PendingIntent.getBroadcast(context, 1, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let {
+            manager(context).cancel(it)
+            it.cancel()
+        }
+    }
+
     fun cancel(context: Context, slot: String) {
         PendingIntent.getBroadcast(context, 0, intent(context, slot), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let {
             manager(context).cancel(it)
@@ -82,7 +89,11 @@ class ResetBootReceiver : BroadcastReceiver() {
             // Work normally survives both, but a missing plan costs a whole interval, so it is put back without waiting.
             val connected = AccountRegistry(app).list().isNotEmpty()
             AccountRefresh.sync(app, connected)
-            if (connected) ResetTicks.schedule(app)
+            if (connected) {
+                ResetTicks.schedule(app)
+                // Whatever ended while the phone was off is read now, so its cycle is closed on the right day.
+                MeasureWork.enqueue(app, null, SyncTrigger.BOOT)
+            }
         }
     }
 }

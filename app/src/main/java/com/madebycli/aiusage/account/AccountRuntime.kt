@@ -7,6 +7,8 @@ import com.madebycli.aiusage.Providers
 import com.madebycli.aiusage.UiState
 import com.madebycli.aiusage.background.ResetAlerts
 import com.madebycli.aiusage.background.ResetTicks
+import com.madebycli.aiusage.background.BackgroundLog
+import com.madebycli.aiusage.background.SyncTrigger
 import com.madebycli.aiusage.widget.WidgetUpdater
 import com.madebycli.aiusage.data.*
 import kotlinx.coroutines.*
@@ -72,10 +74,12 @@ abstract class AccountRuntime(
             if (closed) return@withLock
             update { copy(usage = usage, error = null, storageWarning = null) }
             persist(usage)
+            BackgroundLog.add(app, BackgroundLog.Entry(usage.fetchedAt, SyncTrigger.APP, 0, listOf(BackgroundLog.Result(id, true))))
             afterRead(usage)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             Log.w(TAG, diagnosticFailure("usage_${account.provider.take(5)}", e))
+            BackgroundLog.add(app, BackgroundLog.Entry(Instant.now().epochSecond, SyncTrigger.APP, 0, listOf(BackgroundLog.Result(id, false, BackgroundLog.reason(e)))))
             if (!closed) update { copy(error = failure(e)) }
         } finally {
             if (!closed) update { copy(refreshing = false) }
