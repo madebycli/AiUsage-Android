@@ -25,12 +25,12 @@ suspend fun persistAccountRecord(write: suspend () -> Unit): String? = try {
 }
 
 
-enum class LoginPhase(val label: String) {
-    REQUEST_CODE("Anmeldecode wird angefordert"),
-    WAITING("Wartet auf Browser-Freigabe"),
-    EXCHANGING("Browser-Freigabe wird übernommen"),
-    SAVING("Anmeldung wird auf dem Gerät gespeichert"),
-    LOADING_USAGE("Anmeldung bestätigt · Verbrauch wird geladen")
+enum class LoginPhase(@androidx.annotation.StringRes val label: Int) {
+    REQUEST_CODE(com.madebycli.aiusage.R.string.phase_request),
+    WAITING(com.madebycli.aiusage.R.string.phase_waiting),
+    EXCHANGING(com.madebycli.aiusage.R.string.phase_exchange),
+    SAVING(com.madebycli.aiusage.R.string.phase_exchange),
+    LOADING_USAGE(com.madebycli.aiusage.R.string.phase_usage)
 }
 
 fun loginFailure(phase: LoginPhase, error: Exception): String {
@@ -43,7 +43,7 @@ fun loginFailure(phase: LoginPhase, error: Exception): String {
         else -> safeError(error)
     }
     val status = (error as? HttpFailure)?.let { " · HTTP ${it.status}" }.orEmpty()
-    return "${phase.label}$status. $advice"
+    return "${com.madebycli.aiusage.Texts.get(phase.label)}$status. $advice"
 }
 
 // Only a phase, numeric status and class name. Never bodies, codes, URLs, tokens or stack traces.

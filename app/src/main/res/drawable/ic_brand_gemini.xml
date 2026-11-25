@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Four-point sparkle in Google blue; drawn for AI Usage. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="32dp" android:height="32dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M12,2C12.6,7.2 16.8,11.4 22,12C16.8,12.6 12.6,16.8 12,22C11.4,16.8 7.2,12.6 2,12C7.2,11.4 11.4,7.2 12,2Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="4" android:startY="20" android:endX="20" android:endY="4">
+                <item android:offset="0" android:color="#FF1C7DFF" />
+                <item android:offset="0.55" android:color="#FF8E6DF5" />
+                <item android:offset="1" android:color="#FFE8A7C8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

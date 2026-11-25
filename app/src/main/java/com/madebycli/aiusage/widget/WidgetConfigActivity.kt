@@ -94,7 +94,7 @@ internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight:
     ) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Label("Vorlage anwenden")
-            SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { it.title })
+            SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { androidx.compose.ui.res.stringResource(it.label) })
             Preview(bitmap, previewW, previewH, sizeIndex) { sizeIndex = it }
             if (WidgetRenderer.effectiveStyle(config, widgetWidth, widgetHeight) != config.style)
                 Text("Für diese Darstellung das Widget im Launcher höher ziehen. In der aktuellen Größe wird es kompakt angezeigt.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -104,27 +104,27 @@ internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight:
             }
             Section("Anzeige") {
                 Label("Darstellung")
-                SegmentedTabGroup(WidgetStyle.entries, config.style, { config = config.copy(preset = WidgetPreset.CUSTOM, style = it) }, { it.title })
-                Text(config.style.hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SegmentedTabGroup(WidgetStyle.entries, config.style, { config = config.copy(preset = WidgetPreset.CUSTOM, style = it) }, { androidx.compose.ui.res.stringResource(it.label) })
+                Text(androidx.compose.ui.res.stringResource(config.style.hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Label("Accounts anordnen")
-                SegmentedTabGroup(WidgetArrangement.entries, config.arrangement, { config = config.copy(preset = WidgetPreset.CUSTOM, arrangement = it) }, { it.title })
+                SegmentedTabGroup(WidgetArrangement.entries, config.arrangement, { config = config.copy(preset = WidgetPreset.CUSTOM, arrangement = it) }, { androidx.compose.ui.res.stringResource(it.label) })
                 if (config.style == WidgetStyle.RINGS || config.style == WidgetStyle.PERCENT) {
                     Label("Zeitfenster anordnen")
-                    SegmentedTabGroup(WidgetWindowLayout.entries, config.windowLayout, { config = config.copy(preset = WidgetPreset.CUSTOM, windowLayout = it) }, { it.title })
+                    SegmentedTabGroup(WidgetWindowLayout.entries, config.windowLayout, { config = config.copy(preset = WidgetPreset.CUSTOM, windowLayout = it) }, { androidx.compose.ui.res.stringResource(it.label) })
                 }
                 Label("Zeitfenster")
-                SegmentedTabGroup(WidgetWindows.entries, config.windows, { config = config.copy(preset = WidgetPreset.CUSTOM, windows = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(WidgetWindows.entries, config.windows, { config = config.copy(preset = WidgetPreset.CUSTOM, windows = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
                 Label("Reset-Zeit")
-                SegmentedTabGroup(ResetFormat.entries, config.reset, { config = config.copy(preset = WidgetPreset.CUSTOM, reset = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(ResetFormat.entries, config.reset, { config = config.copy(preset = WidgetPreset.CUSTOM, reset = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
                 Text(when (config.reset) { ResetFormat.CLOCK -> "z. B. 17:40"; ResetFormat.RELATIVE -> "z. B. in 2 Std. 50 Min."; ResetFormat.BOTH -> "z. B. 17:40 · in 2 Std. 50 Min." },
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Label("Balkenfarbe")
-                SegmentedTabGroup(WidgetColors.entries, config.colors, { config = config.copy(preset = WidgetPreset.CUSTOM, colors = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(WidgetColors.entries, config.colors, { config = config.copy(preset = WidgetPreset.CUSTOM, colors = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
                 Text(if (config.colors == WidgetColors.TRAFFIC) "Grün bis 70 %, Gelb bis 90 %, danach Rot" else "Farben der App", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Section("Farben & Form") {
                 Label("Hintergrund")
-                SegmentedTabGroup(WidgetTheme.entries, config.theme, { config = config.copy(preset = WidgetPreset.CUSTOM, theme = it) }, { it.title }, fillEqually = true)
+                SegmentedTabGroup(WidgetTheme.entries, config.theme, { config = config.copy(preset = WidgetPreset.CUSTOM, theme = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SwitchLine("Android-Farben", "Palette aus dem Hintergrundbild", config.dynamic) { config = config.copy(preset = WidgetPreset.CUSTOM, dynamic = it) }
                 SliderLine("Deckkraft", "${config.opacity} %", config.opacity.toFloat(), 20f..100f) { config = config.copy(preset = WidgetPreset.CUSTOM, opacity = it.toInt()) }
                 SliderLine("Ecken", "${config.corner} dp", config.corner.toFloat(), 0f..40f) { config = config.copy(preset = WidgetPreset.CUSTOM, corner = it.toInt()) }

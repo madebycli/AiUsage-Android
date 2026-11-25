@@ -50,6 +50,16 @@ internal val ColorScheme.panel: Color get() = surfaceContainerLow
 /** A step above [panel], for things that sit on a card. */
 internal val ColorScheme.panelRaised: Color get() = surfaceContainer
 
+/** Brand hue of a provider, used for tonal badges and planner lanes. */
+internal fun providerAccent(provider: String): Color = when (provider) {
+    com.madebycli.aiusage.Providers.CODEX -> Color(0xFF10A37F)
+    com.madebycli.aiusage.Providers.CLAUDE -> Color(0xFFD97757)
+    else -> Color(0xFF4285F4)
+}
+
+internal val com.madebycli.aiusage.data.StatsMetric.labelRes: Int get() =
+    if (this == com.madebycli.aiusage.data.StatsMetric.FIVE) com.madebycli.aiusage.R.string.metric_five else com.madebycli.aiusage.R.string.metric_week
+
 internal val cardShape = RoundedCornerShape(28.dp)
 internal val screenPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp)
 internal val maxContentWidth = 680.dp
@@ -118,7 +128,7 @@ internal fun Disclosure(label: String, content: @Composable ColumnScope.() -> Un
 
 @Composable
 internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    val accent = LocalSettingsCategory.current?.accent ?: MaterialTheme.colorScheme.primary
+    val accent = LocalSettingsAccent.current ?: MaterialTheme.colorScheme.primary
     val (background, foreground) = orionTonal(accent)
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
@@ -134,25 +144,28 @@ internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChan
 
 @Composable
 internal fun BrandIcon(provider: String, modifier: Modifier = Modifier.size(28.dp)) {
-    Icon(painterResource(if (provider == Providers.CODEX) R.drawable.ic_brand_codex else R.drawable.ic_brand_claude),
-        contentDescription = null, modifier = modifier,
-        tint = if (provider == Providers.CODEX) MaterialTheme.colorScheme.onSurface else Color(0xFFD58C70))
+    when (provider) {
+        Providers.CODEX -> Icon(painterResource(R.drawable.ic_brand_codex), null, modifier, tint = MaterialTheme.colorScheme.onSurface)
+        Providers.CLAUDE -> Icon(painterResource(R.drawable.ic_brand_claude), null, modifier, tint = Color(0xFFD58C70))
+        else -> Icon(painterResource(R.drawable.ic_brand_gemini), null, modifier, tint = Color.Unspecified)
+    }
 }
 
 /** Reset moment of a window: the clock time first, the remaining time below it. */
 @Composable
 internal fun ResetLines(resetAt: Long?, now: Long, modifier: Modifier = Modifier, horizontalAlignment: Alignment.Horizontal = Alignment.Start) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val res = androidx.compose.ui.platform.LocalResources.current
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp), horizontalAlignment = horizontalAlignment) {
         when {
-            resetAt == null -> Text("Reset nicht gemeldet", style = MaterialTheme.typography.labelMedium, color = muted)
+            resetAt == null -> Text(androidx.compose.ui.res.stringResource(R.string.usage_reset_unknown), style = MaterialTheme.typography.labelMedium, color = muted)
             resetAt <= now -> {
-                Text("Reset erreicht", style = MaterialTheme.typography.labelLarge)
-                Text("seit ${com.madebycli.aiusage.data.TimeText.clock(resetAt, now)} Uhr", style = MaterialTheme.typography.labelSmall, color = muted)
+                Text(androidx.compose.ui.res.stringResource(R.string.usage_reset_reached), style = MaterialTheme.typography.labelLarge)
+                Text(androidx.compose.ui.res.stringResource(R.string.usage_since, com.madebycli.aiusage.data.Fmt.clock(res, resetAt, now)), style = MaterialTheme.typography.labelSmall, color = muted)
             }
             else -> {
-                Text("Reset ${com.madebycli.aiusage.data.TimeText.clock(resetAt, now)} Uhr", style = MaterialTheme.typography.labelLarge)
-                Text(com.madebycli.aiusage.data.TimeText.remaining(resetAt - now), style = MaterialTheme.typography.labelSmall, color = muted)
+                Text(androidx.compose.ui.res.stringResource(R.string.usage_reset_at, com.madebycli.aiusage.data.Fmt.clock(res, resetAt, now)), style = MaterialTheme.typography.labelLarge)
+                Text(com.madebycli.aiusage.data.Fmt.remaining(res, resetAt - now), style = MaterialTheme.typography.labelSmall, color = muted)
             }
         }
     }

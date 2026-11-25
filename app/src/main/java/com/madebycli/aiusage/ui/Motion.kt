@@ -57,19 +57,47 @@ internal data class Screen(val key: String, val depth: Int)
 internal fun pageTransition(): AnimatedContentTransitionScope<Screen>.() -> ContentTransform = {
     val spec = spring<IntOffset>(dampingRatio = .92f, stiffness = 450f)
     when {
-        // The page above slides over the one below. Both stay fully opaque, so nothing shows through and no ghost images appear.
         targetState.depth > initialState.depth ->
             (slideInHorizontally(spec) { it } togetherWith slideOutHorizontally(spec) { -it / 4 }).apply { targetContentZIndex = 1f }
         targetState.depth < initialState.depth ->
             (slideInHorizontally(spec) { -it / 4 } togetherWith slideOutHorizontally(spec) { it }).apply { targetContentZIndex = -1f }
-        // Same level: fade through, the old page is gone before the new one appears.
         else -> fadeIn(tween(180, delayMillis = 90)) togetherWith fadeOut(tween(90))
     }
 }
 
-/** Tabs fade through with a small slide towards the side they sit on. */
+/**
+ * Window motion as in Iris NavHost (copied from Orion Store Root.kt Overlays): a page opens with a fade and a scale from
+ * 0.92 while the page below stays put; closing fades and scales it out to 0.94. Settings slide in a third of the width
+ * from the right with a fade, and leave the same way.
+ */
+@androidx.compose.runtime.Composable
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+internal fun windowTransition(): AnimatedContentTransitionScope<Screen>.() -> ContentTransform {
+    val motion = androidx.compose.material3.MaterialTheme.motionScheme
+    val scaleSpec = motion.defaultSpatialSpec<Float>()
+    val fx = motion.fastEffectsSpec<Float>()
+    val effects = motion.defaultEffectsSpec<Float>()
+    val slide = motion.defaultSpatialSpec<IntOffset>()
+    return {
+        val settingsIn = targetState.key == "route:settings" && initialState.depth == 0
+        val settingsOut = initialState.key == "route:settings" && targetState.depth == 0
+        when {
+            settingsIn -> ((slideInHorizontally(slide) { it / 3 } + fadeIn(effects)) togetherWith ExitTransition.KeepUntilTransitionsFinished).apply { targetContentZIndex = 1f }
+            settingsOut -> (EnterTransition.None togetherWith (slideOutHorizontally(slide) { it / 3 } + fadeOut(effects))).apply { targetContentZIndex = -1f }
+            targetState.depth > initialState.depth ->
+                ((fadeIn(fx) + scaleIn(scaleSpec, 0.92f)) togetherWith ExitTransition.KeepUntilTransitionsFinished).apply { targetContentZIndex = 1f }
+            targetState.depth < initialState.depth ->
+                (EnterTransition.None togetherWith (fadeOut(fx) + scaleOut(targetScale = 0.94f))).apply { targetContentZIndex = -1f }
+            else -> fadeIn(effects) togetherWith fadeOut(fx)
+        }
+    }
+}
+
+/** Tabs: shared X axis, a fifth of the width, with the fast spatial spring (Iris NavHost tab motion). */
 internal fun tabTransition(order: List<Int>): AnimatedContentTransitionScope<Int>.() -> ContentTransform = {
     val forward = order.indexOf(targetState) >= order.indexOf(initialState)
-    val offset: (Int) -> Int = { width -> if (forward) width / 14 else -width / 14 }
-    (fadeIn(tween(200, delayMillis = 90)) + slideInHorizontally(tween(260, easing = FastOutSlowInEasing), offset)) togetherWith fadeOut(tween(90))
+    val spring = spring<IntOffset>(dampingRatio = .8f, stiffness = 1400f)
+    val fade = spring<Float>(dampingRatio = 1f, stiffness = 3800f)
+    (slideInHorizontally(spring) { (it * .2f * if (forward) 1 else -1).toInt() } + fadeIn(fade)) togetherWith
+        (slideOutHorizontally(spring) { (it * .2f * if (forward) -1 else 1).toInt() } + fadeOut(fade))
 }

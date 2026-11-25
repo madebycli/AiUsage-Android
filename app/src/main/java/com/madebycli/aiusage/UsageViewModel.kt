@@ -23,6 +23,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val mutable = MutableStateFlow(UiState(
         theme = enumValueOr(prefs.getString("theme", null), ThemeMode.SYSTEM),
         dynamicColor = prefs.getBoolean("dynamic", false), amoled = prefs.getBoolean("amoled", false),
+        homeStyle = enumValueOr(prefs.getString("homeStyle", null), HomeStyle.COMPACT),
         nav = readNav()
     ))
     val state = mutable.asStateFlow()
@@ -69,6 +70,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     fun cancelLogin(provider: String) { if (provider == Providers.CODEX) codexLogin.cancel() else claudeLogin.cancel() }
     fun completeClaudeLogin(code: String) = claudeLogin.complete(code)
     fun importClaude(raw: String) = claudeLogin.import(raw)
+    fun completeGeminiLogin(address: String) { /* replaced by the Gemini login controller */ }
     fun removeAccount(id: String) = accounts.remove(id)
     fun renameAccount(id: String, label: String?) = accounts.rename(id, label)
     fun reorderAccounts(ids: List<String>) = accounts.reorder(ids)
@@ -89,6 +91,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     // ---- Appearance and navigation ----------------------------------------------------------------------
     fun setTheme(theme: ThemeMode) { prefs.edit { putString("theme", theme.name) }; mutable.update { it.copy(theme = theme) } }
     fun setDynamic(enabled: Boolean) { prefs.edit { putBoolean("dynamic", enabled) }; mutable.update { it.copy(dynamicColor = enabled) } }
+    fun setHomeStyle(style: HomeStyle) { prefs.edit { putString("homeStyle", style.name) }; mutable.update { it.copy(homeStyle = style) } }
     fun setAmoled(enabled: Boolean) { prefs.edit { putBoolean("amoled", enabled) }; mutable.update { it.copy(amoled = enabled) } }
 
     private fun readNav(): NavSettings {

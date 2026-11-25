@@ -1,21 +1,22 @@
 package com.madebycli.aiusage.widget
 
 import android.content.Context
+import com.madebycli.aiusage.R
 import com.madebycli.aiusage.data.appJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 
-enum class WidgetStyle(val title: String, val hint: String) {
-    BARS("Balken", "Name, Balken und Reset pro Fenster"),
-    COMPACT("Kompakt", "Eine Zeile pro Account, viele auf einmal"),
-    PERCENT("Prozent", "Große Zahlen, ohne Balken"),
-    RINGS("Ringe", "Runde Anzeige pro Account")
+enum class WidgetStyle(@androidx.annotation.StringRes val label: Int, @androidx.annotation.StringRes val hint: Int) {
+    BARS(R.string.widget_style_bars, R.string.widget_style_bars_hint),
+    COMPACT(R.string.widget_style_compact, R.string.widget_style_compact_hint),
+    PERCENT(R.string.widget_style_percent, R.string.widget_style_percent_hint),
+    RINGS(R.string.widget_style_rings, R.string.widget_style_rings_hint)
 }
 
-enum class WidgetArrangement(val title: String) { AUTO("Automatisch"), STACK("Untereinander"), GRID("Raster") }
-enum class WidgetWindowLayout(val title: String) { SIDE_BY_SIDE("Nebeneinander"), STACKED("Untereinander") }
-enum class WidgetPreset(val title: String) {
-    CUSTOM("Eigene"), DETAILED("Detailliert"), COMPACT("Kompakt"), RINGS("Ringe");
+enum class WidgetArrangement(@androidx.annotation.StringRes val label: Int) { AUTO(R.string.widget_auto), STACK(R.string.widget_stack), GRID(R.string.widget_grid) }
+enum class WidgetWindowLayout(@androidx.annotation.StringRes val label: Int) { SIDE_BY_SIDE(R.string.widget_side_by_side), STACKED(R.string.widget_stack) }
+enum class WidgetPreset(@androidx.annotation.StringRes val label: Int) {
+    CUSTOM(R.string.widget_preset_custom), DETAILED(R.string.widget_preset_detailed), COMPACT(R.string.widget_style_compact), RINGS(R.string.widget_style_rings);
     fun applyTo(config: WidgetConfig): WidgetConfig = when (this) {
         CUSTOM -> config.copy(preset = this)
         DETAILED -> config.copy(preset = this, style = WidgetStyle.BARS, arrangement = WidgetArrangement.STACK, windowLayout = WidgetWindowLayout.STACKED, windows = WidgetWindows.BOTH, showPlan = true, reset = ResetFormat.BOTH)
@@ -24,10 +25,10 @@ enum class WidgetPreset(val title: String) {
     }
 }
 
-enum class WidgetWindows(val title: String) { FIVE("5 Stunden"), WEEK("Woche"), BOTH("Beide") }
-enum class ResetFormat(val title: String) { CLOCK("Uhrzeit"), RELATIVE("Restzeit"), BOTH("Beides") }
-enum class WidgetTheme(val title: String) { SYSTEM("System"), LIGHT("Hell"), DARK("Dunkel"), BLACK("Schwarz") }
-enum class WidgetColors(val title: String) { THEME("Passend zur App"), TRAFFIC("Ampel") }
+enum class WidgetWindows(@androidx.annotation.StringRes val label: Int) { FIVE(R.string.window_five), WEEK(R.string.range_week), BOTH(R.string.widget_both) }
+enum class ResetFormat(@androidx.annotation.StringRes val label: Int) { CLOCK(R.string.widget_reset_clock), RELATIVE(R.string.widget_reset_relative), BOTH(R.string.widget_both) }
+enum class WidgetTheme(@androidx.annotation.StringRes val label: Int) { SYSTEM(R.string.theme_system), LIGHT(R.string.theme_light), DARK(R.string.theme_dark), BLACK(R.string.widget_black) }
+enum class WidgetColors(@androidx.annotation.StringRes val label: Int) { THEME(R.string.widget_colors_app), TRAFFIC(R.string.widget_colors_traffic) }
 
 @Serializable
 data class WidgetConfig(

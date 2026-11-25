@@ -5,23 +5,29 @@ import com.madebycli.aiusage.data.*
 object Providers {
     const val CODEX = "Codex"
     const val CLAUDE = "Claude Code"
+    const val GEMINI = "Gemini"
     val all = listOf(CODEX, CLAUDE)
     /** Short name for tight places such as the widget. */
     fun short(provider: String) = if (provider == CODEX) "Codex" else "Claude"
+    /** Brand names stay untranslated. */
+    fun label(provider: String) = provider
+    /** A note for providers whose sign-in relies on undocumented endpoints that changed recently. */
+    fun experimental(provider: String): Int? = null
 }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
 
 /** Pages of the bottom bar. The usage page is the home screen and cannot be hidden. */
-enum class AppTab(val title: String) {
-    USAGE("Verbrauch"), STATS("Statistiken"), RESETS("Resets")
+enum class AppTab(@androidx.annotation.StringRes val label: Int) {
+    USAGE(R.string.tab_usage), PLAN(R.string.tab_plan), STATS(R.string.tab_stats), RESETS(R.string.tab_resets)
 }
 
-enum class StartScreen(val title: String, val tab: AppTab?) {
-    LAST("Zuletzt geöffnet", null), USAGE("Verbrauch", AppTab.USAGE), STATS("Statistiken", AppTab.STATS), RESETS("Resets", AppTab.RESETS)
-}
+enum class StartScreen(val tab: AppTab?) { LAST(null), USAGE(AppTab.USAGE), PLAN(AppTab.PLAN), STATS(AppTab.STATS), RESETS(AppTab.RESETS) }
 
-enum class StatsRange(val title: String) { WEEK("Woche"), MONTH("Monat"), YEAR("Jahr") }
+enum class StatsRange(@androidx.annotation.StringRes val label: Int) { WEEK(R.string.range_week), MONTH(R.string.range_month), YEAR(R.string.range_year) }
+
+/** How the home screen draws accounts. */
+enum class HomeStyle { COMPACT, PLAYFUL }
 
 /** Which bottom-bar pages exist, in which order, and where a fresh start opens. */
 data class NavSettings(
@@ -81,6 +87,7 @@ data class UiState(
     val storageWarning: String? = null,
     val intel: Map<IntelSource, IntelResult> = emptyMap(), val intelLoading: Boolean = false,
     val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = false, val amoled: Boolean = false,
+    val homeStyle: HomeStyle = HomeStyle.COMPACT,
     val nav: NavSettings = NavSettings()
 ) {
     val initializing get() = !loaded
