@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -14,6 +15,11 @@ android {
         versionCode = 16
         versionName = "0.9.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Gemini sign-in client: from local.properties or the environment, never from the repository.
+        val local = Properties().apply { rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) } }
+        fun secret(key: String, env: String) = (local.getProperty(key) ?: System.getenv(env) ?: "").replace("\"", "")
+        buildConfigField("String", "GEMINI_CLIENT_ID", "\"${secret("gemini.clientId", "GEMINI_OAUTH_CLIENT_ID")}\"")
+        buildConfigField("String", "GEMINI_CLIENT_SECRET", "\"${secret("gemini.clientSecret", "GEMINI_OAUTH_CLIENT_SECRET")}\"")
     }
     // Public test key, intentionally shared. Never use this key for a release.
     val releaseKeystore: String? = System.getenv("ANDROID_KEYSTORE_PATH")

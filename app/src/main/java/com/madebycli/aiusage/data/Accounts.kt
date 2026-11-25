@@ -96,7 +96,7 @@ class AccountRegistry(context: Context) {
         }
 
         /** Namespace of the not yet finished sign-in of [provider]. Moved into the account on success. */
-        fun stagingNamespace(provider: String) = "login.${if (provider == Providers.CODEX) "codex" else "claude"}"
+        fun stagingNamespace(provider: String) = "login.${when (provider) { Providers.CODEX -> "codex"; Providers.GEMINI -> "gemini"; else -> "claude" }}"
     }
 }
 

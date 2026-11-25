@@ -32,6 +32,7 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     private val accounts = AccountsController(application, viewModelScope, mutable, http, onChanged = ::onAccountsChanged)
     private val codexLogin = CodexLogin(application, viewModelScope, mutable, http, accounts)
     private val claudeLogin = ClaudeLogin(application, viewModelScope, mutable, http, accounts)
+    private val geminiLogin = com.madebycli.aiusage.account.GeminiLogin(application, viewModelScope, mutable, http, accounts)
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -65,12 +66,16 @@ class UsageViewModel(application: Application) : AndroidViewModel(application) {
     // ---- Accounts ---------------------------------------------------------------------------------------
     /** Starts a sign-in. With [replaceAccountId] an existing account signs in again instead of a new one being added. */
     fun connect(provider: String, replaceAccountId: String? = null) {
-        if (provider == Providers.CODEX) codexLogin.start(replaceAccountId) else claudeLogin.begin(replaceAccountId)
+        when (provider) {
+            Providers.CODEX -> codexLogin.start(replaceAccountId)
+            Providers.GEMINI -> geminiLogin.begin(replaceAccountId)
+            else -> claudeLogin.begin(replaceAccountId)
+        }
     }
-    fun cancelLogin(provider: String) { if (provider == Providers.CODEX) codexLogin.cancel() else claudeLogin.cancel() }
+    fun cancelLogin(provider: String) = when (provider) { Providers.CODEX -> codexLogin.cancel(); Providers.GEMINI -> geminiLogin.cancel(); else -> claudeLogin.cancel() }
     fun completeClaudeLogin(code: String) = claudeLogin.complete(code)
     fun importClaude(raw: String) = claudeLogin.import(raw)
-    fun completeGeminiLogin(address: String) { /* replaced by the Gemini login controller */ }
+    fun completeGeminiLogin(address: String) = geminiLogin.complete(address)
     fun removeAccount(id: String) = accounts.remove(id)
     fun renameAccount(id: String, label: String?) = accounts.rename(id, label)
     fun reorderAccounts(ids: List<String>) = accounts.reorder(ids)

@@ -136,8 +136,8 @@ object WidgetRenderer {
         }
 
         fun brand(provider: String, x: Float, y: Float, size: Float) = icon(
-            if (provider == Providers.CODEX) R.drawable.ic_brand_codex else R.drawable.ic_brand_claude, x, y, size,
-            if (provider == Providers.CODEX) palette.text else 0xFFD58C70.toInt())
+            when (provider) { Providers.CODEX -> R.drawable.ic_brand_codex; Providers.GEMINI -> R.drawable.ic_brand_gemini; else -> R.drawable.ic_brand_claude }, x, y, size,
+            when (provider) { Providers.CODEX -> palette.text; Providers.GEMINI -> 0xFF6E8EF5.toInt(); else -> 0xFFD58C70.toInt() })
     }
 
     private fun usageColor(p: WidgetPalette, config: WidgetConfig, seconds: Long, percent: Double): Int = when {

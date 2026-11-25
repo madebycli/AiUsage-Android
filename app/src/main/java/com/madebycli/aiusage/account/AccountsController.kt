@@ -42,7 +42,11 @@ class AccountsController(
     }
 
     private fun start(account: Account) {
-        val runtime = if (account.provider == Providers.CODEX) CodexRuntime(app, scope, state, http, account) else ClaudeRuntime(app, scope, state, http, account)
+        val runtime = when (account.provider) {
+            Providers.CODEX -> CodexRuntime(app, scope, state, http, account)
+            Providers.GEMINI -> GeminiRuntime(app, scope, state, http, account)
+            else -> ClaudeRuntime(app, scope, state, http, account)
+        }
         runtimes.put(account.id, runtime)?.shutdown()
         runtime.refresh()
     }

@@ -430,4 +430,12 @@
     <string name="plan_fact_five">5 hours</string>
     <string name="plan_fact_free">free</string>
     <string name="plan_fact_full">full</string>
+    <string name="gemini_error_state">This address belongs to another sign-in. Start again.</string>
+    <string name="gemini_error_denied">Google sign-in was cancelled.</string>
+    <string name="gemini_error_address">No sign-in code in this address.</string>
+    <string name="gemini_error_subscription">Google reports no Gemini quota for this account.</string>
+    <string name="plan_use_now">Use now</string>
+    <string name="plan_five_free_now">free now</string>
+    <string name="plan_five_until">until %1$s</string>
+    <string name="plan_day_title">%1$s</string>
 </resources>

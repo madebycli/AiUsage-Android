@@ -170,3 +170,14 @@ class ClaudeRuntime(app: Application, scope: CoroutineScope, state: MutableState
         return if (unreadableLogin) "Claude-Anmeldung konnte nicht gelesen oder erneuert werden. Bitte erneut verbinden." else safeError(error)
     }
 }
+
+/** Gemini through the Antigravity quota summary; the Google token is refreshed when it expires. */
+class GeminiRuntime(app: Application, scope: CoroutineScope, state: MutableStateFlow<UiState>, private val http: HttpTransport, account: Account) :
+    AccountRuntime(app, scope, state, account) {
+    private val repository = GeminiRepository(http)
+    override suspend fun fetch(): UsageSnapshot = try { repository.fetch(store.freshGemini(http)) } catch (e: HttpFailure) {
+        if (e.status != 401) throw e
+        repository.fetch(store.freshGemini(http, force = true))
+    }
+    override fun failure(error: Exception) = safeError(error)
+}

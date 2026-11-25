@@ -17,7 +17,7 @@ import kotlin.math.abs
 
 /** One reminder setting: a window of one provider. The switch and lead time apply to every account of it. */
 data class AlertRule(val provider: String, val seconds: Long, val title: String) {
-    val key get() = "${if (provider == Providers.CODEX) "codex" else "claude"}.$seconds"
+    val key get() = "${when (provider) { Providers.CODEX -> "codex"; Providers.GEMINI -> "gemini"; else -> "claude" }}.$seconds"
     val channel get() = "reset.$key"
     /** Key of the plan for one account: each account has its own reset times. */
     fun slot(account: Account) = "${account.id}.$seconds"

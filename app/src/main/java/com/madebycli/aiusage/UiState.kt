@@ -6,13 +6,13 @@ object Providers {
     const val CODEX = "Codex"
     const val CLAUDE = "Claude Code"
     const val GEMINI = "Gemini"
-    val all = listOf(CODEX, CLAUDE)
+    val all = listOfNotNull(CODEX, CLAUDE, GEMINI.takeIf { com.madebycli.aiusage.data.GeminiOAuth.configured })
     /** Short name for tight places such as the widget. */
-    fun short(provider: String) = if (provider == CODEX) "Codex" else "Claude"
+    fun short(provider: String) = when (provider) { CODEX -> "Codex"; GEMINI -> "Gemini"; else -> "Claude" }
     /** Brand names stay untranslated. */
     fun label(provider: String) = provider
     /** A note for providers whose sign-in relies on undocumented endpoints that changed recently. */
-    fun experimental(provider: String): Int? = null
+    fun experimental(provider: String): Int? = if (provider == GEMINI) R.string.provider_experimental else null
 }
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }

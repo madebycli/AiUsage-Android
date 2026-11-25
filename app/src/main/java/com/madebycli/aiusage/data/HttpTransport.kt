@@ -44,8 +44,8 @@ class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
         // OkHttp bounds redirect chains and applies the call timeout to the complete chain.
         return execute(page, pageClient)
     }
-    suspend fun postJson(url: String, json: String): String = execute(
-        request(url).post(json.toRequestBody("application/json".toMediaType())).build()
+    suspend fun postJson(url: String, json: String, headers: Map<String, String> = emptyMap()): String = execute(
+        request(url, headers).post(json.toRequestBody("application/json".toMediaType())).build()
     )
     suspend fun postForm(url: String, fields: Map<String, String>): String {
         val form = FormBody.Builder().apply { fields.forEach { (key, value) -> add(key, value) } }.build()

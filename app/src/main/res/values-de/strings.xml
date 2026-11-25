@@ -424,4 +424,12 @@
     <string name="plan_fact_five">5 Stunden</string>
     <string name="plan_fact_free">frei</string>
     <string name="plan_fact_full">voll</string>
+    <string name="gemini_error_state">Diese Adresse gehört zu einer anderen Anmeldung. Bitte neu starten.</string>
+    <string name="gemini_error_denied">Die Google-Anmeldung wurde abgebrochen.</string>
+    <string name="gemini_error_address">In dieser Adresse steht kein Anmeldecode.</string>
+    <string name="gemini_error_subscription">Google meldet für diesen Account kein Gemini-Kontingent.</string>
+    <string name="plan_use_now">Jetzt nutzen</string>
+    <string name="plan_five_free_now">jetzt frei</string>
+    <string name="plan_five_until">bis %1$s</string>
+    <string name="plan_day_title">%1$s</string>
 </resources>

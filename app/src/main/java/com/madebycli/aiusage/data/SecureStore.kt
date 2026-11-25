@@ -54,8 +54,11 @@ class SecureStore(context: Context, private val namespace: String = "account") :
     fun hasCredentials(): Boolean = synchronized(ioLock) { File(directory, filename("tokens.enc")).exists() }
     /** Moves the stored sign-in of this store into [target] and empties this store. */
     fun moveCredentialsTo(target: SecureStore, provider: String) = synchronized(ioLock) {
-        if (provider == Providers.CODEX) target.writeTokens(readTokens() ?: error("Keine Anmeldung gespeichert."))
-        else target.writeClaude(readClaude() ?: error("Keine Anmeldung gespeichert."))
+        when (provider) {
+            Providers.CODEX -> target.writeTokens(readTokens() ?: error("no sign-in stored"))
+            Providers.GEMINI -> target.writeGemini(readGemini() ?: error("no sign-in stored"))
+            else -> target.writeClaude(readClaude() ?: error("no sign-in stored"))
+        }
         clear()
     }
     fun saveMeasurement(usage: UsageSnapshot, provider: String): PersonalRecord = saveMeasurementEvents(usage, provider).first
@@ -65,6 +68,8 @@ class SecureStore(context: Context, private val namespace: String = "account") :
         recordMeasurementEvents(readRecord(), usage, provider).also { writeRecord(it.first) }
     }
     companion object { private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>() }
+    fun readGemini(): GeminiCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
+    fun writeGemini(value: GeminiCredential) = write("tokens.enc", appJson.encodeToString(value))
     override fun readClaude(): ClaudeCredential? = read("tokens.enc")?.let { appJson.decodeFromString(it) }
     override fun writeClaude(value: ClaudeCredential) = write("tokens.enc", appJson.encodeToString(value))
     override fun readClaudeLogin(): ClaudePendingLogin? = read("login.enc")?.let { appJson.decodeFromString(it) }

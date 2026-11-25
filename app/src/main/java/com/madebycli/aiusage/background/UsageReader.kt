@@ -15,6 +15,13 @@ object UsageReader {
         return try {
             if (!store.hasCredentials()) null
             else if (account.provider == Providers.CODEX) UsageRepository(CodexAuth(http, store)).fetch()
+            else if (account.provider == Providers.GEMINI) {
+                val repository = GeminiRepository(http)
+                try { repository.fetch(store.freshGemini(http)) } catch (e: HttpFailure) {
+                    if (e.status != 401) throw e
+                    repository.fetch(store.freshGemini(http, force = true))
+                }
+            }
             else {
                 val auth = ClaudeAuth(http, store)
                 val repository = ClaudeRepository(http)

@@ -233,3 +233,92 @@ class ClaudeLogin(
         }
     }
 }
+
+/**
+ * Gemini sign-in: Google in the browser, which returns to a loopback address this app listens on. When the browser
+ * cannot reach it (the app was closed meanwhile), the address it shows can be pasted instead. Nothing is stored until
+ * the first quota read worked.
+ */
+class GeminiLogin(
+    private val app: Application,
+    private val scope: CoroutineScope,
+    private val state: MutableStateFlow<UiState>,
+    private val http: HttpTransport,
+    private val accounts: AccountsController
+) {
+    private val staging = SecureStore(app, AccountRegistry.stagingNamespace(Providers.GEMINI))
+    private val repository = GeminiRepository(http)
+    private val generation = SessionGeneration()
+    private var attempt: GeminiOAuth.Attempt? = null
+    private var replaceId: String? = null
+    private var listener: Job? = null
+    @Volatile private var server: java.net.ServerSocket? = null
+    private var job: Job? = null
+    private val login get() = state.value.login(Providers.GEMINI)
+
+    private fun stopListening() { runCatching { server?.close() }; server = null; listener?.cancel() }
+
+    fun begin(replace: String? = null) {
+        if (login.busy && login.phase != LoginPhase.WAITING) return
+        val gen = generation.advance()
+        replaceId = replace
+        val next = GeminiOAuth.attempt()
+        attempt = next
+        state.updateLogin(Providers.GEMINI) { LoginState(open = true, busy = true, phase = LoginPhase.WAITING, url = next.url, replaceAccountId = replace) }
+        stopListening()
+        listener = scope.launch(Dispatchers.IO) {
+            val address = try { GeminiOAuth.awaitCallback(10 * 60_000) { server = it } } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+            if (address != null && generation.isCurrent(gen)) finish(gen, address)
+            else if (generation.isCurrent(gen)) state.idleLogin(Providers.GEMINI)
+        }
+    }
+
+    /** The address the browser shows after the sign-in, pasted by hand. */
+    fun complete(address: String) {
+        val gen = generation.current()
+        if (attempt == null || !login.open) return
+        stopListening()
+        scope.launch(Dispatchers.IO) { finish(gen, address) }
+    }
+
+    private suspend fun finish(gen: Long, address: String) {
+        val current = attempt ?: return
+        state.updateLogin(Providers.GEMINI) { copy(busy = true, phase = LoginPhase.EXCHANGING, error = null) }
+        job?.cancelAndJoin()
+        job = scope.launch(Dispatchers.IO) {
+            try {
+                val code = GeminiOAuth.codeFrom(address, current.state)
+                val credential = GeminiOAuth.exchange(http, code, current.verifier)
+                if (generation.isCurrent(gen)) state.updateLogin(Providers.GEMINI) { copy(phase = LoginPhase.LOADING_USAGE) }
+                val usage = repository.fetch(credential)
+                currentCoroutineContext().ensureActive()
+                if (!generation.isCurrent(gen)) return@launch
+                staging.writeGemini(credential)
+                val account = accounts.attach(Providers.GEMINI, staging, credential.id?.let { "gemini:$it" } ?: credential.email?.let { "gemini:$it" }, credential.email, replaceId, usage)
+                attempt = null
+                if (generation.isCurrent(gen)) state.finishSignIn(Providers.GEMINI, account)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                Log.w("AiUsage", diagnosticFailure("login_gemini", e))
+                val message = when {
+                    e is GeminiLoginFailure && e.reason == GeminiLoginFailure.Reason.STATE -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.gemini_error_state)
+                    e is GeminiLoginFailure && e.reason == GeminiLoginFailure.Reason.DENIED -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.gemini_error_denied)
+                    e is GeminiLoginFailure -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.gemini_error_address)
+                    e is HttpFailure && e.status == 403 -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.gemini_error_subscription)
+                    else -> safeError(e)
+                }
+                if (generation.isCurrent(gen)) state.updateLogin(Providers.GEMINI) { copy(error = message, busy = false, phase = LoginPhase.WAITING) }
+            }
+        }
+    }
+
+    fun cancel() {
+        generation.advance()
+        stopListening()
+        job?.cancel()
+        attempt = null
+        replaceId = null
+        state.closeLogin(Providers.GEMINI)
+        scope.launch(Dispatchers.IO) { runCatching { staging.clear() } }
+    }
+}
