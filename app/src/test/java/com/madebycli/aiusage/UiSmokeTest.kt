@@ -144,7 +144,7 @@ class UiSmokeTest {
     @Test fun `planner recommends an account and shows a week of lanes`() {
         show(ui(*accounts.toTypedArray()))
         tab("Planer")
-        compose.onNodeWithText("Jetzt").assertIsDisplayed()
+        compose.onNodeWithText("Jetzt nutzen").assertIsDisplayed()
         compose.onNodeWithText("Nächste 7 Tage").assertExists()
         screenshot("plan-top")
         scrollToText("Deine Startzeiten")
