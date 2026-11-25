@@ -12,6 +12,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [35], qualifiers = "de")
 class AuthRegressionTest {
     private class MemoryStore : TokenStore {
         @Volatile var saved: Tokens? = Tokens("old", "refresh", "account", null)

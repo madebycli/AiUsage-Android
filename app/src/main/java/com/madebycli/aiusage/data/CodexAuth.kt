@@ -79,7 +79,7 @@ class CodexAuth(private val http: HttpTransport, private val store: TokenStore,
     suspend fun authorizedGet(url: String): String {
         // Only token access/rotation is serial. Slow GETs must not block another quota read.
         val tokens = mutex.withLock {
-            val saved = store.readTokens() ?: throw IllegalStateException("Bitte zuerst deinen Codex-Account verbinden.")
+            val saved = store.readTokens() ?: throw IllegalStateException(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_codex_connect_first))
             if (saved.expiresAt != null && saved.expiresAt < Instant.now().epochSecond + 60 && saved.refresh.isNotBlank())
                 refresh(saved) else saved
         }

@@ -7,7 +7,7 @@ import org.junit.Test
 class UsageParserTest {
     @Test fun `windows identified by duration rather than slot`() {
         val usage = UsageParser.parse("""{"rate_limit":{"primary_window":{"used_percent":"61.5","limit_window_seconds":604800,"reset_at":1900000000}},"plan_type":"pro"}""", 100)
-        assertEquals("Wöchentlich", usage.groups.single().windows.single().title)
+        assertEquals(ONE_WEEK, usage.groups.single().windows.single().seconds)
         assertEquals(61.5, usage.groups.single().windows.single().usedPercent, 0.0)
         assertNull(usage.availableResets)
     }

@@ -167,7 +167,7 @@ class ClaudeRuntime(app: Application, scope: CoroutineScope, state: MutableState
     override fun failure(error: Exception): String {
         val unreadableLogin = operation == "claude_auth" &&
             (error is SchemaException || error is kotlinx.serialization.SerializationException || error is IllegalArgumentException)
-        return if (unreadableLogin) "Claude-Anmeldung konnte nicht gelesen oder erneuert werden. Bitte erneut verbinden." else safeError(error)
+        return if (unreadableLogin) com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_claude_login_unreadable) else safeError(error)
     }
 }
 

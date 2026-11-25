@@ -21,7 +21,7 @@ suspend fun persistAccountRecord(write: suspend () -> Unit): String? = try {
 } catch (cancelled: CancellationException) {
     throw cancelled
 } catch (_: Exception) {
-    "Live-Daten geladen; der Verlauf konnte nicht gespeichert werden."
+    com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_history_not_saved)
 }
 
 
@@ -35,11 +35,11 @@ enum class LoginPhase(@androidx.annotation.StringRes val label: Int) {
 
 fun loginFailure(phase: LoginPhase, error: Exception): String {
     val advice = when {
-        phase == LoginPhase.SAVING -> "Anmeldung konnte auf diesem Gerät nicht gespeichert werden. Lokale Account-Daten zurücksetzen und erneut verbinden."
+        phase == LoginPhase.SAVING -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_saving)
         phase == LoginPhase.REQUEST_CODE && error is HttpFailure && error.status in listOf(403, 404) ->
-            "OpenAI verweigert den Gerätecode. Gerätecode-Anmeldung in ChatGPT unter Einstellungen → Sicherheit aktivieren; bei Workspaces den Administrator prüfen lassen."
+            com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_device_code_denied)
         phase == LoginPhase.EXCHANGING && error is HttpFailure && error.status in listOf(400, 401) ->
-            "Browser-Freigabe konnte nicht übernommen werden. Bitte mit einem neuen Code erneut verbinden."
+            com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_device_exchange)
         else -> safeError(error)
     }
     val status = (error as? HttpFailure)?.let { " · HTTP ${it.status}" }.orEmpty()

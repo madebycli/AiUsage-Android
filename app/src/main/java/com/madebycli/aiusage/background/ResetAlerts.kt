@@ -16,7 +16,11 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /** One reminder setting: a window of one provider. The switch and lead time apply to every account of it. */
-data class AlertRule(val provider: String, val seconds: Long, val title: String) {
+data class AlertRule(val provider: String, val seconds: Long) {
+    /** "5 hours" / "Weekly", in the app language. */
+    val title: String get() = com.madebycli.aiusage.Texts.get(if (seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.window_five else com.madebycli.aiusage.R.string.window_week)
+    /** "5-hour" / "weekly" for sentences. */
+    val adjective: String get() = com.madebycli.aiusage.Texts.get(if (seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.notify_window_five else com.madebycli.aiusage.R.string.notify_window_week)
     val key get() = "${when (provider) { Providers.CODEX -> "codex"; Providers.GEMINI -> "gemini"; else -> "claude" }}.$seconds"
     val channel get() = "reset.$key"
     /** Key of the plan for one account: each account has its own reset times. */
@@ -50,7 +54,7 @@ object ResetAlerts {
 
     internal val deliveryLock = Any()
     val rules = Providers.all.flatMap { provider ->
-        listOf(AlertRule(provider, FIVE_HOURS, "5 Stunden"), AlertRule(provider, ONE_WEEK, "Wöchentlich"))
+        listOf(AlertRule(provider, FIVE_HOURS), AlertRule(provider, ONE_WEEK))
     }
 
     fun prefs(context: Context) = context.getSharedPreferences("alerts", 0)

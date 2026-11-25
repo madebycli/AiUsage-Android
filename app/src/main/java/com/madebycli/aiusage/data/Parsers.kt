@@ -3,7 +3,7 @@ package com.madebycli.aiusage.data
 import kotlinx.serialization.json.*
 
 val appJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-open class SchemaException : Exception("Das Datenformat des Anbieters hat sich geändert.")
+open class SchemaException : Exception("schema")
 internal fun JsonObject.text(key: String): String? = (get(key) as? JsonPrimitive)?.contentOrNull
 internal fun JsonObject.obj(key: String): JsonObject? = get(key) as? JsonObject
 internal fun JsonObject.array(key: String): JsonArray? = get(key) as? JsonArray
@@ -30,7 +30,7 @@ object UsageParser {
         fun amount(obj: JsonObject, key: String): Double? {
             if (obj[key] == null || obj[key] == JsonNull) return null
             return obj.number(key)?.takeIf { kotlin.math.abs(it) <= 9_007_199_254_740_991.0 }.also {
-                if (it == null) warnings += "Ein Zusatzwert konnte nicht gelesen werden."
+                if (it == null) warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_extra_value)
             }
         }
         val credits = root.obj("credits")?.let { block -> AccountCredits(

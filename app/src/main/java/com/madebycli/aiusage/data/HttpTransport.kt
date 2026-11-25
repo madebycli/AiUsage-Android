@@ -16,10 +16,10 @@ import kotlin.coroutines.resumeWithException
 
 class HttpFailure(val status: Int, val retrySeconds: Long? = null) : Exception(
     when (status) {
-        401 -> "Anmeldung abgelaufen. Bitte erneut verbinden."
-        403 -> "Der Anbieter verweigert den Zugriff."
-        429 -> "Anbieter-Limit erreicht. Erneut versuchen in ${retrySeconds ?: 60} Sekunden."
-        else -> "Anbieter nicht erreichbar (HTTP $status)."
+        401 -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_http_401)
+        403 -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_http_403)
+        429 -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_http_429, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.unit_minutes, (((retrySeconds ?: 60) + 59) / 60).toInt()))
+        else -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_http_other, status)
     }
 )
 
@@ -61,7 +61,7 @@ class HttpTransport(val client: OkHttpClient = OkHttpClient.Builder()
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                if (!continuation.isCancelled) continuation.resumeWithException(IOException("Netzwerkfehler. Verbindung prüfen."))
+                if (!continuation.isCancelled) continuation.resumeWithException(IOException(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_network)))
             }
             override fun onResponse(call: Call, response: Response) {
                 response.use {

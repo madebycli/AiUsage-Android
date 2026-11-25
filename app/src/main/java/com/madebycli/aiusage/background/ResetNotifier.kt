@@ -56,10 +56,10 @@ object ResetNotifier {
                     ResetAlarms.arm(context, delivery.slot, after + ResetAlerts.RECHECK_DELAY_SECONDS, delivery)
                     false
                 }
-                Decision.ANNOUNCE -> post(context, delivery, "Das ${rule.title}-Limit wird um ${TimeText.clock(delivery.target, after)} Uhr zurückgesetzt (${TimeText.remaining(delivery.target - after)}).", fresh)
-                Decision.RESET -> post(context, delivery, resetText(rule, snapshot), fresh)
-                Decision.OVERDUE -> post(context, delivery, "Der Reset-Zeitpunkt ist erreicht. Der Anbieter meldet noch den alten Termin.", fresh)
-                Decision.UNVERIFIED -> post(context, delivery, "Der gemeldete Reset-Zeitpunkt ist erreicht. Verbrauch in der App prüfen.", null)
+                Decision.ANNOUNCE -> post(context, delivery, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_announce, rule.adjective, Fmt.clock(context.resources, delivery.target, after)) + " (" + Fmt.remaining(context.resources, delivery.target - after) + ")", fresh)
+                Decision.RESET -> post(context, delivery, resetText(context, rule, snapshot), fresh)
+                Decision.OVERDUE -> post(context, delivery, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_overdue), fresh)
+                Decision.UNVERIFIED -> post(context, delivery, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_unverified), null)
             }
         }
     }
@@ -72,11 +72,10 @@ object ResetNotifier {
             prefs.getString("generation.${delivery.account.id}", null) == delivery.generation && ResetAlerts.permitted(context)
     }
 
-    private fun resetText(rule: AlertRule, snapshot: UsageSnapshot?): String {
+    private fun resetText(context: Context, rule: AlertRule, snapshot: UsageSnapshot?): String {
         val next = snapshot?.windows(rule.provider)?.firstOrNull { it.seconds == rule.seconds }?.resetAt
-        val pattern = if (rule.seconds >= ONE_WEEK) "dd.MM. HH:mm" else "HH:mm"
-        val until = next?.let { DateTimeFormatter.ofPattern(pattern, Locale.GERMAN).withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(it)) }
-        return "Das ${rule.title}-Limit ist zurückgesetzt." + if (until != null) " Das neue Fenster läuft bis $until." else " Das neue Fenster startet mit der nächsten Nutzung."
+        val now = Instant.now().epochSecond
+        return com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_reset, rule.adjective) + (next?.let { " " + com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_until, Fmt.clock(context.resources, it, now)) } ?: "")
     }
 
     @SuppressLint("MissingPermission") // The runtime permission is checked in stillPlanned.
@@ -122,16 +121,16 @@ object ResetNotifier {
             entry.substringBefore('|').toLongOrNull()?.takeIf { now - it < SPONTANEOUS_JOIN_SECONDS }?.let { entry.substringAfter('|') }
         } + name).distinct()
         prefs.edit().putStringSet(key, recent.map { "$now|$it" }.toSet()).apply()
-        val until = window?.resetAt?.takeIf { it > now }?.let { " Das neue Fenster läuft bis ${TimeText.clock(it, now)} Uhr." }.orEmpty()
-        val used = "Zuvor waren ${formatPercent(event.peak)} % verbraucht."
-        val message = if (recent.size == 1) "Das ${rule.title}-Limit wurde früher als geplant zurückgesetzt. $used$until"
-            else "Das ${rule.title}-Limit wurde bei ${recent.joinToString(", ")} früher als geplant zurückgesetzt.$until"
+        val until = window?.resetAt?.takeIf { it > now }?.let { " " + com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_until, Fmt.clock(context.resources, it, now)) }.orEmpty()
+        val used = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_used_before, Fmt.percent(event.peak))
+        val message = if (recent.size == 1) com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_early_one, rule.adjective) + " " + used + until
+            else com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_early_many, rule.adjective, recent.joinToString(", ")) + until
         synchronized(ResetAlerts.deliveryLock) {
             ResetAlerts.channels(context)
             val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("account", account.id)
             val content = PendingIntent.getActivity(context, "spont.${rule.key}".hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             NotificationManagerCompat.from(context).notify("spont.${rule.key}".hashCode(), NotificationCompat.Builder(context, rule.channel)
-                .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("${rule.provider} · Reset erkannt")
+                .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_early_title, rule.provider))
                 .setContentText(message).setStyle(NotificationCompat.BigTextStyle().bigText(message)).setContentIntent(content)
                 .setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_STATUS)
                 .setAutoCancel(true).setOnlyAlertOnce(true).build())
@@ -146,8 +145,8 @@ object ResetNotifier {
         val rule = ResetAlerts.rules.first()
         ResetAlerts.channels(context)
         NotificationManagerCompat.from(context).notify("test".hashCode(), NotificationCompat.Builder(context, rule.channel)
-            .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle("AI Usage · Test")
-            .setContentText("So sehen Reset-Hinweise aus.").setAutoCancel(true).build())
+            .setSmallIcon(android.R.drawable.ic_popup_sync).setContentTitle(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_test_title))
+            .setContentText(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.notify_test_text)).setAutoCancel(true).build())
     }
 }
 

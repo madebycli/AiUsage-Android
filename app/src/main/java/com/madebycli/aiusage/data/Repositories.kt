@@ -26,12 +26,12 @@ class UsageRepository(private val auth: CodexAuth) {
             val details = withTimeoutOrNull(5_000) {
                 UsageParser.credits(auth.authorizedGet("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"))
             }
-            if (details == null) usage.copy(creditsWarning = "Reset-Anzahl aktuell; Ablaufdetails konnten nicht geladen werden.")
+            if (details == null) usage.copy(creditsWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_credits_details))
             else usage.copy(resetCredits = details, creditsFetchedAt = Instant.now().epochSecond, creditsWarning = null)
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             if (e is HttpFailure && e.status == 429) creditsBackoff.defer(e.retrySeconds ?: 60)
-            usage.copy(creditsWarning = "Reset-Anzahl aktuell; Ablaufdetails konnten nicht geladen werden.")
+            usage.copy(creditsWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_credits_details))
         }
     }
 }
@@ -59,10 +59,10 @@ class RefreshQueue(scope: CoroutineScope, private val refresh: suspend () -> Uni
 }
 
 fun safeError(error: Exception): String = when (error) {
-    is ClaudeUsageFormatException -> "Claude-Verbrauch konnte nicht gelesen werden (${if (error.section == ClaudeUsageSection.WINDOWS) "Zeitfenster" else "Antwortformat"}). Bitte erneut aktualisieren."
+    is ClaudeUsageFormatException -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_claude_usage, com.madebycli.aiusage.Texts.get(if (error.section == ClaudeUsageSection.WINDOWS) com.madebycli.aiusage.R.string.err_section_windows else com.madebycli.aiusage.R.string.err_section_response))
     is ClaudeLoginFailure -> error.message.orEmpty()
     is HttpFailure -> error.message.orEmpty()
-    is SchemaException, is kotlinx.serialization.SerializationException, is IllegalArgumentException -> "Das Datenformat des Anbieters hat sich geändert."
-    is IllegalStateException -> "Bitte deinen Account erneut verbinden."
-    else -> "Abruf fehlgeschlagen. Verbindung prüfen und erneut aktualisieren."
+    is SchemaException, is kotlinx.serialization.SerializationException, is IllegalArgumentException -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_format)
+    is IllegalStateException -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_reconnect)
+    else -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_fetch)
 }

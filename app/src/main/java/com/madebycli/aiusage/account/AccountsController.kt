@@ -34,7 +34,7 @@ class AccountsController(
         val loaded = accounts.map { account ->
             val read = runCatching { SecureStore(app, account.namespace).readRecord() }
             AccountState(account, displayName(account, accounts), read.getOrNull()?.usage, read.getOrNull()?.ledger ?: UsageLedger(),
-                error = if (read.isFailure) "Gespeicherte Messung konnte nicht gelesen werden. Jetzt aktualisieren." else null)
+                error = if (read.isFailure) com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_stored_unreadable) else null)
         }
         state.update { it.copy(accounts = loaded, loaded = true) }
         accounts.forEach(::start)
@@ -122,7 +122,7 @@ class AccountsController(
                 else AccountAccess.lock(id).withLock { SecureStore(app, account.namespace).clear() }
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
-                state.update { it.copy(storageWarning = "Lokale Daten von ${account.label ?: account.provider} konnten nicht vollständig gelöscht werden.") }
+                state.update { it.copy(storageWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_local_cleanup, account.label ?: account.provider)) }
             }
             ResetTicks.schedule(app)
         }

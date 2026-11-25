@@ -24,7 +24,7 @@ object ClaudeUsageParser {
             if (value == null || value == JsonNull) return null
             val obj = value as? JsonObject ?: run {
                 invalidWindow = true
-                warnings += "Einzelne Claude-Zeitfenster konnten nicht gelesen werden."
+                warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_windows)
                 return null
             }
             val raw = obj[field]
@@ -32,12 +32,12 @@ object ClaudeUsageParser {
             val percent = obj.number(field)?.takeIf { it in 0.0..101.0 }
             if (percent == null) {
                 invalidWindow = true
-                warnings += "Einzelne Claude-Zeitfenster konnten nicht gelesen werden."
+                warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_windows)
                 return null
             }
             val reset = obj.text("resets_at")?.let(::parseInstant)
             if (obj["resets_at"] != null && obj["resets_at"] != JsonNull && reset == null)
-                warnings += "Eine Reset-Zeit wurde nicht erkannt."
+                warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_reset_time)
             return UsageWindow(percent.coerceAtMost(100.0), seconds, reset)
         }
         listOf("five_hour" to 18000L, "seven_day" to 604800L).forEach { (key, seconds) ->
@@ -53,10 +53,10 @@ object ClaudeUsageParser {
         }
         val limits = root["limits"]
         if (limits != null && limits != JsonNull && limits !is JsonArray)
-            warnings += "Modelllimits konnten teilweise nicht gelesen werden."
+            warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_models)
         (limits as? JsonArray)?.forEach { element ->
             val entry = element as? JsonObject
-            if (entry == null) { warnings += "Modelllimits konnten teilweise nicht gelesen werden."; return@forEach }
+            if (entry == null) { warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_models); return@forEach }
             when (entry.text("kind")) {
                 "session" -> if (main[18000L] == null) window(entry, 18000, "percent")?.let { main[18000L] = it }
                 "weekly_all" -> if (main[604800L] == null) window(entry, 604800, "percent")?.let { main[604800L] = it }
@@ -71,8 +71,8 @@ object ClaudeUsageParser {
         if (main.isEmpty() && models.isEmpty() && invalidWindow)
             throw ClaudeUsageFormatException(ClaudeUsageSection.WINDOWS)
 
-        val extra = optionalObject(root, "extra_usage", warnings, "Zusatzverbrauch konnte teilweise nicht gelesen werden.")?.let { e ->
-            fun bad() { warnings += "Zusatzverbrauch konnte teilweise nicht gelesen werden." }
+        val extra = optionalObject(root, "extra_usage", warnings, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_extra))?.let { e ->
+            fun bad() { warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_extra) }
             fun money(key: String): Double? {
                 if (e[key] == null || e[key] == JsonNull) return null
                 // The API reports fractional minor units as well as integer values.
@@ -87,7 +87,7 @@ object ClaudeUsageParser {
             if (e["is_enabled"] != null && e["is_enabled"] != JsonNull && enabled == null) bad()
             ExtraUsage(enabled, money("used_credits"), money(if (e.containsKey("monthly_limit")) "monthly_limit" else "monthly_credit_limit"), currency, decimals)
         }
-        val block = optionalObject(root, "cedar_ember", warnings, "Reset-Details konnten nicht gelesen werden.")
+        val block = optionalObject(root, "cedar_ember", warnings, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_resets))
         var credits = emptyList<ResetCredit>()
         var available: Int? = null
         var creditWarning: String? = null
@@ -127,13 +127,13 @@ object ClaudeUsageParser {
                     }
                     if ((block["eligible"] as? JsonPrimitive)?.booleanOrNull == true && !unknown && count <= Int.MAX_VALUE)
                         available = count.toInt()
-                    if (unknown || count > Int.MAX_VALUE) creditWarning = "Reset-Verfügbarkeit konnte nicht vollständig bestätigt werden."
+                    if (unknown || count > Int.MAX_VALUE) creditWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_reset_unconfirmed)
                 }
             } catch (_: SchemaException) {
                 // Malformed personal inventory is unknown, never zero or a partial sum.
                 credits = emptyList()
-                creditWarning = "Reset-Details konnten nicht gelesen werden."
-                warnings += "Reset-Details konnten nicht gelesen werden."
+                creditWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_resets)
+                warnings += com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.warn_claude_resets)
             }
         }
         val groups = buildList {

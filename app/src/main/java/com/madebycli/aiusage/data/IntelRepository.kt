@@ -35,11 +35,11 @@ class IntelRepository(private val http: HttpTransport, private val clock: () -> 
             val body = timeline.await()
             body.getOrNull()?.let { text ->
                 try { IntelResult(report.withHistory(IntelParser.codexResetTimeline(text), IntelParser.codexResetTeaser(text, now))) }
-                catch (e: SchemaException) { IntelResult(report, partial = "Der Verlauf von ${source.label} hat ein neues Format.") }
+                catch (e: SchemaException) { IntelResult(report, partial = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_new_format, source.label)) }
             } ?: run {
                 val failure = body.exceptionOrNull()
                 if (failure is CancellationException) throw failure
-                IntelResult(report, partial = "Der Verlauf von ${source.label} konnte nicht geladen werden.")
+                IntelResult(report, partial = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_not_loaded, source.label))
             }
         }
         IntelSource.LUNARWERX -> coroutineScope {
@@ -49,11 +49,11 @@ class IntelRepository(private val http: HttpTransport, private val clock: () -> 
             val body = resets.await()
             body.getOrNull()?.let { text ->
                 try { IntelResult(report.withHistory(IntelParser.lunarResets(text))) }
-                catch (e: SchemaException) { IntelResult(report, partial = "Der Verlauf von ${source.label} hat ein neues Format.") }
+                catch (e: SchemaException) { IntelResult(report, partial = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_new_format, source.label)) }
             } ?: run {
                 val failure = body.exceptionOrNull()
                 if (failure is CancellationException) throw failure
-                IntelResult(report, partial = "Der Verlauf von ${source.label} konnte nicht geladen werden.")
+                IntelResult(report, partial = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_not_loaded, source.label))
             }
         }
         IntelSource.CODEX_TRACKER, IntelSource.CLAUDE_TRACKER -> IntelResult(IntelParser.tracker(source, http.getPublicHtml(source.site), now))

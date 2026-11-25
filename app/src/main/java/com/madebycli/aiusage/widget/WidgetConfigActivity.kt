@@ -70,7 +70,7 @@ class WidgetConfigActivity : ComponentActivity() {
     }
 }
 
-private val previewSizes = listOf("Breit" to (250 to 120), "Hoch" to (160 to 230), "Groß" to (250 to 260), "Schmal" to (250 to 62))
+private val previewSizes = listOf(com.madebycli.aiusage.R.string.wc_wide to (250 to 120), com.madebycli.aiusage.R.string.wc_tall to (160 to 230), com.madebycli.aiusage.R.string.wc_large to (250 to 260), com.madebycli.aiusage.R.string.wc_narrow to (250 to 62))
 
 @Composable
 internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight: Int, onCancel: () -> Unit, onSave: (WidgetConfig) -> Unit) {
@@ -87,53 +87,53 @@ internal fun ConfigScreen(initial: WidgetConfig, widgetWidth: Int, widgetHeight:
     }
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Widget anpassen") },
-                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Abbrechen") } },
-                actions = { FilledTonalButton(onClick = { onSave(config) }) { Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Fertig") }; Spacer(Modifier.width(12.dp)) })
+            TopAppBar(title = { Text(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_title)) },
+                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.cancel)) } },
+                actions = { FilledTonalButton(onClick = { onSave(config) }) { Icon(Icons.Rounded.Check, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.done)) }; Spacer(Modifier.width(12.dp)) })
         }
     ) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Label("Vorlage anwenden")
+            Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_preset))
             SegmentedTabGroup(WidgetPreset.entries, config.preset, { config = it.applyTo(config) }, { androidx.compose.ui.res.stringResource(it.label) })
             Preview(bitmap, previewW, previewH, sizeIndex) { sizeIndex = it }
             if (WidgetRenderer.effectiveStyle(config, widgetWidth, widgetHeight) != config.style)
-                Text("Für diese Darstellung das Widget im Launcher höher ziehen. In der aktuellen Größe wird es kompakt angezeigt.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Section("Accounts") {
-                if (accounts.isEmpty()) Text("Es ist noch kein Account verbunden. Verbinde zuerst einen Account in der App.", style = MaterialTheme.typography.bodyMedium)
+                Text(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_taller), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Section(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_accounts)) {
+                if (accounts.isEmpty()) Text(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_no_accounts), style = MaterialTheme.typography.bodyMedium)
                 else AccountPicker(accounts, config) { config = it.copy(preset = WidgetPreset.CUSTOM) }
             }
-            Section("Anzeige") {
-                Label("Darstellung")
+            Section(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_display)) {
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_style))
                 SegmentedTabGroup(WidgetStyle.entries, config.style, { config = config.copy(preset = WidgetPreset.CUSTOM, style = it) }, { androidx.compose.ui.res.stringResource(it.label) })
                 Text(androidx.compose.ui.res.stringResource(config.style.hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Label("Accounts anordnen")
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_arrange_accounts))
                 SegmentedTabGroup(WidgetArrangement.entries, config.arrangement, { config = config.copy(preset = WidgetPreset.CUSTOM, arrangement = it) }, { androidx.compose.ui.res.stringResource(it.label) })
                 if (config.style == WidgetStyle.RINGS || config.style == WidgetStyle.PERCENT) {
-                    Label("Zeitfenster anordnen")
+                    Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_arrange_windows))
                     SegmentedTabGroup(WidgetWindowLayout.entries, config.windowLayout, { config = config.copy(preset = WidgetPreset.CUSTOM, windowLayout = it) }, { androidx.compose.ui.res.stringResource(it.label) })
                 }
-                Label("Zeitfenster")
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_windows))
                 SegmentedTabGroup(WidgetWindows.entries, config.windows, { config = config.copy(preset = WidgetPreset.CUSTOM, windows = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
-                Label("Reset-Zeit")
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_reset))
                 SegmentedTabGroup(ResetFormat.entries, config.reset, { config = config.copy(preset = WidgetPreset.CUSTOM, reset = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
-                Text(when (config.reset) { ResetFormat.CLOCK -> "z. B. 17:40"; ResetFormat.RELATIVE -> "z. B. in 2 Std. 50 Min."; ResetFormat.BOTH -> "z. B. 17:40 · in 2 Std. 50 Min." },
+                Text(when (config.reset) { ResetFormat.CLOCK -> androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_example_clock); ResetFormat.RELATIVE -> androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_example_relative); ResetFormat.BOTH -> androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_example_both) },
                     style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Label("Balkenfarbe")
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_bar_color))
                 SegmentedTabGroup(WidgetColors.entries, config.colors, { config = config.copy(preset = WidgetPreset.CUSTOM, colors = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
-                Text(if (config.colors == WidgetColors.TRAFFIC) "Grün bis 70 %, Gelb bis 90 %, danach Rot" else "Farben der App", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (config.colors == WidgetColors.TRAFFIC) androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_traffic_hint) else androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_app_colors), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Section("Farben & Form") {
-                Label("Hintergrund")
+            Section(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_colors_shape)) {
+                Label(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_background))
                 SegmentedTabGroup(WidgetTheme.entries, config.theme, { config = config.copy(preset = WidgetPreset.CUSTOM, theme = it) }, { androidx.compose.ui.res.stringResource(it.label) }, fillEqually = true)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SwitchLine("Android-Farben", "Palette aus dem Hintergrundbild", config.dynamic) { config = config.copy(preset = WidgetPreset.CUSTOM, dynamic = it) }
-                SliderLine("Deckkraft", "${config.opacity} %", config.opacity.toFloat(), 20f..100f) { config = config.copy(preset = WidgetPreset.CUSTOM, opacity = it.toInt()) }
-                SliderLine("Ecken", "${config.corner} dp", config.corner.toFloat(), 0f..40f) { config = config.copy(preset = WidgetPreset.CUSTOM, corner = it.toInt()) }
-                SliderLine("Schriftgröße", "${config.textScale} %", config.textScale.toFloat(), 80f..140f) { config = config.copy(preset = WidgetPreset.CUSTOM, textScale = it.toInt() / 5 * 5) }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) SwitchLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.dynamic_colors), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.dynamic_colors_desc), config.dynamic) { config = config.copy(preset = WidgetPreset.CUSTOM, dynamic = it) }
+                SliderLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_opacity), "${config.opacity} %", config.opacity.toFloat(), 20f..100f) { config = config.copy(preset = WidgetPreset.CUSTOM, opacity = it.toInt()) }
+                SliderLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_corners), "${config.corner} dp", config.corner.toFloat(), 0f..40f) { config = config.copy(preset = WidgetPreset.CUSTOM, corner = it.toInt()) }
+                SliderLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_text_size), "${config.textScale} %", config.textScale.toFloat(), 80f..140f) { config = config.copy(preset = WidgetPreset.CUSTOM, textScale = it.toInt() / 5 * 5) }
             }
-            Section("Elemente") {
-                SwitchLine("Aktualisieren-Knopf", "Liest die Accounts sofort neu", config.showRefresh) { config = config.copy(preset = WidgetPreset.CUSTOM, showRefresh = it) }
-                SwitchLine("Zeit der letzten Messung", "„Stand 14:05“, warnt bei veralteten Daten", config.showUpdated) { config = config.copy(preset = WidgetPreset.CUSTOM, showUpdated = it) }
-                SwitchLine("Tarif anzeigen", "Plus, Max 5x und so weiter", config.showPlan) { config = config.copy(preset = WidgetPreset.CUSTOM, showPlan = it) }
+            Section(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_elements)) {
+                SwitchLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_refresh_button), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_refresh_button_desc), config.showRefresh) { config = config.copy(preset = WidgetPreset.CUSTOM, showRefresh = it) }
+                SwitchLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_updated), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_updated_desc), config.showUpdated) { config = config.copy(preset = WidgetPreset.CUSTOM, showUpdated = it) }
+                SwitchLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_plan), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_plan_desc), config.showPlan) { config = config.copy(preset = WidgetPreset.CUSTOM, showPlan = it) }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -147,11 +147,11 @@ private fun Preview(bitmap: Bitmap?, widthDp: Int, heightDp: Int, selected: Int,
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Box(Modifier.fillMaxWidth().animateContentSize().background(Brush.linearGradient(wallpaper), MaterialTheme.shapes.extraLarge).padding(18.dp), contentAlignment = Alignment.Center) {
             val image = bitmap
-            if (image != null) Image(image.asImageBitmap(), "Vorschau", Modifier.width(widthDp.dp).height(heightDp.dp))
+            if (image != null) Image(image.asImageBitmap(), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_preview), Modifier.width(widthDp.dp).height(heightDp.dp))
             else Box(Modifier.width(widthDp.dp).height(heightDp.dp))
         }
-        Text("Größe testen · Die echte Größe änderst du im Launcher.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SegmentedTabGroup((-1 until previewSizes.size).toList(), selected, select, { if (it < 0) "Dein Widget" else previewSizes[it].first })
+        Text(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_size_hint), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SegmentedTabGroup((-1 until previewSizes.size).toList(), selected, select, { if (it < 0) androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_your_widget) else androidx.compose.ui.res.stringResource(previewSizes[it].first) })
     }
 }
 
@@ -185,7 +185,7 @@ private fun SliderLine(title: String, value: String, current: Float, range: Clos
 @Composable
 private fun AccountPicker(accounts: List<WidgetAccount>, config: WidgetConfig, update: (WidgetConfig) -> Unit) {
     val all = config.accounts.isEmpty()
-    SwitchLine("Alle Accounts", "In der Reihenfolge der Startseite, neue kommen automatisch dazu", all) { auto ->
+    SwitchLine(androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_all_accounts), androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.wc_all_accounts_desc), all) { auto ->
         update(config.copy(accounts = if (auto) emptyList() else accounts.map { it.account.id }))
     }
     if (all) return
@@ -209,8 +209,8 @@ private fun AccountPicker(accounts: List<WidgetAccount>, config: WidgetConfig, u
                 Text(listOfNotNull(entry.provider, entry.plan).joinToString(" · "), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (selected) {
-                IconButton(onClick = { move(entry.account.id, -1) }, enabled = config.accounts.indexOf(entry.account.id) > 0) { Icon(Icons.Rounded.KeyboardArrowUp, "Nach oben") }
-                IconButton(onClick = { move(entry.account.id, 1) }, enabled = config.accounts.indexOf(entry.account.id) < config.accounts.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, "Nach unten") }
+                IconButton(onClick = { move(entry.account.id, -1) }, enabled = config.accounts.indexOf(entry.account.id) > 0) { Icon(Icons.Rounded.KeyboardArrowUp, androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.usage_up)) }
+                IconButton(onClick = { move(entry.account.id, 1) }, enabled = config.accounts.indexOf(entry.account.id) < config.accounts.lastIndex) { Icon(Icons.Rounded.KeyboardArrowDown, androidx.compose.ui.res.stringResource(com.madebycli.aiusage.R.string.usage_down)) }
             }
         }
     }

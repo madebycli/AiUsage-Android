@@ -127,7 +127,7 @@ class IntelTest {
         val unverified = report.entries.first { it.at == at("2026-09-01T00:00:00Z") }
         assertFalse(unverified.verified)
         assertEquals("Limits reset for all users", unverified.title)
-        assertEquals("5 Std. und Woche · alle Tarife · Fable 5.1 launch", unverified.detail)
+        assertEquals("5h + weekly · All plans · Fable 5.1 launch", unverified.detail)
         assertEquals(ResetKind.GLOBAL, unverified.kind)
         assertEquals(ResetKind.PARTIAL, report.entries.first { it.at == at("2026-09-04T00:00:00Z") }.kind)
         assertThrows(SchemaException::class.java) { IntelParser.claudeResets("<h1>Error</h1>", now) }

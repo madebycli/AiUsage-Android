@@ -255,8 +255,5 @@ internal fun rememberNow(): Long {
 }
 
 internal fun percent(value: Double): String = com.madebycli.aiusage.data.formatPercent(value)
-internal fun date(at: Long, seconds: Boolean = false): String = DateTimeFormatter.ofPattern(if (seconds) "dd.MM. · HH:mm:ss" else "dd.MM. · HH:mm", Locale.GERMAN)
-    .withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(at))
-internal fun age(seconds: Long): String = when { seconds < 60 -> "vor ${seconds.coerceAtLeast(0)} s"; seconds < 3600 -> "vor ${seconds / 60} min"; else -> "vor ${seconds / 3600} h" }
 internal fun number(value: Double, maxFraction: Int = 2): String =
     java.text.NumberFormat.getNumberInstance(Locale.GERMANY).apply { maximumFractionDigits = maxFraction }.format(value)

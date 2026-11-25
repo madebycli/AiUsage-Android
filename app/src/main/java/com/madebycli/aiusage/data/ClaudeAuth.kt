@@ -55,10 +55,10 @@ class ClaudeAuth(
     suspend fun cancel() = mutex.withLock { store.clearClaudeLogin() }
 
     suspend fun complete(pasted: String): ClaudeCredential = mutex.withLock {
-        val pending = store.readClaudeLogin() ?: throw ClaudeLoginFailure("Bitte eine neue Browser-Anmeldung starten.")
+        val pending = store.readClaudeLogin() ?: throw ClaudeLoginFailure(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.claude_start_again))
         if (pending.expiresAt <= clock()) {
             store.clearClaudeLogin()
-            throw ClaudeLoginFailure("Anmeldung abgelaufen. Bitte neu starten.")
+            throw ClaudeLoginFailure(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.claude_expired))
         }
         // The hosted callback displays code#state. Require the whole value, not
         // merely a code from an unrelated login. No clipboard reads or URL fetches.
@@ -66,7 +66,7 @@ class ClaudeAuth(
         if (pasted.length > 4096 || parts.size != 2 ||
             !parts[0].matches(Regex("[A-Za-z0-9._~+\\-/=]{1,2048}")) ||
             !MessageDigest.isEqual(parts[1].toByteArray(), pending.state.toByteArray())) {
-            throw ClaudeLoginFailure("Bitte den vollständigen Code aus dieser Browser-Freigabe einfügen, einschließlich # und dem Text dahinter.")
+            throw ClaudeLoginFailure(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.claude_paste_full))
         }
         backoff.check()
         // Consume before sending. A failed/uncertain exchange must not replay a
@@ -111,7 +111,7 @@ class ClaudeAuth(
         val refresh = secret("refresh_token") ?: previous?.refresh
         val seconds = root.integer("expires_in")?.takeIf { it in 1..31_536_000 } ?: throw SchemaException()
         root.text("token_type")?.let { if (!it.equals("Bearer", true)) throw SchemaException() }
-        root.text("scope")?.let { if ("user:profile" !in it.split(' ')) throw ClaudeLoginFailure("Die Freigabe enthält keinen Zugriff auf Verbrauchsdaten. Bitte neu anmelden.") }
+        root.text("scope")?.let { if ("user:profile" !in it.split(' ')) throw ClaudeLoginFailure(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.claude_no_scope)) }
         val organization = root.obj("organization")
         val tier = organization?.text("rate_limit_tier").orEmpty()
         val plan = previous?.plan ?: when {

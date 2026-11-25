@@ -77,7 +77,7 @@ class CodexLogin(
             auth.complete(pending.device,
                 onRetry = { error ->
                     Log.w(TAG, diagnosticFailure("login_poll_retry", error))
-                    edit { copy(hint = "Verbindung kurz unterbrochen. Die App versucht es mit demselben Code erneut.") }
+                    edit { copy(hint = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_poll_retry)) }
                 },
                 onPhase = { phase -> edit { copy(phase = phase, hint = null, deviceCode = if (phase == LoginPhase.WAITING) deviceCode else null) } },
                 timeoutMillis = ((pending.expiresAt - Instant.now().epochSecond) * 1000).coerceAtLeast(1_000))
@@ -89,7 +89,7 @@ class CodexLogin(
             if (generation.isCurrent(gen)) state.finishSignIn(Providers.CODEX, account)
         } catch (e: TimeoutCancellationException) {
             runCatching { staging.clearDeviceLogin() }
-            edit { copy(busy = false, url = null, deviceCode = null, error = "Der Anmeldecode ist abgelaufen. Bitte einen neuen anfordern.") }
+            edit { copy(busy = false, url = null, deviceCode = null, error = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_code_expired)) }
         } catch (e: CancellationException) { throw e }
         catch (e: Exception) {
             val phase = login.phase
@@ -179,7 +179,7 @@ class ClaudeLogin(
                     val pending = runCatching { auth.pendingUrl() }.getOrNull()
                     val message = when {
                         e is ClaudeLoginFailure -> e.message.orEmpty()
-                        e is HttpFailure && e.status in listOf(400, 401) -> "Browser-Freigabe konnte nicht übernommen werden. Bitte neu anmelden."
+                        e is HttpFailure && e.status in listOf(400, 401) -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_browser_approval)
                         else -> safeError(e)
                     }
                     if (generation.isCurrent(gen)) state.updateLogin(Providers.CLAUDE) { copy(error = message, url = pending) }
@@ -212,7 +212,7 @@ class ClaudeLogin(
                     if (generation.isCurrent(gen)) state.finishSignIn(Providers.CLAUDE, account)
                 } catch (e: CancellationException) { throw e }
                 catch (e: Exception) {
-                    if (generation.isCurrent(gen)) state.updateLogin(Providers.CLAUDE) { copy(error = "Import fehlgeschlagen. ${safeError(e)}") }
+                    if (generation.isCurrent(gen)) state.updateLogin(Providers.CLAUDE) { copy(error = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_import_failed, safeError(e))) }
                 } finally { if (generation.isCurrent(gen)) state.idleLogin(Providers.CLAUDE) }
             }
         }
@@ -228,7 +228,7 @@ class ClaudeLogin(
             previous?.join()
             lock.withLock {
                 try { auth.cancel(); staging.clear() }
-                catch (_: Exception) { state.update { it.copy(storageWarning = "Anmeldeversuch konnte nicht gelöscht werden.") } }
+                catch (_: Exception) { state.update { it.copy(storageWarning = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.err_attempt_cleanup)) } }
             }
         }
     }

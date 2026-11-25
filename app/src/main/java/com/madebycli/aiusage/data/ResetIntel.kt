@@ -9,15 +9,15 @@ import org.jsoup.parser.Parser
  * one number: the sources use different methods and often disagree, so each one is shown on its own.
  */
 enum class IntelSource(val label: String, val provider: String, val site: String, val minimumSeconds: Long, val method: String) {
-    CODEX_RESET("codex-reset.com", "Codex", "https://codex-reset.com", 120, "Modell aus der Reset-Historie"),
-    LUNARWERX("LunarWerx", "Codex", "https://codex.lunarwerx.com", 300, "Statistisches Modell mit Unsicherheitsbereich"),
-    CODEX_TRACKER("Codex Reset Tracker", "Codex", "https://pingreset.com/en", 1800, "Spielerische Schätzung aus dem Rhythmus"),
-    CLAUDE_TRACKER("Claude Reset Tracker", "Claude Code", "https://pingreset.com/en/claude", 1800, "Spielerische Schätzung aus dem Rhythmus"),
-    CLAUDE_RESETS("claude-resets.net", "Claude Code", "https://claude-resets.net/", 1800, "Einschätzung der Community-Seite")
+    CODEX_RESET("codex-reset.com", "Codex", "https://codex-reset.com", 120, "model"),
+    LUNARWERX("LunarWerx", "Codex", "https://codex.lunarwerx.com", 300, "statistical"),
+    CODEX_TRACKER("Codex Reset Tracker", "Codex", "https://pingreset.com/en", 1800, "rhythm"),
+    CLAUDE_TRACKER("Claude Reset Tracker", "Claude Code", "https://pingreset.com/en/claude", 1800, "rhythm"),
+    CLAUDE_RESETS("claude-resets.net", "Claude Code", "https://claude-resets.net/", 1800, "community")
 }
 
 enum class ResetKind(val label: String) {
-    GLOBAL("Globaler Reset"), PARTIAL("Teil-Reset"), BANKED("Gutschrift"), EVENT("Reset gemeldet")
+    GLOBAL("global"), PARTIAL("partial"), BANKED("credit"), EVENT("event")
 }
 
 /** [at] is the time the source gives; [timeKnown] is false when it only knows the day (00:00 UTC then). */
@@ -108,10 +108,10 @@ object IntelParser {
                 else -> return@mapNotNull null
             }
             val state = row.text("banked_state")
-            val title = clean(row.text("summary") ?: row.text("text")) ?: "Reset gemeldet"
+            val title = clean(row.text("summary") ?: row.text("text")) ?: ""
             val detail = when (state) {
-                "available" -> "Gutschrift verfügbar"; "arriving" -> "Gutschrift unterwegs"; "announced" -> "Gutschrift angekündigt"
-                "unknown" -> "Gutschrift, Stand unklar"; else -> null
+                "available" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_credit_available); "arriving" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_credit_arriving); "announced" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_credit_announced)
+                "unknown" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_credit_unknown); else -> null
             }
             ResetEntry(at, true, kind, title, detail, link(row.text("url")),
                 row.text("confidence") == "high" || row.text("observation_result") == "reset_observed", IntelSource.CODEX_RESET)
@@ -152,7 +152,7 @@ object IntelParser {
             val at = parseInstant(row.text("at")) ?: return@mapNotNull null
             val announcement = row.obj("announcement")
             // The ledger lists every recorded reset, banked grants included, without classifying them.
-            ResetEntry(at, true, ResetKind.EVENT, clean(announcement?.text("text")) ?: "Reset im Verlauf", null, link(announcement?.text("url")), true, IntelSource.LUNARWERX)
+            ResetEntry(at, true, ResetKind.EVENT, clean(announcement?.text("text")) ?: "", null, link(announcement?.text("url")), true, IntelSource.LUNARWERX)
         }.distinctBy { it.at }.sortedByDescending { it.at }.take(120)
     }
 
@@ -171,7 +171,7 @@ object IntelParser {
         val history = doc.select("section").firstOrNull { it.attr("aria-label") == "Reset history" } ?: throw SchemaException()
         val entries = history.select("li").mapNotNull { row ->
             val at = row.selectFirst("time[datetime]")?.attr("datetime")?.let(::parseInstant) ?: return@mapNotNull null
-            ResetEntry(at, true, ResetKind.EVENT, "Reset gemeldet", null, row.selectFirst("a[href]")?.absUrl("href")?.let(::link), true, source)
+            ResetEntry(at, true, ResetKind.EVENT, "", null, row.selectFirst("a[href]")?.absUrl("href")?.let(::link), true, source)
         }.distinctBy { it.at }.sortedByDescending { it.at }
         val expected = panel.selectFirst(".next-reset time[datetime]")?.attr("datetime")?.let(::parseInstant)
         return IntelReport(source, now, sync("Last synced"), sync("Next sync"), listOf(Chance(48, percent)), entries.firstOrNull()?.at, expected,
@@ -202,7 +202,7 @@ object IntelParser {
                 "all users" in lowered -> ResetKind.GLOBAL
                 else -> ResetKind.PARTIAL
             }
-            val detail = listOfNotNull(scope?.let(::scopeText), plans?.let { if (it.equals("All plans", true)) "alle Tarife" else it }, reason).joinToString(" · ").ifEmpty { null }
+            val detail = listOfNotNull(scope?.let(::scopeText), plans, reason).joinToString(" · ").ifEmpty { null }
             ResetEntry(at, false, kind, title, detail, row.selectFirst("a[href]")?.absUrl("href")?.let(::link), !unverified, IntelSource.CLAUDE_RESETS)
         }.distinctBy { "${it.at}:${it.title}" }.sortedByDescending { it.at }  // one article can cover several resets, so the link does not identify a row
         val last = panel.select("p").firstOrNull { it.text().startsWith("Last Claude reset:") }?.text()
@@ -210,18 +210,18 @@ object IntelParser {
             ?.let { text -> runCatching { java.time.LocalDate.parse(text, java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy", java.util.Locale.ENGLISH)).atStartOfDay(java.time.ZoneOffset.UTC).toEpochSecond() }.getOrNull() }
         val label = panel.select("p").firstOrNull { it.className().contains("signal") }?.text()?.let { clean(it, 60) }
         return IntelReport(IntelSource.CLAUDE_RESETS, now, null, null, listOf(Chance(168, percent)), lastAt ?: entries.firstOrNull()?.at, null, null, null,
-            label?.let { "Einschätzung der Seite: ${siteLabel(it)}" }, emptyList(), entries)
+            label?.let { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_site_estimate, siteLabel(it)) }, emptyList(), entries)
     }
 
-    /** The few phrases the page uses for its own rating, in German; anything else stays as written. */
+    /** The few phrases the page uses for its own rating, in the app language; anything else stays as written. */
     private fun siteLabel(text: String) = when (text.trim().lowercase()) {
-        "likely soon" -> "bald wahrscheinlich"; "overdue" -> "überfällig"; "unlikely" -> "unwahrscheinlich"
-        "possible" -> "möglich"; "too early" -> "noch zu früh"; else -> text
+        "likely soon" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_likely_soon); "overdue" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_overdue); "unlikely" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_unlikely)
+        "possible" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_possible); "too early" -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.intel_too_early); else -> text
     }
 
     private fun scopeText(scope: String): String = when (scope.lowercase()) {
-        "5-hour + weekly" -> "5 Std. und Woche"; "weekly" -> "nur Woche"; "5-hour" -> "nur 5 Std."
-        else -> scope.replace("5-hour", "5 Std.").replace("weekly", "Woche").replace("One saved reset", "Ein gespeicherter Reset")
+        "5-hour + weekly" -> "5h + weekly"
+        else -> scope
     }
 }
 

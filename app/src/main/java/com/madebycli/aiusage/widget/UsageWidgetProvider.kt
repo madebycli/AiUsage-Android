@@ -127,8 +127,8 @@ object WidgetUpdater {
         views.setViewVisibility(R.id.widget_placeholder, android.view.View.GONE)
         val shown = WidgetData.select(accounts, config)
         views.setContentDescription(R.id.widget_image, shown.joinToString(". ") { a ->
-            "${a.title}: " + listOfNotNull(a.window(com.madebycli.aiusage.data.FIVE_HOURS)?.let { "5 Stunden ${com.madebycli.aiusage.data.formatPercent(it.usedPercent)} Prozent" },
-                a.window(com.madebycli.aiusage.data.ONE_WEEK)?.let { "Woche ${com.madebycli.aiusage.data.formatPercent(it.usedPercent)} Prozent" }).joinToString(", ").ifEmpty { "keine Messung" }
+            "${a.title}: " + listOfNotNull(a.window(com.madebycli.aiusage.data.FIVE_HOURS)?.let { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_window_a11y, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.window_five), com.madebycli.aiusage.data.formatPercent(it.usedPercent)) },
+                a.window(com.madebycli.aiusage.data.ONE_WEEK)?.let { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_window_a11y, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.window_week), com.madebycli.aiusage.data.formatPercent(it.usedPercent)) }).joinToString(", ").ifEmpty { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading) }
         }.ifEmpty { "AI Usage" })
         val open = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         shown.singleOrNull()?.let { open.putExtra("account", it.account.id) }

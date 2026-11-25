@@ -98,7 +98,7 @@ object ResetOutlookBuilder {
         else -> Math.floorDiv(a.at, 86_400L) == Math.floorDiv(b.at, 86_400L)
     }
 
-    private val generic = setOf("Reset gemeldet", "Reset im Verlauf")
+    private val generic = setOf("", "Reset gemeldet", "Reset im Verlauf")
     private fun richness(e: ResetEntry) = (if (e.title !in generic) 4 else 0) + (if (e.detail != null) 2 else 0) + (if (e.url != null) 1 else 0)
     private fun rank(kind: ResetKind) = when (kind) { ResetKind.GLOBAL -> 3; ResetKind.PARTIAL -> 2; ResetKind.BANKED -> 1; ResetKind.EVENT -> 0 }
 

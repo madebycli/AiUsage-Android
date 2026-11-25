@@ -9,13 +9,6 @@ const val ONE_WEEK = 604_800L
 
 @Serializable
 data class UsageWindow(val usedPercent: Double, val seconds: Long, val resetAt: Long? = null) {
-    val title: String get() = when {
-        seconds == FIVE_HOURS -> "5 Stunden"
-        seconds == ONE_WEEK -> "Wöchentlich"
-        seconds % 86_400 == 0L -> "${seconds / 86_400} Tage"
-        seconds % 3_600 == 0L -> "${seconds / 3_600} Stunden"
-        else -> "${seconds / 60} Minuten"
-    }
     fun elapsed(now: Long): Float? = resetAt?.let { (1.0 - (it - now).toDouble() / seconds).toFloat().coerceIn(0f, 1f) }
 }
 @Serializable

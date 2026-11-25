@@ -21,6 +21,8 @@ object Texts {
     @Volatile private var context: Context? = null
     fun init(context: Context) { this.context = context.applicationContext }
     private val res: Resources? get() = context?.resources
+    /** Resources of the app language for formatting outside Compose. */
+    val resources: Resources get() = context?.resources ?: Resources.getSystem()
     fun get(@StringRes id: Int, vararg args: Any): String = res?.getString(id, *args) ?: fallback(id)
     fun plural(@PluralsRes id: Int, count: Int, vararg args: Any): String = res?.getQuantityString(id, count, *args) ?: fallback(id)
     /** Only in plain JVM tests without Android resources. */

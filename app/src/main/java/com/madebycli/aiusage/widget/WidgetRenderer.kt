@@ -68,8 +68,8 @@ object WidgetRenderer {
     }
 
     private fun rowsFor(account: WidgetAccount, config: WidgetConfig): List<Row> = buildList {
-        if (config.windows != WidgetWindows.WEEK) add(Row("5 Std.", FIVE_HOURS, account.window(FIVE_HOURS)))
-        if (config.windows != WidgetWindows.FIVE) add(Row("Woche", ONE_WEEK, account.window(ONE_WEEK)))
+        if (config.windows != WidgetWindows.WEEK) add(Row(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_five_short), FIVE_HOURS, account.window(FIVE_HOURS)))
+        if (config.windows != WidgetWindows.FIVE) add(Row(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_week_short), ONE_WEEK, account.window(ONE_WEEK)))
     }
 
     /** Draws everything with density-independent numbers; [px] converts to pixels. */
@@ -150,12 +150,12 @@ object WidgetRenderer {
     private fun resetOptions(row: Row, now: Long, config: WidgetConfig, prefix: String = ""): List<String> {
         val window = row.window
         return when (row.state(now)) {
-            State.UNKNOWN -> listOf("nicht gemeldet")
-            State.EXPIRED -> listOf("Reset erreicht", "zurückgesetzt")
+            State.UNKNOWN -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_not_reported))
+            State.EXPIRED -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_reached), com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_done))
             State.LIVE -> {
-                val at = window?.resetAt ?: return listOf("Reset unbekannt", "–")
-                val clock = TimeText.clock(at, now)
-                val left = TimeText.remaining(at - now)
+                val at = window?.resetAt ?: return listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_unknown), "–")
+                val clock = Fmt.clock(com.madebycli.aiusage.Texts.resources, at, now)
+                val left = Fmt.remaining(com.madebycli.aiusage.Texts.resources, at - now)
                 when (config.reset) {
                     ResetFormat.CLOCK -> listOf("$prefix$clock", clock)
                     ResetFormat.RELATIVE -> listOf("$prefix$left", left)
@@ -243,7 +243,7 @@ object WidgetRenderer {
         val stripHeight = if (wouldOverflow && !hasHeader && height >= 70f) 16f else 0f
         val contentH = height - pad - top - stripHeight
         if (accounts.isEmpty()) {
-            painter.text(if (all.isEmpty()) "Noch kein Account verbunden" else "Kein Account gewählt", width / 2, height / 2 + 4, 12f, painter.medium, palette.muted, Paint.Align.CENTER, contentW)
+            painter.text(if (all.isEmpty()) com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_no_account) else com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_none_chosen), width / 2, height / 2 + 4, 12f, painter.medium, palette.muted, Paint.Align.CENTER, contentW)
             return bitmap
         }
         val columns = columnCount(config, contentW, minW, accounts.size)
@@ -280,7 +280,7 @@ object WidgetRenderer {
             }
         }
         if (accounts.size > shown.size && !hasHeader && stripHeight > 0f) {
-            val label = "+${accounts.size - shown.size} weitere"
+            val label = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_more, accounts.size - shown.size)
             painter.text(label, width - pad - 2, height - pad + 1f, 10f, painter.medium, palette.muted, Paint.Align.RIGHT)
         }
         return bitmap
@@ -290,10 +290,10 @@ object WidgetRenderer {
         val newest = accounts.mapNotNull { it.fetchedAt }.maxOrNull()
         val stale = newest != null && now - newest > STALE_SECONDS
         val label = when {
-            refreshing -> "Aktualisiere…"
+            refreshing -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_refreshing)
             !config.showUpdated -> ""
-            newest == null -> "Noch keine Messung"
-            else -> "Stand " + DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN).withZone(ZoneId.systemDefault()).format(Instant.ofEpochSecond(newest)) + if (stale) " · veraltet" else ""
+            newest == null -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading)
+            else -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_as_of, Fmt.clockOnly(com.madebycli.aiusage.Texts.resources, newest)) + if (stale) " · " + com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_stale) else ""
         }
         var right = width - pad
         if (config.showRefresh) { p.icon(R.drawable.ic_widget_refresh, right - 16f, pad - 1f, 16f, p.palette.muted); right -= 22f }
@@ -305,7 +305,7 @@ object WidgetRenderer {
             right -= w + 6f
         }
         if (label.isNotEmpty()) {
-            val options = listOf(label, label.removePrefix("Stand ").removeSuffix(" · veraltet").let { if (stale) "$it !" else it })
+            val options = listOf(label, (newest?.let { Fmt.clockOnly(com.madebycli.aiusage.Texts.resources, it) } ?: label).let { if (stale) "$it !" else it })
             p.text(p.fit(options, right - pad - 4f, 10f, p.medium), pad + 2, pad + 9f, 10f, p.medium, if (stale && !refreshing) p.palette.warn else p.palette.muted, maxWidth = right - pad - 4f)
         }
     }
@@ -333,7 +333,7 @@ object WidgetRenderer {
                     p.text(row.label, x, cursor + 11f, 10f, p.medium, colors.muted)
                     p.text(percent, x + w, cursor + 12f, 13f, p.bold, percentColor, Paint.Align.RIGHT)
                     p.bar(x, cursor + 16f, w, 6f, progress(row, now), accent)
-                    p.text(p.fit(resetOptions(row, now, p.config, "Reset "), w, 10f, p.regular), x, cursor + 34f, 10f, p.regular, colors.muted, maxWidth = w)
+                    p.text(p.fit(resetOptions(row, now, p.config, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_prefix, "")), w, 10f, p.regular), x, cursor + 34f, 10f, p.regular, colors.muted, maxWidth = w)
                     cursor += min(40f, perWindow)
                 }
                 // reset time on the label line, so it survives in shorter tiles
@@ -370,7 +370,7 @@ object WidgetRenderer {
             val cx = x + column * i
             val cw = column - if (i < rows.lastIndex) 6f else 0f
             val live = row.state(now) == State.LIVE
-            val label = if (row.seconds == FIVE_HOURS) "5h" else "Wo"
+            val label = com.madebycli.aiusage.Texts.get(if (row.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
             p.text(label, cx, top + 25f, 8.5f, p.medium, colors.muted)
             p.text(percentText(row, now), cx + cw, top + 25.5f, 11f, p.bold, if (live) colors.text else colors.muted, Paint.Align.RIGHT)
             if (withBars) p.bar(cx, top + 30f, cw, 5f, progress(row, now), accent(colors, p.config, row, now))
@@ -392,24 +392,24 @@ object WidgetRenderer {
             val at = live?.window?.resetAt
             val options = when {
                 live != null && at != null -> {
-                    val clock = TimeText.clock(at, now)
-                    val left = TimeText.remaining(at - now)
-                    val short = if (live.seconds == FIVE_HOURS) "5h" else "Wo"
+                    val clock = Fmt.clock(com.madebycli.aiusage.Texts.resources, at, now)
+                    val left = Fmt.remaining(com.madebycli.aiusage.Texts.resources, at - now)
+                    val short = com.madebycli.aiusage.Texts.get(if (live.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
                     when (p.config.reset) {
                         ResetFormat.CLOCK -> listOf("${live.label} $clock", "$short $clock", clock)
                         ResetFormat.RELATIVE -> listOf("${live.label} $left", "$short $left", left)
                         ResetFormat.BOTH -> listOf("${live.label} $clock · $left", "${live.label} $clock", "$short $clock", clock)
                     }
                 }
-                rows.any { it.state(now) == State.EXPIRED } -> listOf("Reset erreicht", "Reset da")
-                else -> listOf("Keine Messung", "–")
+                rows.any { it.state(now) == State.EXPIRED } -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_reached), com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_here))
+                else -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading), "–")
             }
             p.text(p.fit(options, textW, 9.5f, p.regular), x + 22f, mid + 10f, 9.5f, p.regular, colors.muted, maxWidth = textW)
         }
         rows.forEachIndexed { i, row ->
             val cx = x + w - chunk * (rows.size - i) + 3f
             val cw = chunk - 7f
-            val label = if (wide || rows.size == 1) row.label else if (row.seconds == FIVE_HOURS) "5h" else "Wo"
+            val label = if (wide || rows.size == 1) row.label else com.madebycli.aiusage.Texts.get(if (row.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
             p.text(label, cx, mid - 3f, 9f, p.medium, colors.muted, maxWidth = cw * 0.55f)
             p.text(percentText(row, now), cx + cw, mid - 2.5f, 11.5f, p.bold, if (row.state(now) == State.LIVE) colors.text else colors.muted, Paint.Align.RIGHT)
             p.bar(cx, mid + 3f, cw, 5f, progress(row, now), accent(colors, p.config, row, now))
