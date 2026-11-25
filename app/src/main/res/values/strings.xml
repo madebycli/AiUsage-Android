@@ -56,7 +56,6 @@
     <string name="done">Done</string>
     <string name="refresh_now">Refresh now</string>
     <string name="more">More</string>
-    <string name="open_link">Open</string>
     <string name="settings">Settings</string>
     <string name="settings_search">Search settings</string>
     <string name="settings_none_found">Nothing found</string>
@@ -92,9 +91,7 @@
     <string name="accounts_rename_title">Rename account</string>
     <string name="accounts_name">Name</string>
     <string name="accounts_name_hint">Empty uses the default name</string>
-    <string name="accounts_state_ok">Connected</string>
     <string name="accounts_state_error">Error</string>
-    <string name="accounts_not_loaded">Not loaded yet</string>
     <string name="theme">Theme</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
@@ -108,7 +105,6 @@
     <string name="home_style_playful">Playful</string>
     <string name="language">Language</string>
     <string name="language_system">System default</string>
-    <string name="font">Font</string>
     <string name="background_refresh">Refresh in background</string>
     <string name="background_refresh_desc">Limits, statistics and widget</string>
     <string name="background_interval">Interval</string>
@@ -122,15 +118,12 @@
     <string name="exact_alarms">Exact alarms</string>
     <string name="exact_alarms_on">Allowed</string>
     <string name="exact_alarms_off">Not allowed: reads can come up to 10 min early</string>
-    <string name="exact_alarms_allow">Allow exact alarms</string>
     <string name="battery">Battery</string>
     <string name="battery_unrestricted">Unrestricted</string>
     <string name="battery_optimized">Optimised by Android: reads can be late</string>
-    <string name="battery_open">Open battery settings</string>
     <string name="log">Log</string>
     <string name="log_empty">No reads yet</string>
     <string name="log_show_all">Show all (%d)</string>
-    <string name="log_clear">Clear log</string>
     <string name="trigger_periodic">Interval</string>
     <string name="trigger_cycle_end">Before reset</string>
     <string name="trigger_after_reset">After reset</string>
@@ -154,7 +147,6 @@
     <string name="alerts_android_settings">Android settings</string>
     <string name="alerts_sound">Sound and display</string>
     <string name="alerts_at_reset">At reset</string>
-    <string name="alerts_before">%d min before</string>
     <string name="alerts_none_planned">Nothing planned</string>
     <string name="window_five">5 hours</string>
     <string name="window_week">Weekly</string>
@@ -216,9 +208,7 @@
     <string name="usage_reset_reached">Reset reached</string>
     <string name="usage_reset_unknown">Reset not reported</string>
     <string name="usage_since">since %1$s</string>
-    <string name="usage_updated">%1$s</string>
     <string name="usage_used">used</string>
-    <string name="usage_left">%1$s%% left</string>
     <string name="usage_next_reset">Next reset</string>
     <string name="usage_limit_reached">Limit reached</string>
     <string name="usage_running">Running</string>
@@ -238,7 +228,6 @@
     <string name="usage_up">Up</string>
     <string name="usage_down">Down</string>
     <string name="usage_order_hint">Drag the handle or use the arrows. Also applies to the widget.</string>
-    <string name="usage_now_next">Next: %1$s · %2$s</string>
     <string name="usage_window_a11y">%1$s: %2$s percent used</string>
     <plurals name="bank_title">
         <item quantity="one">%d reset available</item>
@@ -268,18 +257,9 @@
     <string name="spend_free">%1$s%% free</string>
     <string name="spend_line">Used %1$s · Limit %2$s</string>
     <string name="not_reported">not reported</string>
-    <string name="plan_now">Now</string>
-    <string name="plan_then">Then</string>
-    <string name="plan_week_left">Week %1$s%% left</string>
     <string name="plan_week_reset">Weekly reset %1$s</string>
-    <string name="plan_five_free">5 h free</string>
-    <string name="plan_five_used">5 h at %1$s%%</string>
-    <string name="plan_five_full_until">5 h full until %1$s</string>
-    <string name="plan_week_empty_until">Week used up until %1$s</string>
     <string name="plan_week">Next 7 days</string>
     <string name="plan_legend_running">Running</string>
-    <string name="plan_legend_session">Suggested</string>
-    <string name="plan_legend_reset">Weekly reset</string>
     <string name="plan_overlap">Weekly resets close together: %1$s and %2$s</string>
     <string name="plan_budgets">Budget until reset</string>
     <plurals name="plan_sessions">
@@ -293,7 +273,6 @@
     <string name="plan_hours_default">Default until enough windows are measured</string>
     <string name="plan_no_week">No weekly limit reported</string>
     <string name="plan_session_at">%1$s – %2$s</string>
-    <string name="plan_upcoming">Suggested windows</string>
     <string name="stats_all">All accounts</string>
     <string name="stats_no_data">No measurement yet</string>
     <string name="stats_at_least">at least</string>
@@ -335,7 +314,6 @@
     <string name="stats_year">Year %1$d</string>
     <string name="resets_yours">Your next resets</string>
     <string name="resets_none_running">No window running</string>
-    <string name="resets_global">Global reset</string>
     <string name="resets_last">Last reset</string>
     <string name="resets_loading">Loading</string>
     <string name="resets_no_data">No data yet</string>
@@ -394,7 +372,7 @@
     <string name="connect_valid_15">Valid for 15 minutes.</string>
     <string name="connect_approve">Approve in the browser</string>
     <string name="connect_approve_text">Enter the code and confirm. The app notices the approval by itself.</string>
-    <string name="connect_open_browser">Sign in in the browser</string>
+    <string name="connect_open_browser">Sign in with the browser</string>
     <string name="connect_claude_step">Sign in at Claude</string>
     <string name="connect_claude_step_text">Google or e-mail work directly in the browser.</string>
     <string name="connect_claude_open">Open Claude in the browser</string>
@@ -423,12 +401,9 @@
     <string name="plan_day_empty">Nothing planned</string>
     <string name="plan_reset_row">Weekly reset · %1$s</string>
     <string name="plan_then_list">Then: %1$s</string>
-    <string name="plan_today">Today</string>
-    <string name="plan_tomorrow">Tomorrow</string>
     <string name="plan_fact_week">Week left</string>
     <string name="plan_fact_reset">Weekly reset</string>
     <string name="plan_fact_five">5 hours</string>
-    <string name="plan_fact_free">free</string>
     <string name="plan_fact_full">full</string>
     <string name="gemini_error_state">This address belongs to another sign-in. Start again.</string>
     <string name="gemini_error_denied">Google sign-in was cancelled.</string>
@@ -437,7 +412,6 @@
     <string name="plan_use_now">Use now</string>
     <string name="plan_five_free_now">free now</string>
     <string name="plan_five_until">until %1$s</string>
-    <string name="plan_day_title">%1$s</string>
     <string name="err_claude_login_unreadable">The Claude sign-in could not be read or renewed. Please connect again.</string>
     <string name="err_stored_unreadable">Stored measurement could not be read. Refresh now.</string>
     <string name="err_local_cleanup">Local data of %1$s could not be removed completely.</string>
@@ -530,7 +504,7 @@
     <string name="wc_example_relative">e.g. in 2 h 50 min</string>
     <string name="wc_example_both">e.g. 17:40 · in 2 h 50 min</string>
     <string name="wc_bar_color">Bar colour</string>
-    <string name="wc_traffic_hint">Green up to 70 %, yellow up to 90 %, then red</string>
+    <string name="wc_traffic_hint" formatted="false">Green up to 70 %, yellow up to 90 %, then red</string>
     <string name="wc_app_colors">App colours</string>
     <string name="wc_colors_shape">Colours and shape</string>
     <string name="wc_background">Background</string>

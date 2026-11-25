@@ -50,7 +50,6 @@
     <string name="done">Fertig</string>
     <string name="refresh_now">Jetzt aktualisieren</string>
     <string name="more">Mehr</string>
-    <string name="open_link">Öffnen</string>
     <string name="settings">Einstellungen</string>
     <string name="settings_search">Einstellungen durchsuchen</string>
     <string name="settings_none_found">Nichts gefunden</string>
@@ -86,9 +85,7 @@
     <string name="accounts_rename_title">Account umbenennen</string>
     <string name="accounts_name">Name</string>
     <string name="accounts_name_hint">Leer: Standardname</string>
-    <string name="accounts_state_ok">Verbunden</string>
     <string name="accounts_state_error">Fehler</string>
-    <string name="accounts_not_loaded">Noch nicht geladen</string>
     <string name="theme">Farbschema</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Hell</string>
@@ -102,7 +99,6 @@
     <string name="home_style_playful">Verspielt</string>
     <string name="language">Sprache</string>
     <string name="language_system">Systemsprache</string>
-    <string name="font">Schrift</string>
     <string name="background_refresh">Im Hintergrund aktualisieren</string>
     <string name="background_refresh_desc">Limits, Statistik und Widget</string>
     <string name="background_interval">Intervall</string>
@@ -116,15 +112,12 @@
     <string name="exact_alarms">Exakte Wecker</string>
     <string name="exact_alarms_on">Erlaubt</string>
     <string name="exact_alarms_off">Nicht erlaubt: Abrufe bis zu 10 Min. früher</string>
-    <string name="exact_alarms_allow">Exakte Wecker erlauben</string>
     <string name="battery">Akku</string>
     <string name="battery_unrestricted">Uneingeschränkt</string>
     <string name="battery_optimized">Von Android optimiert: Abrufe können sich verspäten</string>
-    <string name="battery_open">Akku-Einstellungen öffnen</string>
     <string name="log">Protokoll</string>
     <string name="log_empty">Noch keine Abrufe</string>
     <string name="log_show_all">Alle anzeigen (%d)</string>
-    <string name="log_clear">Protokoll leeren</string>
     <string name="trigger_periodic">Intervall</string>
     <string name="trigger_cycle_end">Vor Reset</string>
     <string name="trigger_after_reset">Nach Reset</string>
@@ -148,7 +141,6 @@
     <string name="alerts_android_settings">Android-Einstellungen</string>
     <string name="alerts_sound">Ton und Anzeige</string>
     <string name="alerts_at_reset">Zum Reset</string>
-    <string name="alerts_before">%d Min. vorher</string>
     <string name="alerts_none_planned">Nichts geplant</string>
     <string name="window_five">5 Stunden</string>
     <string name="window_week">Wöchentlich</string>
@@ -210,9 +202,7 @@
     <string name="usage_reset_reached">Reset erreicht</string>
     <string name="usage_reset_unknown">Reset nicht gemeldet</string>
     <string name="usage_since">seit %1$s</string>
-    <string name="usage_updated">%1$s</string>
     <string name="usage_used">genutzt</string>
-    <string name="usage_left">%1$s %% frei</string>
     <string name="usage_next_reset">Nächster Reset</string>
     <string name="usage_limit_reached">Limit erreicht</string>
     <string name="usage_running">Läuft</string>
@@ -232,7 +222,6 @@
     <string name="usage_up">Nach oben</string>
     <string name="usage_down">Nach unten</string>
     <string name="usage_order_hint">Am Griff ziehen oder Pfeile nutzen. Gilt auch für das Widget.</string>
-    <string name="usage_now_next">Als Nächstes: %1$s · %2$s</string>
     <string name="usage_window_a11y">%1$s: %2$s Prozent verbraucht</string>
     <plurals name="bank_title">
         <item quantity="one">%d Reset verfügbar</item>
@@ -262,18 +251,9 @@
     <string name="spend_free">%1$s %% frei</string>
     <string name="spend_line">Verbrauch %1$s · Limit %2$s</string>
     <string name="not_reported">nicht gemeldet</string>
-    <string name="plan_now">Jetzt</string>
-    <string name="plan_then">Danach</string>
-    <string name="plan_week_left">Woche %1$s %% frei</string>
     <string name="plan_week_reset">Wochenreset %1$s</string>
-    <string name="plan_five_free">5 Std. frei</string>
-    <string name="plan_five_used">5 Std. bei %1$s %%</string>
-    <string name="plan_five_full_until">5 Std. voll bis %1$s</string>
-    <string name="plan_week_empty_until">Woche aufgebraucht bis %1$s</string>
     <string name="plan_week">Nächste 7 Tage</string>
     <string name="plan_legend_running">Läuft</string>
-    <string name="plan_legend_session">Vorschlag</string>
-    <string name="plan_legend_reset">Wochenreset</string>
     <string name="plan_overlap">Wochenresets dicht beieinander: %1$s und %2$s</string>
     <string name="plan_budgets">Budget bis Reset</string>
     <plurals name="plan_sessions">
@@ -287,7 +267,6 @@
     <string name="plan_hours_default">Standard, bis genug Fenster gemessen sind</string>
     <string name="plan_no_week">Kein Wochenlimit gemeldet</string>
     <string name="plan_session_at">%1$s – %2$s</string>
-    <string name="plan_upcoming">Vorgeschlagene Fenster</string>
     <string name="stats_all">Alle Accounts</string>
     <string name="stats_no_data">Noch keine Messung</string>
     <string name="stats_at_least">mindestens</string>
@@ -329,7 +308,6 @@
     <string name="stats_year">Jahr %1$d</string>
     <string name="resets_yours">Deine nächsten Resets</string>
     <string name="resets_none_running">Kein Zeitfenster läuft</string>
-    <string name="resets_global">Globaler Reset</string>
     <string name="resets_last">Letzter Reset</string>
     <string name="resets_loading">Wird geladen</string>
     <string name="resets_no_data">Noch keine Angabe</string>
@@ -417,12 +395,9 @@
     <string name="plan_day_empty">Nichts geplant</string>
     <string name="plan_reset_row">Wochenreset · %1$s</string>
     <string name="plan_then_list">Danach: %1$s</string>
-    <string name="plan_today">Heute</string>
-    <string name="plan_tomorrow">Morgen</string>
     <string name="plan_fact_week">Woche frei</string>
     <string name="plan_fact_reset">Wochenreset</string>
     <string name="plan_fact_five">5 Stunden</string>
-    <string name="plan_fact_free">frei</string>
     <string name="plan_fact_full">voll</string>
     <string name="gemini_error_state">Diese Adresse gehört zu einer anderen Anmeldung. Bitte neu starten.</string>
     <string name="gemini_error_denied">Die Google-Anmeldung wurde abgebrochen.</string>
@@ -431,7 +406,6 @@
     <string name="plan_use_now">Jetzt nutzen</string>
     <string name="plan_five_free_now">jetzt frei</string>
     <string name="plan_five_until">bis %1$s</string>
-    <string name="plan_day_title">%1$s</string>
     <string name="err_claude_login_unreadable">Claude-Anmeldung konnte nicht gelesen oder erneuert werden. Bitte erneut verbinden.</string>
     <string name="err_stored_unreadable">Gespeicherte Messung konnte nicht gelesen werden. Jetzt aktualisieren.</string>
     <string name="err_local_cleanup">Lokale Daten von %1$s konnten nicht vollständig gelöscht werden.</string>
@@ -524,7 +498,7 @@
     <string name="wc_example_relative">z. B. in 2 Std. 50 Min.</string>
     <string name="wc_example_both">z. B. 17:40 · in 2 Std. 50 Min.</string>
     <string name="wc_bar_color">Balkenfarbe</string>
-    <string name="wc_traffic_hint">Grün bis 70 %, Gelb bis 90 %, danach Rot</string>
+    <string name="wc_traffic_hint" formatted="false">Grün bis 70 %, Gelb bis 90 %, danach Rot</string>
     <string name="wc_app_colors">Farben der App</string>
     <string name="wc_colors_shape">Farben und Form</string>
     <string name="wc_background">Hintergrund</string>

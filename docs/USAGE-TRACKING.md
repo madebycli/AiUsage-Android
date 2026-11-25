@@ -1,47 +1,52 @@
-# Wie die Nutzung gezählt wird
+# Wie die Nutzung gezählt wird (ab 2.0)
 
-Die Statistik besteht nur aus dem, was der Anbieter als Verbrauch meldet: wie viel Prozent des
-5-Stunden- und des Wochenlimits verbraucht sind und wann das Fenster zurückgesetzt wird. Es gibt
-keine Tokens, Credits oder Kosten.
+Grundlage ist nur, was der Anbieter meldet: wie viel Prozent des 5-Stunden- und des Wochenlimits verbraucht sind und
+wann das Fenster zurückgesetzt wird. Keine Tokens, Credits oder Kosten.
 
-## Läufe statt Messungen
+## Zyklen
 
-Ein **Lauf** ist ein Reset-Zyklus eines Fensters. Er wird über den gemeldeten Reset-Zeitpunkt
-erkannt (Toleranz 5 Minuten). Jede Messung wird in ihren Lauf einsortiert. Zur Nutzung zählt nur
-der Teil über dem bisher höchsten Wert dieses Laufs. Dadurch gilt:
+Ein **Zyklus** ist ein Durchlauf eines Fensters bis zu seinem Reset. Er wird am gemeldeten Reset-Zeitpunkt erkannt
+(Toleranz 5 Minuten). Jeder 5-Stunden-Zyklus wird einzeln gespeichert mit Ende, Höchstwert, erster und letzter Messung
+und ob sein Ende gesehen wurde.
 
-- Wer in einem Lauf fünfmal 99 % sieht, hat 99 % verbraucht, nicht fünfmal.
-- 50 % zehn Minuten nach einem Reset und 80 % eine Stunde später sind zusammen 80 %, nicht 130 %.
-- Sinkt der Wert im selben Lauf (Rundung, Fehlmeldung), wird nichts abgezogen und nichts doppelt
-  gezählt.
+- Ein Zyklus zählt mit seinem **höchsten Wert**, einmal. Zwanzigmal 60 % im selben Zyklus sind 60 %, nicht 1200 %.
+- Gleich alte oder ältere Messungen werden verworfen (doppelte Abrufe, parallele Worker).
+- Ein 5-Stunden-Zyklus zählt am **lokalen Tag seines Beginns** (Reset minus 5 Stunden). Ein Fenster von 22:00 bis
+  03:00 gehört zum ersten Tag.
+- Zwei 5-Stunden-Zyklen eines Accounts überschneiden sich nie; ein Tag kann höchstens fünf beginnen. Ein Test prüft
+  das mit zufälligen Abruffolgen inklusive Duplikaten und verspäteter Antworten.
+- Wochenverbrauch eines Tages ist der Anstieg des Wochenwerts zwischen zwei Messungen desselben Wochenzyklus.
 
-## Wann ein neuer Lauf beginnt (Reset)
+## Reset
 
 | Beobachtung | Folge |
 | --- | --- |
-| Der gemeldete Reset-Zeitpunkt ist ein anderer | Alter Lauf endet; Reset zählt am Tag der Messung (vorzeitiger Reset, zum Beispiel eingelöster Reset). |
-| Der Reset-Zeitpunkt des alten Laufs ist vorbei | Alter Lauf endet; der Reset zählt am Tag des Zeitpunkts, auch wenn die App tagelang zu war. |
-| Kein Reset-Zeitpunkt gemeldet, Wert fällt um mehr als 1 Punkt | Neuer Lauf. |
-| Das Fenster fehlt in der Antwort, der Zeitpunkt ist noch nicht erreicht | Nichts passiert, kein Reset. |
-| Fenster steht auf 0 % (auch mit wanderndem Zeitpunkt) | Kein Lauf, keine Nutzung. Der Tag gilt als gemessen. |
+| Anderer Reset-Zeitpunkt gemeldet | alter Zyklus endet (vorzeitig), Reset am Tag der Messung |
+| Reset-Zeitpunkt des alten Zyklus vorbei | alter Zyklus endet zu diesem Zeitpunkt |
+| Kein Zeitpunkt gemeldet, Wert fällt um mehr als 1 Punkt | neuer Zyklus |
+| Fenster fehlt in der Antwort, Zeitpunkt noch nicht erreicht | nichts |
+| Fenster steht auf 0 % | kein Zyklus, der Tag gilt als gemessen |
 
-Gleiche oder ältere Messungen (zum Beispiel die Anreicherung derselben Abfrage oder zwei Worker
-gleichzeitig) werden ignoriert.
+## Wenn die App etwas nicht gesehen hat
 
-## Tage
+Gezählt wird nur Gemessenes. Damit möglichst nichts fehlt, liest die App im gewählten Intervall (höchstens 5 Stunden,
+also wird jeder Zyklus mindestens einmal gesehen) und **3 Minuten vor dem Ende jedes laufenden Fensters** über
+AlarmManager. Mit „exakten Weckern“ hält Android diesen Termin auch im Ruhemodus ein, sonst bis zu 10 Minuten früher.
 
-Die Nutzung eines Zeitraums zwischen zwei Messungen wird dem lokalen Tag der späteren Messung
-zugeordnet. Ein Tag mit mindestens einer Messung gilt als **gemessen**: 0 ist dann eine echte Null.
-Tage ohne Messung bleiben unbekannt und zählen weder als Null noch in Wochentags-Durchschnitten.
+- Ein beendeter Zyklus, dessen letzte Messung mehr als 15 Minuten vor seinem Ende lag, gilt als **„mindestens“**.
+  Statistik und Tagesansicht markieren das.
+- Steigt der Wochenwert über eine solche Lücke stärker, als die gesehenen 5-Stunden-Zyklen erklären, zeigt die
+  Statistik den Rest getrennt als **„≈ … ungesehen“**. Das Verhältnis „Wochenpunkte pro vollem 5-Stunden-Limit“ wird
+  pro Account aus Messpaaren gelernt, in denen beide Fenster im selben Zyklus liefen (mindestens 150 Fünf-Stunden-
+  und 3 Wochenpunkte, nie bei einem Wochenwert ab 99 %). Unter einem Viertel Limit pro Tag gilt der Unterschied als
+  Rundung. Gemessene Werte werden nie durch die Schätzung ersetzt.
 
-Pro Tag werden gespeichert: verbrauchte Punkte im 5-Stunden- und im Wochenfenster (100 Punkte im
-5-Stunden-Fenster sind ein volles Limit), gestartete Läufe, Resets, höchster 5-Stunden-Wert,
-Zahl der Messungen. Bis zu 800 Tage bleiben erhalten. Der alte Verlauf (nur der höchste Wert
-eines Tages) wird einmalig als Untergrenze übernommen und als „früherer Verlauf“ markiert.
+## Daten aus 0.9
+
+Die Tageswerte aus 0.9 bleiben als früherer Verlauf. Ein beim Update laufender Zyklus wird übernommen und zählt nur
+noch mit dem Teil über dem, was 0.9 bereits gezählt hatte. Keine Neuanmeldung nötig.
 
 ## Grenzen
 
-- Nutzung, die zwischen der letzten Messung eines Laufs und dem Reset entsteht, fehlt. Deshalb liest
-  die App kurz vor jedem Reset noch einmal. Android kann das verzögern.
-- Die Messzeit ist der Bezugstag, nicht der Moment der Nutzung.
-- Die Endpunkte der Anbieter sind inoffiziell und können sich ändern.
+- Die Endpunkte der Anbieter sind inoffiziell.
+- Android kann Hintergrundarbeit trotz allem verzögern; das Protokoll unter Einstellungen → Hintergrund zeigt jeden Abruf.

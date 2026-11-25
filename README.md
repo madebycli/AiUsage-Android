@@ -1,50 +1,37 @@
 # AI Usage für Android
 
-Zeigt dein Codex- und Claude-Code-Kontingent auf dem Handy. Alle Werte stammen direkt
-vom jeweiligen Anbieter; die App rechnet nichts nach und erfindet nichts. Fehlende
-Angaben erscheinen als „nicht gemeldet“, nie als 0 %.
+Zeigt die Limits von Codex, Claude Code und Gemini auf dem Handy: 5-Stunden- und Wochenfenster, wann sie zurückgesetzt
+werden, wie viel du wann verbraucht hast und welchen Account du als Nächstes nutzen solltest. Alle Werte stammen vom
+jeweiligen Anbieter. Fehlende Angaben erscheinen als „nicht gemeldet“, nie als 0 %.
 
-Kotlin, Jetpack Compose, Material 3 Expressive, Android 8.0 oder neuer. Basis ist
-[AniHyou-android](https://github.com/axiel7/AniHyou-android), das Design folgt
-[AniSync](https://github.com/Marco-9456/AniSync) (siehe [docs/UPSTREAM.md](docs/UPSTREAM.md)).
+Kotlin, Jetpack Compose, Material 3 Expressive, Android 8.0 oder neuer. Sprachen: Englisch und Deutsch.
 
 ## Funktionen
 
-- **Mehrere Accounts**: beliebig viele Codex- und Claude-Code-Accounts, auch mehrere desselben
-  Anbieters. Accounts lassen sich umbenennen, erneut anmelden und trennen; dasselbe Konto wird
-  beim erneuten Verbinden erkannt und nicht doppelt angelegt. Tokens liegen je Account
-  verschlüsselt im Android Keystore.
-- **Startseite**: eine Karte pro Account mit 5-Stunden- und Wochenfenster. Der Reset steht als
-  Uhrzeit („Reset 17:40 Uhr“) mit Restzeit darunter („in 2 Std. 43 Min.“). Die Reihenfolge ändert
-  der **Sortiermodus** (Ziehen am Griff oder Pfeile); sie gilt auch für das Widget.
-- **Statistiken**: reine Nutzung, ohne Tokens, Credits oder Kosten. Woche, Monat (Kalender) und Jahr
-  (Heatmap), pro Account oder gesamt, als 5-Stunden-Limit oder Wochenlimit. Dazu Resets, aktive
-  Tage, bester Tag, Serie und die Auswertung, an welchem Wochentag am meisten verbraucht wird.
-  Wie gezählt wird, steht in [docs/USAGE-TRACKING.md](docs/USAGE-TRACKING.md).
-- **Widget**: pro Widget einstellbar sind Accounts und deren Reihenfolge, Darstellung (Balken,
-  Kompakt, Prozent, Ringe), Zeitfenster, Reset-Anzeige (Uhrzeit, Restzeit oder beides), Farben
-  (App, Ampel, Android-Farben), Hintergrund, Deckkraft, Ecken und Schriftgröße. Antippen öffnet
-  die App, der Knopf oben rechts liest sofort neu.
-- **Navigation**: Statistiken und Resets lassen sich ausblenden und umsortieren, die Startseite
-  ist immer sichtbar. Beim vollständigen Neustart öffnet die App die zuletzt genutzte oder eine
-  feste Seite; aus dem Hintergrund zurück bleibt sie, wo sie war.
-- **Anmeldung** für beide Anbieter über eine gleich aufgebaute Seite.
-  Codex nutzt den Gerätecode von OpenAI, Claude die Browser-Freigabe mit einmaligem Code
-  ([Details](docs/CLAUDE-PHONE-LOGIN.md)). Ein laufender Codex-Versuch übersteht auch einen
-  Neustart der App.
-- **Resets**: Zeitplan der nächsten Resets aller Accounts, öffentliche Schätzungen und Verlauf
-  (codex-reset.com, LunarWerx, Community-Tracker), getrennt von den persönlichen Konten.
-- **Benachrichtigungen**: Hinweis zum gemeldeten Reset-Zeitpunkt, getrennt für 5 Stunden
-  und Woche, für jeden Account einzeln geplant.
+- **Verbrauch**: eine Karte pro Account. Zwei Stile: *Kompakt* (Zahlen und Balken) und *Verspielt*
+  (Material-Formen, die sich mit dem Verbrauch füllen). Reset als Uhrzeit, Restzeit darunter.
+- **Planer**: welcher Account jetzt dran ist, die nächsten sieben Tage als Kalenderstreifen mit vorgeschlagenen
+  5-Stunden-Fenstern und Wochenresets, Budget bis zum Reset (wie viele volle 5-Stunden-Fenster das Wochenlimit noch
+  erlaubt, was ungenutzt verfällt) und deine üblichen Startzeiten. Siehe [docs/PLANNER.md](docs/PLANNER.md).
+- **Statistiken**: Woche, Monat, Jahr; pro Account oder gesamt; 5-Stunden- oder Wochenlimit. Jedes 5-Stunden-Fenster
+  einzeln, am Tag seines Beginns gezählt. Wie gezählt wird: [docs/USAGE-TRACKING.md](docs/USAGE-TRACKING.md).
+- **Resets**: deine nächsten Resets aller Accounts, dazu je Anbieter Wahrscheinlichkeit, letzter globaler Reset,
+  Verlauf und gespeicherte Resets.
+- **Hintergrund**: Abruf im gewählten Intervall (15 Minuten bis 5 Stunden) und kurz vor dem Ende jedes laufenden
+  Fensters, über AlarmManager. Ein Protokoll der letzten 100 Abrufe zeigt, ob das auf deinem Gerät funktioniert.
+- **Widget**, **Reset-Hinweise**, **mehrere Accounts pro Anbieter**, Einstellungen im Iris-Stil.
 
-## Aktualisierung
+## Anbieter
 
-Der Aktualisieren-Knopf liest immer neu beim Anbieter. Beim Öffnen der App werden nur
-Werte gelesen, die älter als zwei Minuten sind. Im Hintergrund liest die App im gewählten
-Intervall (1 bis 12 Stunden) sowie kurz vor und nach jedem Reset, damit der Höchstwert eines
-Zyklus nicht verloren geht. Bei HTTP 429 wartet die App die vom
-Anbieter genannte Zeit; bei Fehlern bleibt die letzte Messung sichtbar.
-Die Verbrauchsendpunkte beider Anbieter sind inoffiziell und können sich ändern.
+| Anbieter | Anmeldung | Quelle |
+| --- | --- | --- |
+| Codex | Gerätecode von OpenAI | `chatgpt.com/backend-api/wham/usage` |
+| Claude Code | Browser-Freigabe mit Code ([Details](docs/CLAUDE-PHONE-LOGIN.md)) | `api.anthropic.com/api/oauth/usage` |
+| Gemini (experimentell) | Google im Browser, Rückleitung an die App | Antigravity `retrieveUserQuotaSummary` |
+
+Alle Verbrauchsendpunkte sind inoffiziell und können sich ändern. Gemini für private Google-Konten läuft seit
+18.06.2026 über Antigravity statt über die Gemini CLI. Der Ablauf folgt
+[OpenUsage](https://github.com/robinebers/openusage) (MIT).
 
 ## Bauen
 
@@ -54,23 +41,33 @@ JDK 17, Android SDK Platform 37, Build Tools 37.0.0:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-Die CI lädt zwei APKs hoch: `AiUsage-debug` und `AiUsage-performance` (R8-optimiert, nicht
-debuggbar, für den Alltag). Beide sind mit demselben öffentlichen Test-Schlüssel signiert,
-lassen sich also übereinander installieren, und sind kein Play-Store-Release.
-Lokal: `./gradlew assemblePerformance`.
+Gemini braucht einen Google-OAuth-Client für installierte Apps. Er gehört nicht ins Repository; ohne ihn blendet
+die App Gemini aus. Lokal in `local.properties`:
+
+```properties
+gemini.clientId=…
+gemini.clientSecret=…
+```
+
+In der CI als Secrets `GEMINI_OAUTH_CLIENT_ID` und `GEMINI_OAUTH_CLIENT_SECRET`.
+
+## Übersetzen
+
+Alle Texte stehen in `app/src/main/res/values/strings.xml` (Englisch) und `values-de/strings.xml`.
+Einrichtung mit Weblate: [docs/TRANSLATING.md](docs/TRANSLATING.md).
 
 ## Aufbau
 
-- `account/`: Account-Liste, eine Laufzeit pro Account, Anmeldungen, öffentliche Reset-Daten
-- `data/`: Anbieter-Clients, Parser, Account-Registry, Nutzungs-Ledger, verschlüsselter Speicher
-- `background/`: periodischer Abruf, Reset-Ticks und Reset-Benachrichtigungen
-- `widget/`: Renderer, Provider und Konfiguration des Homescreen-Widgets
-- `ui/`: Navigation, Seiten und gemeinsame Komponenten
+- `data/`: Anbieter-Clients, Parser, Ledger (Zyklen), Planer, Formatierung, verschlüsselter Speicher
+- `account/`: Account-Liste, eine Laufzeit pro Account, Anmeldungen
+- `background/`: periodischer Abruf, Abruf vor Fensterende, Protokoll, Reset-Hinweise
+- `widget/`: Renderer, Provider und Konfiguration
+- `ui/`: Navigation, Seiten, Einstellungen (Iris), gemeinsame Bausteine
 
-GPL-3.0, siehe [LICENSE](LICENSE). Inoffizielle App, unabhängig von OpenAI und Anthropic.
+## Herkunft
 
-## Iris UI
+Basis [AniHyou-android](https://github.com/axiel7/AniHyou-android) (GPL-3.0, [docs/UPSTREAM.md](docs/UPSTREAM.md)).
+Designbausteine aus [Iris](https://github.com/madebycli/iris-android) und
+[Orion Store](https://github.com/RookieEnough/Orion-Store) (GPL-3.0, [docs/IRIS_DESIGN.md](docs/IRIS_DESIGN.md)).
 
-Designbausteine aus [Iris Build 102](https://github.com/madebycli/Iris/tree/60bbb256e588103ad18f9776ed8acfdde7c6f156) und [Orion Store](https://github.com/RookieEnough/Orion-Store) (RookieEnough und Mitwirkende), GPL-3.0. [Übernahmen und Umfang](docs/IRIS_DESIGN.md). Die untere Navigation bleibt erhalten.
-
-[AI Usage 0.9.5: native Pixel 9 dark/light gallery and detailed English self-review](docs/pixel9-audit/README.md).
+GPL-3.0, siehe [LICENSE](LICENSE). Inoffizielle App, unabhängig von OpenAI, Anthropic und Google.

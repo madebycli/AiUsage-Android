@@ -25,6 +25,9 @@ jobs:
       - name: Install SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
       - name: Test, lint, build
+        env:
+          GEMINI_OAUTH_CLIENT_ID: ${{ secrets.GEMINI_OAUTH_CLIENT_ID }}
+          GEMINI_OAUTH_CLIENT_SECRET: ${{ secrets.GEMINI_OAUTH_CLIENT_SECRET }}
         run: ./gradlew testDebugUnitTest lintDebug assembleDebug assemblePerformance --stacktrace
       - uses: actions/upload-artifact@v4
         with:

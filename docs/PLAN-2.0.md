@@ -1,6 +1,6 @@
 # AI Usage 2.0: Plan
 
-Stand 25.11.2026. Ausgangspunkt 0.9.1 (`fb7af4c`).
+Stand 25.11.2026. Ausgangspunkt 0.9.5-preview.1 (`design/iris-ui`, `9c260a4`); Farben der Karten aus 0.9.1.
 
 ## 1. Befund im Ist-Stand
 
@@ -126,3 +126,13 @@ Ziel: zeigen, wann welches Kontingent am meisten bringt.
 - Kein Android-Emulator in dieser Umgebung (`/dev/kvm` fehlt). Geprüft wird mit gerenderten Screenshots der echten
   Compose-Oberfläche. Echte Hintergrundzustellung auf deinem Gerät kann nur das Protokoll aus 3 belegen.
 - Die Verbrauchsendpunkte aller Anbieter sind inoffiziell.
+
+## 10. Umgesetzt in 2.0.0
+
+- Ledger v2 mit Zyklen, Lückenmarkierung und getrennter Schätzung; Tests gegen Doppelzählung und Phantomwerte.
+- Hintergrund: Intervall 15 Min. bis 5 Std., Abruf vor jedem Fensterende über AlarmManager, Protokoll.
+- Einstellungen wie Iris: Kopf scrollt mit, Kachel wächst in die Seite, Seite „Hintergrund“ neu.
+- Karten in den dunklen Farben von 0.9.1; Startseite Kompakt und Verspielt.
+- Planer, neue Statistik, aufgeräumte Resets.
+- Alle Texte in `strings.xml`, Englisch und Deutsch, Sprachwahl ab Android 13.
+- Gemini über Antigravity, experimentell; OAuth-Client nur aus Build-Konfiguration.
