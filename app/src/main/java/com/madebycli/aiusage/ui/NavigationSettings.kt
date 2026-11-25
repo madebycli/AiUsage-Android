@@ -85,7 +85,7 @@ internal fun NavigationSettings(state: UiState, model: UsageViewModel) {
 
 @Composable
 private fun BarPreview(nav: NavSettings) {
-    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.panel) {
         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp).animateContentSize(), horizontalArrangement = Arrangement.SpaceEvenly) {
             nav.visible.forEach { tab ->
                 val selected = tab == nav.initial

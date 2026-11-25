@@ -7,7 +7,7 @@
     <application android:label="AI Usage" android:theme="@style/Theme.AiUsage"
         android:icon="@drawable/ic_launcher" android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules"
-        android:supportsRtl="true" android:usesCleartextTraffic="false">
+        android:supportsRtl="true" android:localeConfig="@xml/locales_config" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

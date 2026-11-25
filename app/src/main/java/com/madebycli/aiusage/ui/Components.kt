@@ -45,6 +45,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** Cards and grouped rows: the dark, calm surface of 0.9.1. */
+internal val ColorScheme.panel: Color get() = surfaceContainerLow
+/** A step above [panel], for things that sit on a card. */
+internal val ColorScheme.panelRaised: Color get() = surfaceContainer
+
 internal val cardShape = RoundedCornerShape(28.dp)
 internal val screenPadding = PaddingValues(16.dp, 8.dp, 16.dp, 24.dp)
 internal val maxContentWidth = 680.dp
@@ -59,7 +64,7 @@ internal fun SoftCard(contentPadding: PaddingValues = PaddingValues(16.dp), modi
 /** Orion settings Section/SRow surface: row insets belong to the row, not to a second surrounding card. */
 @Composable
 internal fun SettingsContent(content: @Composable ColumnScope.() -> Unit) {
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.surfaceContainer) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraSmall, color = MaterialTheme.colorScheme.panel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
 }
@@ -94,7 +99,7 @@ internal fun SectionTitle(text: String) = OrionHubHeader(text)
 
 @Composable
 internal fun Notice(text: String, error: Boolean = false) {
-    Surface(shape = MaterialTheme.shapes.large, color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainer,
+    Surface(shape = MaterialTheme.shapes.large, color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.panel,
         contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth()) {
         Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))
     }
@@ -122,7 +127,7 @@ internal fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChan
             Icon(androidx.compose.material.icons.Icons.Rounded.Tune, null, Modifier.size(22.dp), tint = foreground)
         } },
         trailingContent = { Switch(checked, null, thumbContent = { Icon(if (checked) androidx.compose.material.icons.Icons.Rounded.Check else androidx.compose.material.icons.Icons.Rounded.Close, null, Modifier.size(SwitchDefaults.IconSize)) }) },
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.panel),
         modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.extraSmall).then(Modifier.toggleable(checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)))
 
 }

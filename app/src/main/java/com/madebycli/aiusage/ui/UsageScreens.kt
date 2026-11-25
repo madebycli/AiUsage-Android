@@ -63,7 +63,7 @@ internal fun AccountCard(entry: AccountState, now: Long, index: Int, modifier: M
     val windows = entry.windows()
     val source = remember { MutableInteractionSource() }
     Surface(onClick = open, interactionSource = source, modifier = modifier.fillMaxWidth().staggeredEntrance(index, entry.id).pressScale(source),
-        shape = cardShape, color = colors.surfaceContainerHigh) {
+        shape = cardShape, color = colors.panel) {
         Column(Modifier.padding(16.dp).animateContentSize(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BrandIcon(entry.provider)
@@ -148,7 +148,7 @@ internal fun SortList(accounts: List<AccountState>, commit: (List<String>) -> Un
             Surface(
                 modifier = (if (active) Modifier else Modifier.animateItem()).fillMaxWidth().height(sortRowHeight).zIndex(if (active) 1f else 0f)
                     .graphicsLayer { translationY = if (active) offset else 0f; scaleX = 1f + .02f * lift; scaleY = 1f + .02f * lift },
-                shape = MaterialTheme.shapes.extraLarge, color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                shape = MaterialTheme.shapes.extraLarge, color = if (active) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.panel,
                 shadowElevation = (8 * lift).dp
             ) {
                 Row(Modifier.padding(start = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -48,8 +48,11 @@ data class CycleRecord(
     val migrated: Boolean = false
 ) {
     fun start(seconds: Long) = end - seconds
-    /** The last reading was close enough to the end that the final value is known. */
-    val complete get() = closedAt != null && (early || lastSeen >= end - COMPLETE_SECONDS)
+    /**
+     * The final value is known: the last reading was at most 15 minutes before the end, or, for an early reset,
+     * at most 15 minutes before the reset was noticed.
+     */
+    val complete get() = lastSeen >= end - COMPLETE_SECONDS || (early && closedAt != null && lastSeen >= closedAt - COMPLETE_SECONDS)
     val counted get() = (peak - baseline).coerceAtLeast(0.0)
 
     companion object { const val COMPLETE_SECONDS = 15 * 60L }

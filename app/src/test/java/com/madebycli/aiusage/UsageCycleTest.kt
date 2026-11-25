@@ -56,6 +56,7 @@ class UsageCycleTest {
             var cycleEnd: Long? = null
             var percent = 0.0
             val readings = mutableListOf<UsageSnapshot>()
+            val originals = mutableListOf<UsageSnapshot>()
             while (t < at("2026-11-15T00:00:00Z")) {
                 t += random.nextLong(60, 4 * 3600)
                 if (cycleEnd != null && t >= cycleEnd) { cycleEnd = null; percent = 0.0 }
@@ -63,6 +64,7 @@ class UsageCycleTest {
                 if (cycleEnd != null) percent = (percent + random.nextDouble(0.0, 30.0)).coerceAtMost(100.0)
                 val reading = snap(t, five = percent to (cycleEnd ?: (t + FIVE_HOURS)))
                 readings += reading
+                originals += reading
                 // Duplicates and stale re-reads must change nothing.
                 if (random.nextInt(4) == 0) readings += reading
                 if (random.nextInt(6) == 0) readings += reading.copy(fetchedAt = t - 30)
@@ -77,8 +79,8 @@ class UsageCycleTest {
                 assertTrue("${day.date}: ${day.fiveCycles} cycles", day.fiveCycles <= 5)
                 assertTrue("${day.date}: ${day.five}", day.five <= day.fiveCycles * 100.0 + 0.0001)
             }
-            val clean = feed(readings.distinctBy { it.fetchedAt }.sortedBy { it.fetchedAt })
-            assertEquals(clean.fiveCycles, ledger.fiveCycles)
+            // Duplicates and late re-reads were dropped: the result equals the clean sequence exactly.
+            assertEquals(feed(originals).fiveCycles, ledger.fiveCycles)
         }
     }
 

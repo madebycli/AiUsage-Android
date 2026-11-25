@@ -74,7 +74,7 @@ fun OrionGroupItem(i: Int, n: Int, modifier: Modifier = Modifier, selected: Bool
     val top by animateDpAsState(if (i == 0 || selected) 20.dp else 4.dp, spec, label = "gt")
     val bottom by animateDpAsState(if (i == n - 1 || selected) 20.dp else 4.dp, spec, label = "gb")
     val shape = RoundedCornerShape(top, top, bottom, bottom)
-    val color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+    val color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.panel
     val m = modifier.fillMaxWidth().padding(bottom = 2.dp)
     if (onClick != null) Surface(onClick, m, shape = shape, color = color) { content() } else Surface(m, shape = shape, color = color) { content() }
 }

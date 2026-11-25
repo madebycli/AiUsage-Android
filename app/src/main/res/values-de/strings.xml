@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_refresh">Jetzt aktualisieren</string>
+    <string name="widget_description">Verbrauch und Reset-Zeiten deiner KI-Accounts</string>
+    <string name="widget_config_title">AI-Usage-Widget</string>
+
+    <string name="time_in">in %1$s</string>
+    <string name="time_in_under_minute">in unter 1 Min.</string>
+    <plurals name="time_in_days">
+        <item quantity="one">in %d Tag</item>
+        <item quantity="other">in %d Tagen</item>
+    </plurals>
+    <string name="unit_days">%d T.</string>
+    <string name="unit_hours">%d Std.</string>
+    <string name="unit_minutes">%d Min.</string>
+    <string name="time_tomorrow_at">morgen %1$s</string>
+    <string name="time_yesterday_at">gestern %1$s</string>
+    <string name="time_weekday_at">%1$s %2$s</string>
+    <string name="time_just_now">gerade eben</string>
+    <string name="time_ago">vor %1$s</string>
+    <plurals name="time_days_ago">
+        <item quantity="one">vor %d Tag</item>
+        <item quantity="other">vor %d Tagen</item>
+    </plurals>
+    <string name="date_day_month">%1$d.%2$d.</string>
+    <string name="date_long">%1$s, %2$d. %3$s</string>
+    <string name="date_medium">%1$s, %2$d. %3$s</string>
+    <plurals name="limits">
+        <item quantity="one">%s Limit</item>
+        <item quantity="other">%s Limits</item>
+    </plurals>
+    <string-array name="weekdays_short">
+        <item>Mo.</item><item>Di.</item><item>Mi.</item><item>Do.</item><item>Fr.</item><item>Sa.</item><item>So.</item>
+    </string-array>
+    <string-array name="weekdays_long">
+        <item>Montag</item><item>Dienstag</item><item>Mittwoch</item><item>Donnerstag</item><item>Freitag</item><item>Samstag</item><item>Sonntag</item>
+    </string-array>
+    <string-array name="weekdays_letter">
+        <item>M</item><item>D</item><item>M</item><item>D</item><item>F</item><item>S</item><item>S</item>
+    </string-array>
+    <string-array name="months_short">
+        <item>Jan.</item><item>Feb.</item><item>März</item><item>Apr.</item><item>Mai</item><item>Juni</item><item>Juli</item><item>Aug.</item><item>Sep.</item><item>Okt.</item><item>Nov.</item><item>Dez.</item>
+    </string-array>
+    <string-array name="months_long">
+        <item>Januar</item><item>Februar</item><item>März</item><item>April</item><item>Mai</item><item>Juni</item><item>Juli</item><item>August</item><item>September</item><item>Oktober</item><item>November</item><item>Dezember</item>
+    </string-array>
+</resources>

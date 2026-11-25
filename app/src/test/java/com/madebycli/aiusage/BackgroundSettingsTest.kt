@@ -28,7 +28,7 @@ class BackgroundSettingsTest {
     private fun snapshot(at: Long, percent: Double, provider: String = "Codex", reset: Long? = 200000) = UsageSnapshot(null,
         listOf(QuotaGroup(provider, listOf(UsageWindow(percent, 18000, reset)))), at)
 
-    @Test fun `three hour work replaces retired schedules, stays unique and can be disabled`() {
+    @Test fun `hourly work replaces retired schedules, stays unique and can be disabled`() {
         val work = WorkManager.getInstance(context)
         listOf("daily-account-measurement", "four-hour-account-refresh").forEach {
             work.enqueueUniquePeriodicWork(it, ExistingPeriodicWorkPolicy.KEEP, PeriodicWorkRequestBuilder<AccountRefreshWorker>(24, TimeUnit.HOURS).build())
@@ -37,7 +37,7 @@ class BackgroundSettingsTest {
         AccountRefresh.sync(context, true)
         assertTrue(work.getWorkInfosForUniqueWork("daily-account-measurement").get().all { it.state.isFinished })
         assertTrue(work.getWorkInfosForUniqueWork("four-hour-account-refresh").get().all { it.state.isFinished })
-        assertEquals(TimeUnit.HOURS.toMillis(3), AccountRefresh.request().workSpec.intervalDuration)
+        assertEquals(TimeUnit.HOURS.toMillis(1), AccountRefresh.request().workSpec.intervalDuration)
         val infos = work.getWorkInfosForUniqueWork(AccountRefresh.NAME).get().filter { !it.state.isFinished }
         assertEquals(1, infos.size)
         assertEquals(NetworkType.CONNECTED, infos.single().constraints.requiredNetworkType)
@@ -52,18 +52,31 @@ class BackgroundSettingsTest {
         assertTrue(context.noBackupFilesDir.listFiles().orEmpty().none { it.name.endsWith("usage.enc") })
     }
 
-    @Test fun `the background interval is chosen in hours and applied without restarting the period`() {
+    @Test fun `the background interval is chosen in minutes, 0_9 hours carry over, and it stays at most five hours`() {
         val prefs = context.getSharedPreferences("alerts", 0)
-        assertEquals(3L, AccountRefresh.hours(context))
-        prefs.edit().putInt("hours", 6).commit()
-        assertEquals(6L, AccountRefresh.hours(context))
-        prefs.edit().putInt("hours", 5).commit()
-        assertEquals("unknown choices fall back to the default", 3L, AccountRefresh.hours(context))
-        prefs.edit().putInt("hours", 1).commit()
+        assertEquals(60L, AccountRefresh.minutes(context))
+        prefs.edit().putInt("hours", 2).commit()
+        assertEquals("a deliberate 0.9 choice of two hours is kept", 120L, AccountRefresh.minutes(context))
+        prefs.edit().putInt("hours", 12).commit()
+        assertEquals("longer than five hours would miss cycles", 60L, AccountRefresh.minutes(context))
+        AccountRefresh.setMinutes(context, 30)
+        assertEquals(30L, AccountRefresh.minutes(context))
+        prefs.edit().putInt("minutes", 7).commit()
+        assertEquals("unknown choices fall back to the default", 60L, AccountRefresh.minutes(context))
+        assertTrue(AccountRefresh.choices.all { it in 15L..300L })
         AccountRefresh.sync(context, true)
         val info = WorkManager.getInstance(context).getWorkInfosForUniqueWork(AccountRefresh.NAME).get().single { !it.state.isFinished }
         assertEquals(NetworkType.CONNECTED, info.constraints.requiredNetworkType)
-        assertEquals(TimeUnit.HOURS.toMillis(1), AccountRefresh.request(1).workSpec.intervalDuration)
+        assertEquals(TimeUnit.MINUTES.toMillis(30), AccountRefresh.request(30).workSpec.intervalDuration)
+    }
+
+    @Test fun `background reads are logged without tokens and capped`() {
+        BackgroundLog.clear(context)
+        repeat(BackgroundLog.MAX + 5) { BackgroundLog.add(context, BackgroundLog.Entry(1000L + it, SyncTrigger.PERIODIC, 10, listOf(BackgroundLog.Result("a", it % 2 == 0, null)))) }
+        val log = BackgroundLog.read(context)
+        assertEquals(BackgroundLog.MAX, log.size)
+        assertEquals("newest first", 1000L + BackgroundLog.MAX + 4, log.first().at)
+        assertEquals("http-429", BackgroundLog.reason(HttpFailure(429, 10)))
     }
 
     @Test fun `a firing reminder follows the providers newest report`() {

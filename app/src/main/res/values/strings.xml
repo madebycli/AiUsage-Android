@@ -1,6 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Base language: English. German lives in values-de. Every visible text of the app is here; Weblate reads this format directly. -->
 <resources>
-    <string name="widget_refresh">Jetzt aktualisieren</string>
-    <string name="widget_description">Verbrauch und Reset-Zeiten deiner Codex- und Claude-Accounts</string>
-    <string name="widget_loading">AI Usage</string>
-    <string name="widget_config_title">AI Usage Widget</string>
+    <string name="app_name" translatable="false">AI Usage</string>
+
+    <!-- Widget -->
+    <string name="widget_refresh">Refresh now</string>
+    <string name="widget_description">Usage and reset times of your AI accounts</string>
+    <string name="widget_loading" translatable="false">AI Usage</string>
+    <string name="widget_config_title">AI Usage widget</string>
+
+    <!-- Time and numbers -->
+    <string name="time_in">in %1$s</string>
+    <string name="time_in_under_minute">in under a minute</string>
+    <plurals name="time_in_days">
+        <item quantity="one">in %d day</item>
+        <item quantity="other">in %d days</item>
+    </plurals>
+    <string name="unit_days">%d d</string>
+    <string name="unit_hours">%d h</string>
+    <string name="unit_minutes">%d min</string>
+    <string name="time_tomorrow_at">tomorrow %1$s</string>
+    <string name="time_yesterday_at">yesterday %1$s</string>
+    <string name="time_weekday_at">%1$s %2$s</string>
+    <string name="time_just_now">just now</string>
+    <string name="time_ago">%1$s ago</string>
+    <plurals name="time_days_ago">
+        <item quantity="one">%d day ago</item>
+        <item quantity="other">%d days ago</item>
+    </plurals>
+    <string name="date_day_month">%2$d/%1$d</string>
+    <string name="date_long">%1$s, %3$s %2$d</string>
+    <string name="date_medium">%1$s, %3$s %2$d</string>
+    <plurals name="limits">
+        <item quantity="one">%s limit</item>
+        <item quantity="other">%s limits</item>
+    </plurals>
+    <string-array name="weekdays_short">
+        <item>Mon</item><item>Tue</item><item>Wed</item><item>Thu</item><item>Fri</item><item>Sat</item><item>Sun</item>
+    </string-array>
+    <string-array name="weekdays_long">
+        <item>Monday</item><item>Tuesday</item><item>Wednesday</item><item>Thursday</item><item>Friday</item><item>Saturday</item><item>Sunday</item>
+    </string-array>
+    <string-array name="weekdays_letter">
+        <item>M</item><item>T</item><item>W</item><item>T</item><item>F</item><item>S</item><item>S</item>
+    </string-array>
+    <string-array name="months_short">
+        <item>Jan</item><item>Feb</item><item>Mar</item><item>Apr</item><item>May</item><item>Jun</item><item>Jul</item><item>Aug</item><item>Sep</item><item>Oct</item><item>Nov</item><item>Dec</item>
+    </string-array>
+    <string-array name="months_long">
+        <item>January</item><item>February</item><item>March</item><item>April</item><item>May</item><item>June</item><item>July</item><item>August</item><item>September</item><item>October</item><item>November</item><item>December</item>
+    </string-array>
 </resources>
