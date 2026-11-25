@@ -5,7 +5,7 @@ on:
       tag:
         description: GitHub prerelease tag
         required: true
-        default: v0.9.5-preview.1
+        default: v2.0.0-preview.1
         type: string
 permissions:
   contents: write
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
-    if: github.ref == 'refs/heads/design/iris-ui'
+    if: github.ref == 'refs/heads/design/iris-ui' || github.ref == 'refs/heads/claude/pensive-hopper-967t87'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,13 +83,16 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
           sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
           cat > preview-notes.md <<'NOTES'
-          Preview of AI Usage 0.9.5: dark/light foreground fixes, consistent page gutters, native settings rows and animated category emblems. Includes the Pixel 9 before/after audit.
+          Preview of AI Usage 2.0.
 
-          Normal Android package: `com.madebycli.aiusage`. Signed with the same release certificate as Stable 0.9.1; optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate Android application.
+          - Usage counted per 5-hour window, on the day it started; re-reads never count twice. Windows whose end was not seen are marked as a lower bound.
+          - Background reads at a chosen interval (15 min to 5 h) and 3 minutes before every window ends, through AlarmManager. Log of the last 100 reads under Settings, Background.
+          - Planner tab, new statistics, resets grouped per account, playful home screen (compact stays selectable).
+          - Settings laid out as in Iris. English and German; every text in string resources.
+          - Gemini through Antigravity (experimental), only in builds with the Gemini sign-in client configured.
 
-          Includes tests, lint, signature and application identity verification. No merge into main; the latest Stable release remains unchanged.
+          Normal Android package `com.madebycli.aiusage`, signed with the same release certificate as Stable, so it installs over the existing app and keeps accounts and history. Optimised and not debuggable. Preview is a GitHub prerelease designation, not a separate application. No merge into main.
           NOTES
-          printf '\n[Preview gallery and detailed English review](https://github.com/%s/blob/%s/docs/pixel9-audit/README.md)\n' "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> preview-notes.md
           gh release create "$PREVIEW_TAG" "AiUsage-$PREVIEW_TAG.apk" SHA256SUMS \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "AI Usage ${PREVIEW_TAG#v}" --notes-file preview-notes.md --prerelease --latest=false
