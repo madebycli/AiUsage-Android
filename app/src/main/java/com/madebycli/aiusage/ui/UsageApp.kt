@@ -36,7 +36,7 @@ private object Route {
 }
 
 @Composable
-fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String? = null, notificationEvent: Long = 0) {
+fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String? = null, notificationEvent: Long = 0, launchTab: String? = null) {
     var tab by rememberSaveable { mutableStateOf(state.nav.initial) }
     var resetProvider by rememberSaveable { mutableStateOf(Providers.CODEX) }
     var statsScope by rememberSaveable { mutableStateOf(ALL_ACCOUNTS) }
@@ -74,11 +74,15 @@ fun UsageApp(state: UiState, model: UsageViewModel, notificationAccount: String?
             show(Route.account(event.accountId))
         }
     }
-    LaunchedEffect(notificationEvent, notificationAccount, state.accounts.size) {
+    LaunchedEffect(notificationEvent, notificationAccount, launchTab, state.accounts.size) {
         if (notificationEvent > 0 && notificationEvent != handledNotification && notificationAccount != null && state.account(notificationAccount) != null) {
             handledNotification = notificationEvent
             tab = AppTab.USAGE
             show(Route.account(notificationAccount))
+        } else if (notificationEvent > 0 && notificationEvent != handledNotification && notificationAccount == null && launchTab != null) {
+            // A widget opens its own tab, if that tab is shown in the navigation.
+            handledNotification = notificationEvent
+            AppTab.entries.firstOrNull { it.name == launchTab }?.takeIf { it in visibleTabs }?.let { stack.clear(); sorting = false; tab = it }
         }
     }
 

@@ -5,7 +5,6 @@
 
     <!-- Widget -->
     <string name="widget_refresh">Refresh now</string>
-    <string name="widget_description">Usage and reset times of your AI accounts</string>
     <string name="widget_loading" translatable="false">AI Usage</string>
     <string name="widget_config_title">AI Usage widget</string>
 
@@ -69,7 +68,7 @@
     <string name="page_background">Background</string>
     <string name="page_background_desc">Refresh interval and log</string>
     <string name="page_widgets">Widgets</string>
-    <string name="page_widgets_desc">Layouts on the home screen</string>
+    <string name="page_widgets_desc">Usage, statistics, planner and resets on the home screen</string>
     <string name="page_navigation">Navigation</string>
     <string name="page_navigation_desc">Bottom bar and start page</string>
     <string name="page_about">About</string>
@@ -166,8 +165,7 @@
     <string name="nav_start">Opens on</string>
     <string name="nav_start_last">Last page</string>
     <string name="nav_stats_defaults">Statistics default</string>
-    <string name="widgets_empty">Long-press the home screen, open Widgets and pick AI Usage.</string>
-    <string name="widgets_item">Widget %1$d</string>
+    <string name="widgets_empty">None yet. Add one below.</string>
     <string name="about_unofficial">Not affiliated with OpenAI, Anthropic or Google.</string>
     <string name="about_source">Source code and licences</string>
     <string name="about_version">Version %1$s · Build %2$d</string>
@@ -181,19 +179,12 @@
     <string name="metric_five">5-hour limit</string>
     <string name="metric_week">Weekly limit</string>
     <string name="widget_style_bars">Bars</string>
-    <string name="widget_style_bars_hint">Name, bar and reset per window</string>
     <string name="widget_style_compact">Compact</string>
-    <string name="widget_style_compact_hint">One line per account</string>
     <string name="widget_style_percent">Percent</string>
-    <string name="widget_style_percent_hint">Large numbers, no bars</string>
     <string name="widget_style_rings">Rings</string>
-    <string name="widget_style_rings_hint">A ring per account</string>
     <string name="widget_auto">Automatic</string>
     <string name="widget_stack">Stacked</string>
     <string name="widget_grid">Grid</string>
-    <string name="widget_side_by_side">Side by side</string>
-    <string name="widget_preset_custom">Custom</string>
-    <string name="widget_preset_detailed">Detailed</string>
     <string name="widget_both">Both</string>
     <string name="widget_reset_clock">Clock time</string>
     <string name="widget_reset_relative">Time left</string>
@@ -476,7 +467,6 @@
     <string name="widget_reset_unknown">Reset unknown</string>
     <string name="widget_no_account">No account connected yet</string>
     <string name="widget_none_chosen">No account selected</string>
-    <string name="widget_reset_here">Reset is due</string>
     <string name="notify_window_five">5-hour</string>
     <string name="notify_window_week">weekly</string>
     <string name="widget_five_short">5 h</string>
@@ -485,26 +475,17 @@
     <string name="widget_week_tiny">Wk</string>
     <string name="widget_more">+%1$d more</string>
     <string name="widget_refreshing">Refreshing…</string>
-    <string name="widget_as_of">As of %1$s</string>
-    <string name="widget_stale">outdated</string>
-    <string name="widget_reset_prefix">Reset %1$s</string>
     <string name="wc_title">Customise widget</string>
-    <string name="wc_preset">Apply a template</string>
     <string name="wc_taller">Make the widget taller in the launcher for this layout; at its current size it is shown compact.</string>
     <string name="wc_accounts">Accounts</string>
     <string name="wc_no_accounts">No account connected yet. Connect one in the app first.</string>
     <string name="wc_display">Display</string>
     <string name="wc_style">Style</string>
     <string name="wc_arrange_accounts">Arrange accounts</string>
-    <string name="wc_arrange_windows">Arrange windows</string>
     <string name="wc_windows">Windows</string>
     <string name="wc_reset">Reset time</string>
-    <string name="wc_example_clock">e.g. 17:40</string>
-    <string name="wc_example_relative">e.g. in 2 h 50 min</string>
-    <string name="wc_example_both">e.g. 17:40 · in 2 h 50 min</string>
     <string name="wc_bar_color">Bar colour</string>
     <string name="wc_traffic_hint" formatted="false">Green up to 70 %, yellow up to 90 %, then red</string>
-    <string name="wc_app_colors">App colours</string>
     <string name="wc_colors_shape">Colours and shape</string>
     <string name="wc_background">Background</string>
     <string name="wc_opacity">Opacity</string>
@@ -517,15 +498,58 @@
     <string name="wc_updated_desc">Warns about outdated data</string>
     <string name="wc_plan">Show plan</string>
     <string name="wc_plan_desc">Plus, Max 5x and so on</string>
-    <string name="wc_preview">Preview</string>
-    <string name="wc_size_hint">Test sizes; the real size is set in the launcher.</string>
     <string name="wc_your_widget">Your widget</string>
     <string name="wc_wide">Wide</string>
-    <string name="wc_tall">Tall</string>
     <string name="wc_large">Large</string>
     <string name="wc_narrow">Narrow</string>
     <string name="wc_all_accounts">All accounts</string>
     <string name="wc_all_accounts_desc">In home screen order; new ones are added</string>
     <string name="alerts_lead">Lead time</string>
     <string name="alerts_at_reset">0 min</string>
+    <!-- Widget Update -->
+    <string name="widget_kind_usage">Usage</string>
+    <string name="widget_kind_usage_desc">Your limits as shapes, bars or rings</string>
+    <string name="widget_kind_stats">Statistics</string>
+    <string name="widget_kind_stats_desc">Usage of the last days as a chart</string>
+    <string name="widget_kind_plan">Planner</string>
+    <string name="widget_kind_plan_desc">Which account to use now, and the week ahead</string>
+    <string name="widget_kind_resets">Resets</string>
+    <string name="widget_kind_resets_desc">The next resets with the time left</string>
+    <string name="widget_style_liquid">Liquid</string>
+    <string name="widget_span_week">7 days</string>
+    <string name="widget_span_two_weeks">14 days</string>
+    <string name="widget_span_month">28 days</string>
+    <plurals name="widget_limits_unit">
+        <item quantity="one">limit</item>
+        <item quantity="other">limits</item>
+    </plurals>
+    <string name="widget_week_points" formatted="false">% of the weekly limit</string>
+    <string name="widget_today">Today</string>
+    <plurals name="widget_streak_chip">
+        <item quantity="one">%d day in a row</item>
+        <item quantity="other">%d days in a row</item>
+    </plurals>
+    <string name="widget_free_at">Free from %1$s</string>
+    <string name="widget_week_left_value">%1$s %% of the week left</string>
+    <string name="widget_five_left_value">%1$s %% of 5 h left</string>
+    <string name="widget_then">Then</string>
+    <string name="widget_next_up">Free first</string>
+    <string name="widget_week_reset">Weekly reset %1$s</string>
+    <string name="widget_next_reset">Next reset</string>
+    <string name="widget_no_resets">No reset time known</string>
+    <plurals name="widget_banked">
+        <item quantity="one">%d saved</item>
+        <item quantity="other">%d saved</item>
+    </plurals>
+    <string name="widget_no_history">No history yet</string>
+    <string name="wc_small">Small</string>
+    <string name="wc_save">Save</string>
+    <string name="wc_limit">Limit</string>
+    <string name="wc_span">Period</string>
+    <string name="widgets_placed">On your home screen</string>
+    <string name="widgets_gallery">Add a widget</string>
+    <string name="widgets_add">Add</string>
+    <string name="widget_from">from %1$s</string>
+    <string name="widget_left_short">%1$s %% left</string>
+    <string name="widget_per_day">Ø per day</string>
 </resources>

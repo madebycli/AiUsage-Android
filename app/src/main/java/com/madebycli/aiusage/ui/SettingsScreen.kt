@@ -121,7 +121,7 @@ internal fun SettingsScreen(state: UiState, model: UsageViewModel, onBack: () ->
                             SettingsPage.NOTIFICATIONS -> notificationsPage(state, model)
                             SettingsPage.APPEARANCE -> appearancePage(state, model)
                             SettingsPage.NAVIGATION -> navigationPage(state, model)
-                            SettingsPage.WIDGETS -> widgetsPage()
+                            SettingsPage.WIDGETS -> widgetsPage(state)
                             SettingsPage.ABOUT -> aboutPage()
                         }
                     }
@@ -583,18 +583,71 @@ private fun BarPreview(nav: NavSettings) {
 
 // ---- Widgets -------------------------------------------------------------------------------------------
 
-private fun androidx.compose.foundation.lazy.LazyListScope.widgetsPage() {
-    settingsItem("widgets") {
+private fun androidx.compose.foundation.lazy.LazyListScope.widgetsPage(state: UiState) {
+    settingsItem("widgets-placed", 0) {
         val context = LocalContext.current
-        val manager = remember { AppWidgetManager.getInstance(context) }
-        var ids by remember { mutableStateOf(manager.getAppWidgetIds(ComponentName(context, UsageWidgetProvider::class.java)).toList()) }
-        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { ids = manager.getAppWidgetIds(ComponentName(context, UsageWidgetProvider::class.java)).toList() }
+        fun placed() = WidgetKind.entries.flatMap { kind -> WidgetUpdater.ids(context, kind).map { it to kind } }
+        var ids by remember { mutableStateOf(placed()) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { ids = placed() }
+        SettingsSectionLabel(stringResource(R.string.widgets_placed))
         SettingsGroup {
             if (ids.isEmpty()) SettingsBlock { Text(stringResource(R.string.widgets_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            ids.forEach { id ->
-                val config = WidgetConfigStore.read(context, id)
-                NavigationSettingsItem(stringResource(R.string.widgets_item, id), "${stringResource(config.style.label)} · ${stringResource(config.arrangement.label)}", Icons.Rounded.Widgets) {
+            ids.forEach { (id, kind) ->
+                val config = WidgetConfigStore.read(context, id, kind)
+                val detail = when (kind) {
+                    WidgetKind.USAGE -> "${stringResource(config.style.label)} · ${stringResource(config.windows.label)}"
+                    WidgetKind.STATS -> "${stringResource(config.metric.labelRes)} · ${stringResource(config.span.label)}"
+                    WidgetKind.PLAN -> if (config.accounts.isEmpty()) stringResource(R.string.wc_all_accounts) else pluralStringResource(R.plurals.accounts_count, config.accounts.size, config.accounts.size)
+                    WidgetKind.RESETS -> stringResource(config.windows.label)
+                }
+                SettingsItem(stringResource(kind.label), {
                     context.startActivity(Intent(context, WidgetConfigActivity::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
+                }, subtitle = detail, leading = { WidgetKindBadge(kind) }) {
+                    Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        SettingsSectionLabel(stringResource(R.string.widgets_gallery))
+    }
+    WidgetKind.entries.forEachIndexed { index, kind ->
+        settingsItem("widget-kind-${kind.name}", index + 1) { WidgetGalleryCard(kind, state) }
+    }
+}
+
+@Composable
+private fun WidgetKindBadge(kind: WidgetKind, size: androidx.compose.ui.unit.Dp = 40.dp) {
+    val (bg, fg) = orionTonal(kind.accent)
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(Modifier.matchParentSize().background(bg, kind.shape.toShape()))
+        Icon(kind.icon, null, tint = fg, modifier = Modifier.size(size * .5f))
+    }
+}
+
+/** One widget of the app: its real picture with your accounts, what it shows, and a button that puts it on the home screen. */
+@Composable
+private fun WidgetGalleryCard(kind: WidgetKind, state: UiState) {
+    val context = LocalContext.current
+    val accounts = remember(state.accounts) { WidgetData.fromStates(state.accounts) }
+    val manager = remember { AppWidgetManager.getInstance(context) }
+    val canPin = remember { runCatching { manager.isRequestPinAppWidgetSupported }.getOrDefault(false) }
+    val (w, h) = kind.defaultSize
+    Surface(color = MaterialTheme.colorScheme.panel, shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            WallpaperBox(Modifier.fillMaxWidth(), kind.accent) {
+                BoxWithConstraints(Modifier.padding(vertical = 22.dp, horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    WidgetPicture(WidgetConfig(kind = kind, showRefresh = true), accounts, w, h, displayWidth = minOf(maxWidth, (w * 1.1f).dp))
+                }
+            }
+            Row(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                WidgetKindBadge(kind, 44.dp)
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(stringResource(kind.label), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(kind.description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (canPin) FilledTonalButton(onClick = {
+                    runCatching { manager.requestPinAppWidget(ComponentName(context, WidgetUpdater.providers.getValue(kind)), null, null) }
+                }, shapes = ButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.widgets_add))
                 }
             }
         }

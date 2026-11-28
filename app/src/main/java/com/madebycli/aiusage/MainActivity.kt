@@ -22,13 +22,19 @@ class MainActivity : ComponentActivity() {
     private var notificationEvent by mutableLongStateOf(0)
     override fun onSaveInstanceState(outState: Bundle) { outState.putLong("notificationEvent", notificationEvent); super.onSaveInstanceState(outState) }
     private var notificationAccount by mutableStateOf<String?>(null)
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); notificationAccount = intent.getStringExtra("account"); notificationEvent++ }
+    /** A tab a widget asked for: "PLAN", "STATS" or "RESETS". */
+    private var launchTab by mutableStateOf<String?>(null)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent); setIntent(intent)
+        notificationAccount = intent.getStringExtra("account"); launchTab = intent.getStringExtra("tab"); notificationEvent++
+    }
     private val model: UsageViewModel by viewModels()
     override fun onResume() { super.onResume(); model.foregroundRefresh() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         notificationAccount = intent.getStringExtra("account")
-        notificationEvent = savedInstanceState?.getLong("notificationEvent") ?: if (notificationAccount != null) 1L else 0L
+        launchTab = intent.getStringExtra("tab")
+        notificationEvent = savedInstanceState?.getLong("notificationEvent") ?: if (notificationAccount != null || launchTab != null) 1L else 0L
         enableEdgeToEdge()
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
@@ -43,7 +49,7 @@ class MainActivity : ComponentActivity() {
                 // The window behind the app has the app's own background, so no light flash can show through.
                 val background = androidx.compose.material3.MaterialTheme.colorScheme.background
                 androidx.compose.runtime.SideEffect { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb())) }
-                UsageApp(state, model, notificationAccount, notificationEvent)
+                UsageApp(state, model, notificationAccount, notificationEvent, launchTab)
             }
         }
     }

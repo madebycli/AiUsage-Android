@@ -1,469 +1,87 @@
 package com.madebycli.aiusage.widget
 
 import android.content.Context
-import android.content.res.Configuration
-import android.graphics.*
-import android.os.Build
-import android.text.TextPaint
-import androidx.core.content.ContextCompat
-import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.DrawableCompat
-import com.madebycli.aiusage.Providers
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import com.madebycli.aiusage.R
-import com.madebycli.aiusage.data.*
+import com.madebycli.aiusage.Texts
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
 
-/** Colours of one widget, taken from the app palette (or Android's own colours on request). */
-class WidgetPalette(
-    val surface: Int, val tile: Int, val text: Int, val muted: Int, val track: Int,
-    val primary: Int, val secondary: Int, val error: Int, val good: Int, val warn: Int, val dark: Boolean
-)
-
+/**
+ * Draws every widget into a bitmap. Shared frame here (body, header, refresh button, empty states); the content of
+ * each kind lives in its own file.
+ */
 object WidgetRenderer {
-    /** Data older than this is marked as outdated. */
-    const val STALE_SECONDS = 6 * 3600L
+    const val STALE_SECONDS = WidgetChrome.STALE_SECONDS
 
-    fun palette(context: Context, config: WidgetConfig): WidgetPalette {
-        val systemDark = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-        val dark = when (config.theme) { WidgetTheme.SYSTEM -> systemDark; WidgetTheme.LIGHT -> false; else -> true }
-        val black = config.theme == WidgetTheme.BLACK
-        val base = if (dark) WidgetPalette(
-            surface = if (black) 0xFF000000.toInt() else 0xFF14161C.toInt(), tile = if (black) 0xFF14161C.toInt() else 0xFF1F222B.toInt(),
-            text = 0xFFE4E5EE.toInt(), muted = 0xFFAFB1C0.toInt(), track = if (black) 0xFF2A2D37.toInt() else 0xFF30333E.toInt(),
-            primary = 0xFFB8C5ED.toInt(), secondary = 0xFFD7BFEA.toInt(), error = 0xFFF2B8B5.toInt(),
-            good = 0xFF8FD3A8.toInt(), warn = 0xFFF0C46A.toInt(), dark = true)
-        else WidgetPalette(
-            surface = 0xFFF0F2F8.toInt(), tile = 0xFFE3E7F1.toInt(), text = 0xFF1D2029.toInt(), muted = 0xFF5D6171.toInt(), track = 0xFFD2D7E4.toInt(),
-            primary = 0xFF4A5D8A.toInt(), secondary = 0xFF74588C.toInt(), error = 0xFFB3261E.toInt(),
-            good = 0xFF2E7D55.toInt(), warn = 0xFFB87A10.toInt(), dark = false)
-        if (!config.dynamic || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return base
-        fun color(id: Int) = runCatching { ContextCompat.getColor(context, id) }.getOrNull()
-        return if (dark) WidgetPalette(
-            color(android.R.color.system_neutral1_900)?.takeUnless { black } ?: base.surface, color(android.R.color.system_neutral1_800)?.takeUnless { black } ?: base.tile,
-            color(android.R.color.system_neutral1_50) ?: base.text, color(android.R.color.system_neutral2_200) ?: base.muted,
-            color(android.R.color.system_neutral1_700) ?: base.track, color(android.R.color.system_accent1_200) ?: base.primary,
-            color(android.R.color.system_accent3_200) ?: base.secondary, base.error, base.good, base.warn, true)
-        else WidgetPalette(
-            color(android.R.color.system_neutral1_50) ?: base.surface, color(android.R.color.system_neutral1_100) ?: base.tile,
-            color(android.R.color.system_neutral1_900) ?: base.text, color(android.R.color.system_neutral2_700) ?: base.muted,
-            color(android.R.color.system_neutral1_200) ?: base.track, color(android.R.color.system_accent1_600) ?: base.primary,
-            color(android.R.color.system_accent3_600) ?: base.secondary, base.error, base.good, base.warn, false)
+    fun palette(context: Context, config: WidgetConfig): WidgetPalette = WidgetColorsKit.palette(context, config)
+
+    /** The header (title, time, refresh) needs this much height. Small widgets show only their content. */
+    fun hasHeader(config: WidgetConfig, widthDp: Int, heightDp: Int): Boolean = widthDp >= 110 && when (config.kind) {
+        // The usage widget gives its height to the shapes first; a standard 4×2 widget has no room for a header.
+        WidgetKind.USAGE -> heightDp >= 150 && (config.showRefresh || config.showUpdated)
+        else -> heightDp >= 100
     }
 
-    private class Row(val label: String, val seconds: Long, val window: UsageWindow?)
+    fun refreshVisible(config: WidgetConfig, widthDp: Int, heightDp: Int) = config.showRefresh && hasHeader(config, widthDp, heightDp)
 
-    private enum class State { UNKNOWN, EXPIRED, LIVE }
+    private fun padding(widthDp: Int, heightDp: Int) = if (heightDp < 90 || widthDp < 120) 10f else 14f
 
-    private fun Row.state(now: Long) = when {
-        window == null -> State.UNKNOWN
-        window.resetAt != null && window.resetAt <= now -> State.EXPIRED
-        else -> State.LIVE
+    private fun content(config: WidgetConfig, widthDp: Int, heightDp: Int): Area {
+        val pad = padding(widthDp, heightDp)
+        val top = if (hasHeader(config, widthDp, heightDp)) WidgetChrome.HEADER + 6f else pad
+        return Area(pad, top, widthDp - pad * 2, heightDp - top - pad)
     }
 
-    private fun rowsFor(account: WidgetAccount, config: WidgetConfig): List<Row> = buildList {
-        if (config.windows != WidgetWindows.WEEK) add(Row(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_five_short), FIVE_HOURS, account.window(FIVE_HOURS)))
-        if (config.windows != WidgetWindows.FIVE) add(Row(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_week_short), ONE_WEEK, account.window(ONE_WEEK)))
-    }
-
-    /** Draws everything with density-independent numbers; [px] converts to pixels. */
-    private class Painter(val context: Context, val canvas: Canvas, val density: Float, val fontScale: Float, val palette: WidgetPalette, val config: WidgetConfig) {
-        fun px(dp: Float) = dp * density
-
-        /** The same painter with everything [factor] times larger; coordinates are then given in the smaller space. */
-        fun scaled(factor: Float) = if (factor == 1f) this else Painter(context, canvas, density * factor, fontScale, palette, config)
-        val regular: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_regular)
-        val medium: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_medium)
-        val bold: Typeface = font(com.axiel7.anihyou.core.ui.R.font.usage_rounded_bold)
-        private fun font(id: Int): Typeface = runCatching { ResourcesCompat.getFont(context, id) }.getOrNull() ?: Typeface.DEFAULT
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
-        private val scale = config.textScale / 100f * min(fontScale, 1.3f)
-
-        fun sp(size: Float) = size * scale * density
-
-        fun measure(text: String, size: Float, face: Typeface): Float {
-            textPaint.typeface = face; textPaint.textSize = sp(size)
-            return textPaint.measureText(text)
-        }
-
-        /** Text with its baseline at [y]; [maxWidth] (dp) cuts it with an ellipsis. */
-        fun text(text: String, x: Float, y: Float, size: Float, face: Typeface, color: Int, align: Paint.Align = Paint.Align.LEFT, maxWidth: Float? = null) {
-            textPaint.typeface = face; textPaint.textSize = sp(size); textPaint.color = color; textPaint.textAlign = align
-            val shown = if (maxWidth == null) text else android.text.TextUtils.ellipsize(text, textPaint, px(maxWidth), android.text.TextUtils.TruncateAt.END).toString()
-            canvas.drawText(shown, px(x), px(y), textPaint)
-        }
-
-        /** The largest of [sizes] at which [text] still fits in [maxWidth] dp; the smallest otherwise. */
-        fun fitSize(text: String, maxWidth: Float, face: Typeface, sizes: List<Float>): Float =
-            sizes.firstOrNull { measure(text, it, face) <= px(maxWidth) } ?: sizes.last()
-
-        /** The first of [options] that fits in [maxWidth] dp, or the shortest cut off. */
-        fun fit(options: List<String>, maxWidth: Float, size: Float, face: Typeface): String =
-            options.firstOrNull { measure(it, size, face) <= px(maxWidth) } ?: options.last()
-
-        fun roundRect(x: Float, y: Float, w: Float, h: Float, radius: Float, color: Int) {
-            paint.style = Paint.Style.FILL; paint.color = color
-            canvas.drawRoundRect(RectF(px(x), px(y), px(x + w), px(y + h)), px(radius), px(radius), paint)
-        }
-
-        fun bar(x: Float, y: Float, w: Float, h: Float, progress: Float, color: Int) {
-            roundRect(x, y, w, h, h / 2, palette.track)
-            val filled = (w * progress.coerceIn(0f, 1f)).let { if (progress > 0f) max(it, h) else 0f }
-            if (filled > 0f) roundRect(x, y, min(filled, w), h, h / 2, color)
-        }
-
-        fun ring(cx: Float, cy: Float, radius: Float, stroke: Float, progress: Float, color: Int) {
-            paint.style = Paint.Style.STROKE; paint.strokeCap = Paint.Cap.ROUND; paint.strokeWidth = px(stroke)
-            val rect = RectF(px(cx - radius), px(cy - radius), px(cx + radius), px(cy + radius))
-            paint.color = palette.track
-            canvas.drawArc(rect, 135f, 270f, false, paint)
-            if (progress > 0f) { paint.color = color; canvas.drawArc(rect, 135f, 270f * progress.coerceIn(0f, 1f), false, paint) }
-            paint.style = Paint.Style.FILL
-        }
-
-        fun icon(resource: Int, x: Float, y: Float, size: Float, color: Int) {
-            val drawable = ContextCompat.getDrawable(context, resource)?.mutate() ?: return
-            DrawableCompat.setTint(drawable, color)
-            drawable.setBounds(px(x).toInt(), px(y).toInt(), px(x + size).toInt(), px(y + size).toInt())
-            drawable.draw(canvas)
-        }
-
-        fun brand(provider: String, x: Float, y: Float, size: Float) = icon(
-            when (provider) { Providers.CODEX -> R.drawable.ic_brand_codex; Providers.GEMINI -> R.drawable.ic_brand_gemini; else -> R.drawable.ic_brand_claude }, x, y, size,
-            when (provider) { Providers.CODEX -> palette.text; Providers.GEMINI -> 0xFF6E8EF5.toInt(); else -> 0xFFD58C70.toInt() })
-    }
-
-    private fun usageColor(p: WidgetPalette, config: WidgetConfig, seconds: Long, percent: Double): Int = when {
-        percent >= 100 -> p.error
-        config.colors == WidgetColors.TRAFFIC -> when { percent >= 90 -> p.error; percent >= 70 -> p.warn; else -> p.good }
-        seconds == FIVE_HOURS -> p.primary
-        else -> p.secondary
-    }
-
-    private fun resetOptions(row: Row, now: Long, config: WidgetConfig, prefix: String = ""): List<String> {
-        val window = row.window
-        return when (row.state(now)) {
-            State.UNKNOWN -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_not_reported))
-            State.EXPIRED -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_reached), com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_done))
-            State.LIVE -> {
-                val at = window?.resetAt ?: return listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_unknown), "–")
-                val clock = Fmt.clock(com.madebycli.aiusage.Texts.resources, at, now)
-                val left = Fmt.remaining(com.madebycli.aiusage.Texts.resources, at - now)
-                when (config.reset) {
-                    ResetFormat.CLOCK -> listOf("$prefix$clock", clock)
-                    ResetFormat.RELATIVE -> listOf("$prefix$left", left)
-                    ResetFormat.BOTH -> listOf("$prefix$clock · $left", "$prefix$clock", clock)
-                }
-            }
-        }
-    }
-
-    private fun percentText(row: Row, now: Long) = when (row.state(now)) {
-        State.LIVE -> "${formatPercent(row.window!!.usedPercent)}%"
-        else -> "–"
-    }
-
-    private fun progress(row: Row, now: Long) = if (row.state(now) == State.LIVE) (row.window!!.usedPercent / 100).toFloat() else 0f
-
-    private fun accent(p: WidgetPalette, config: WidgetConfig, row: Row, now: Long) =
-        if (row.state(now) == State.LIVE) usageColor(p, config, row.seconds, row.window!!.usedPercent) else p.muted
-
-    /** Smallest tile a style needs, in dp: (width, height). Below this height a tile falls back to the one-line layout. */
-    internal fun columnCount(config: WidgetConfig, width: Float, minimum: Float, accounts: Int): Int {
-        val fits = floor((width + 8f) / (minimum + 8f)).toInt().coerceIn(1, accounts.coerceAtLeast(1))
-        return when (config.arrangement) { WidgetArrangement.AUTO -> fits; WidgetArrangement.STACK -> 1; WidgetArrangement.GRID -> fits.coerceAtMost(2) }
-    }
-
-    private fun minTile(config: WidgetConfig, rows: Int): Pair<Float, Float> = when (config.style) {
-        WidgetStyle.BARS -> (if (rows > 1) 150f else 130f) to (if (rows > 1) 74f else 54f)
-        WidgetStyle.COMPACT -> (if (rows > 1) 210f else 160f) to 34f
-        WidgetStyle.PERCENT -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 104f else 72f) to (if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 48f else 62f)
-        WidgetStyle.RINGS -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 104f else 72f) to (if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 68f else 74f)
-    }
-
-    private fun maxTileHeight(config: WidgetConfig, rows: Int) = when (config.style) {
-        WidgetStyle.BARS -> 22f + rows * 38f + 18f
-        WidgetStyle.COMPACT -> 44f
-        WidgetStyle.PERCENT -> if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 78f else 96f
-        WidgetStyle.RINGS -> if (config.windowLayout == WidgetWindowLayout.STACKED) 16f + rows * 100f else 118f
-    }
-
-    /** Natural size of one tile in dp: (width, tallest useful height). Bigger tiles draw everything larger instead of leaving space. */
-    private fun naturalTile(config: WidgetConfig, rows: Int): Pair<Float, Float> = when (config.style) {
-        WidgetStyle.BARS -> (if (rows > 1) 190f else 170f) to maxTileHeight(config, rows)
-        WidgetStyle.COMPACT -> (if (rows > 1) 250f else 200f) to maxTileHeight(config, rows)
-        WidgetStyle.PERCENT -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 150f else 100f) to maxTileHeight(config, rows)
-        WidgetStyle.RINGS -> (if (rows > 1 && config.windowLayout != WidgetWindowLayout.STACKED) 150f else 100f) to maxTileHeight(config, rows)
-    }
-
-    internal fun effectiveStyle(config: WidgetConfig, widthDp: Int, heightDp: Int): WidgetStyle {
-        val pad = if (heightDp < 90 || widthDp < 120) 8f else 12f
-        val header = if ((config.showRefresh || config.showUpdated) && heightDp >= 100) 18f else 0f
-        val minimum = minTile(config, if (config.windows == WidgetWindows.BOTH) 2 else 1).second
-        return if (heightDp - 2 * pad - header < minimum - 1) WidgetStyle.COMPACT else config.style
-    }
-
-    /** Largest enlargement of the content in big widgets. */
-    private const val MAX_ENLARGE = 2.2f
+    /** The usage style drawn at this size; the settings show a hint when it differs from the chosen one. */
+    fun effectiveStyle(config: WidgetConfig, widthDp: Int, heightDp: Int): WidgetStyle =
+        UsageWidgetDraw.effectiveStyle(config, content(config, max(40, widthDp), max(40, heightDp)).h)
 
     fun render(context: Context, config: WidgetConfig, all: List<WidgetAccount>, widthDp: Int, heightDp: Int, now: Long = Instant.now().epochSecond,
         refreshing: Boolean = false, density: Float = context.resources.displayMetrics.density): Bitmap {
-        val width = max(40, widthDp).toFloat()
-        val height = max(40, heightDp).toFloat()
-        val bitmap = Bitmap.createBitmap((width * density).toInt().coerceAtLeast(1), (height * density).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val w = max(40, widthDp)
+        val h = max(40, heightDp)
+        val bitmap = Bitmap.createBitmap((w * density).toInt().coerceAtLeast(1), (h * density).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val palette = palette(context, config)
-        val painter = Painter(context, canvas, density, context.resources.configuration.fontScale, palette, config)
+        val p = Painter(context, canvas, density, context.resources.configuration.fontScale, palette, config)
         val alpha = config.opacity / 100f
-        fun withAlpha(color: Int) = Color.argb((Color.alpha(color) * alpha).toInt(), Color.red(color), Color.green(color), Color.blue(color))
-        painter.roundRect(0f, 0f, width, height, config.corner.toFloat(), withAlpha(palette.surface))
+        // Containers stay opaque against the body so that text on them keeps its contrast on any wallpaper.
+        val surface = withAlpha(palette.surface, alpha)
+        val tile = if (alpha >= 1f) palette.tile else withAlpha(palette.tile, max(alpha, .72f))
+        p.roundRect(0f, 0f, w.toFloat(), h.toFloat(), config.corner.toFloat(), surface)
 
         val accounts = WidgetData.select(all, config)
-        val pad = if (height < 90f || width < 120f) 8f else 12f
-        val gap = 8f
-        val hasHeader = (config.showRefresh || config.showUpdated) && height >= 100f
-        val headerHeight = if (hasHeader) 18f else 0f
-        val rowCount = if (config.windows == WidgetWindows.BOTH) 2 else 1
-        val left = pad
-        val top = pad + headerHeight
-        val contentW = width - pad * 2
-        // A style that cannot fit even one tile in this height shows the one-line layout for the whole widget.
-        val style = effectiveStyle(config, widthDp, heightDp)
-        val (minW, minH) = minTile(config.copy(style = style), rowCount)
-        val wouldOverflow = accounts.size > columnCount(config, contentW, minW, accounts.size) *
-            max(1, floor((height - pad - top + gap) / (minH + gap)).toInt())
-        // The "+N" marker lives in the header; widgets without one reserve a thin strip when there is room.
-        val stripHeight = if (wouldOverflow && !hasHeader && height >= 70f) 16f else 0f
-        val contentH = height - pad - top - stripHeight
+        val area = content(config, w, h)
+        val header = hasHeader(config, w, h)
+        val newest = accounts.mapNotNull { it.fetchedAt }.maxOrNull()
+        if (header) {
+            val badge = when (config.kind) {
+                WidgetKind.USAGE -> (accounts.size - UsageWidgetDraw.capacity(config, area, accounts.size)).takeIf { it > 0 }?.let { "+$it" }
+                WidgetKind.RESETS -> ResetsWidgetDraw.banked(accounts).takeIf { it > 0 }?.let { Texts.plural(R.plurals.widget_banked, it, it) }
+                else -> null
+            }
+            WidgetChrome.header(p, Texts.get(config.kind.label), newest, now, refreshing, w.toFloat(), badge)
+        }
         if (accounts.isEmpty()) {
-            painter.text(if (all.isEmpty()) com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_no_account) else com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_none_chosen), width / 2, height / 2 + 4, 12f, painter.medium, palette.muted, Paint.Align.CENTER, contentW)
+            WidgetChrome.empty(p, Texts.get(if (all.isEmpty()) R.string.widget_no_account else R.string.widget_none_chosen), area.x, area.y, area.w, area.h)
             return bitmap
         }
-        val columns = columnCount(config, contentW, minW, accounts.size)
-        val fittingRows = max(1, floor((contentH + gap) / (minH + gap)).toInt())
-        val capacity = columns * fittingRows
-        val shown = accounts.take(capacity)
-        val usedRows = ceil(shown.size / columns.toFloat()).toInt()
-        val tileW = (contentW - gap * (columns - 1)) / columns
-        val tileH = (contentH - gap * (usedRows - 1)) / usedRows
-        val (naturalW, naturalH) = naturalTile(config.copy(style = style), rowCount)
-        val enlarge = min(tileW / naturalW, tileH / naturalH).coerceIn(1f, MAX_ENLARGE)
-        val gridTop = top
-        val framed = accounts.size > 1 || shown.size > 1
-        if (hasHeader) drawHeader(painter, accounts, now, refreshing, width, pad, config, hidden = accounts.size - shown.size)
-
-        shown.forEachIndexed { index, account ->
-            val x = left + (index % columns) * (tileW + gap)
-            val y = gridTop + (index / columns) * (tileH + gap)
-            if (framed) painter.roundRect(x, y, tileW, tileH, max(8f, config.corner * 0.55f), withAlpha(palette.tile))
-            val inner = if (framed) 10f else 2f
-            val rows = rowsFor(account, config)
-            // Content is laid out in a smaller space and enlarged, so text and bars grow with the widget.
-            val k = enlarge
-            val drawer = painter.scaled(k)
-            val tileContentH = min(tileH / k, naturalH)
-            val cx = x / k
-            val cy = (y + (tileH - tileContentH * k) / 2) / k
-            val cw = tileW / k
-            when (style) {
-                WidgetStyle.BARS -> drawBars(drawer, account, rows, cx + inner, cy + (if (framed) 9f else 2f), cw - inner * 2, tileContentH - (if (framed) 18f else 4f), now)
-                WidgetStyle.COMPACT -> drawCompact(drawer, account, rows, cx + inner, cy, cw - inner * 2, tileContentH, now)
-                WidgetStyle.PERCENT -> drawPercent(drawer, account, rows, cx + inner, cy + (if (framed) 8f else 2f), cw - inner * 2, tileContentH - (if (framed) 16f else 4f), now)
-                WidgetStyle.RINGS -> drawRings(drawer, account, rows, cx + inner, cy + (if (framed) 8f else 2f), cw - inner * 2, tileContentH - (if (framed) 16f else 4f), now)
+        // Tiles take the body colour when the body is see-through, so translucent widgets do not turn patchy.
+        val back = if (alpha >= 1f) palette.surface else palette.tile
+        when (config.kind) {
+            WidgetKind.USAGE -> {
+                // Without a header, accounts that do not fit are counted in the first tile's title row.
+                val hidden = (accounts.size - UsageWidgetDraw.capacity(config, area, accounts.size)).takeIf { it > 0 && !header }
+                UsageWidgetDraw.draw(p, config, accounts, area, now, back, tile, hidden)
             }
-        }
-        if (accounts.size > shown.size && !hasHeader && stripHeight > 0f) {
-            val label = com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_more, accounts.size - shown.size)
-            painter.text(label, width - pad - 2, height - pad + 1f, 10f, painter.medium, palette.muted, Paint.Align.RIGHT)
+            WidgetKind.STATS -> if (accounts.all { it.ledger.fiveCycles.isEmpty() && it.ledger.weekCycles.isEmpty() && it.ledger.days.isEmpty() })
+                WidgetChrome.empty(p, Texts.get(R.string.widget_no_history), area.x, area.y, area.w, area.h)
+                else StatsWidgetDraw.draw(p, config, accounts, area, now, tile)
+            WidgetKind.PLAN -> PlanWidgetDraw.draw(p, config, accounts, area, now, tile)
+            WidgetKind.RESETS -> ResetsWidgetDraw.draw(p, config, accounts, area, now, tile)
         }
         return bitmap
-    }
-
-    private fun drawHeader(p: Painter, accounts: List<WidgetAccount>, now: Long, refreshing: Boolean, width: Float, pad: Float, config: WidgetConfig, hidden: Int) {
-        val newest = accounts.mapNotNull { it.fetchedAt }.maxOrNull()
-        val stale = newest != null && now - newest > STALE_SECONDS
-        val label = when {
-            refreshing -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_refreshing)
-            !config.showUpdated -> ""
-            newest == null -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading)
-            else -> com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_as_of, Fmt.clockOnly(com.madebycli.aiusage.Texts.resources, newest)) + if (stale) " · " + com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_stale) else ""
-        }
-        var right = width - pad
-        if (config.showRefresh) { p.icon(R.drawable.ic_widget_refresh, right - 16f, pad - 1f, 16f, p.palette.muted); right -= 22f }
-        if (hidden > 0) {
-            val badge = "+$hidden"
-            val w = p.measure(badge, 10f, p.bold) / p.density + 14f
-            p.roundRect(right - w, pad - 1f, w, 16f, 8f, p.palette.primary)
-            p.text(badge, right - w / 2, pad + 10.5f, 10f, p.bold, if (p.palette.dark) 0xFF20304F.toInt() else Color.WHITE, Paint.Align.CENTER)
-            right -= w + 6f
-        }
-        if (label.isNotEmpty()) {
-            val options = listOf(label, (newest?.let { Fmt.clockOnly(com.madebycli.aiusage.Texts.resources, it) } ?: label).let { if (stale) "$it !" else it })
-            p.text(p.fit(options, right - pad - 4f, 10f, p.medium), pad + 2, pad + 9f, 10f, p.medium, if (stale && !refreshing) p.palette.warn else p.palette.muted, maxWidth = right - pad - 4f)
-        }
-    }
-
-    private fun nameOf(account: WidgetAccount) = account.title
-
-    private fun drawBars(p: Painter, a: WidgetAccount, rows: List<Row>, x: Float, y: Float, w: Float, h: Float, now: Long) {
-        val colors = p.palette
-        p.brand(a.provider, x, y + 1f, 14f)
-        val plan = if (p.config.showPlan && w >= 150f) a.plan else null
-        val planW = plan?.let { min(p.measure(it, 10f, p.medium) / p.density + 4f, w * 0.38f) } ?: 0f
-        p.text(nameOf(a), x + 20f, y + 12f, 12.5f, p.bold, colors.text, maxWidth = w - 20f - planW - 4f)
-        if (plan != null) p.text(plan, x + w, y + 12f, 10f, p.medium, colors.muted, Paint.Align.RIGHT, planW)
-        var cursor = y + 20f
-        val room = h - 20f
-        val blocks = rows.size
-        val perWindow = room / blocks
-        rows.forEach { row ->
-            val accent = accent(colors, p.config, row, now)
-            val percent = percentText(row, now)
-            val percentColor = if (row.state(now) == State.LIVE) colors.text else colors.muted
-            when {
-                // label and percentage, the bar, and the reset line below it
-                perWindow >= 36f -> {
-                    p.text(row.label, x, cursor + 11f, 10f, p.medium, colors.muted)
-                    p.text(percent, x + w, cursor + 12f, 13f, p.bold, percentColor, Paint.Align.RIGHT)
-                    p.bar(x, cursor + 16f, w, 6f, progress(row, now), accent)
-                    p.text(p.fit(resetOptions(row, now, p.config, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_prefix, "")), w, 10f, p.regular), x, cursor + 34f, 10f, p.regular, colors.muted, maxWidth = w)
-                    cursor += min(40f, perWindow)
-                }
-                // reset time on the label line, so it survives in shorter tiles
-                perWindow >= 26f -> {
-                    p.text(row.label, x, cursor + 11f, 10f, p.medium, colors.muted)
-                    p.text(percent, x + w, cursor + 12f, 12.5f, p.bold, percentColor, Paint.Align.RIGHT)
-                    val room2 = w - 38f - 40f
-                    p.text(p.fit(resetOptions(row, now, p.config), room2, 9.5f, p.regular), x + 38f, cursor + 11f, 9.5f, p.regular, colors.muted, maxWidth = room2)
-                    p.bar(x, cursor + 16f, w, 5f, progress(row, now), accent)
-                    cursor += perWindow
-                }
-                else -> {
-                    val labelW = 34f
-                    val percentW = 34f
-                    val mid = cursor + perWindow / 2
-                    p.text(row.label, x, mid + 3.5f, 10f, p.medium, colors.muted, maxWidth = labelW)
-                    p.bar(x + labelW, mid - 3f, w - labelW - percentW - 6f, 6f, progress(row, now), accent)
-                    p.text(percent, x + w, mid + 4f, 11.5f, p.bold, percentColor, Paint.Align.RIGHT)
-                    cursor += perWindow
-                }
-            }
-        }
-    }
-
-    /** Narrow tiles: the name on top, the windows side by side below it. */
-    private fun drawCompactNarrow(p: Painter, a: WidgetAccount, rows: List<Row>, x: Float, y: Float, w: Float, h: Float, now: Long) {
-        val colors = p.palette
-        val withBars = h >= 44f
-        val top = y + (h - (if (withBars) 36f else 30f)) / 2
-        p.brand(a.provider, x, top + 1f, 12f)
-        p.text(nameOf(a), x + 17f, top + 11f, 11.5f, p.bold, colors.text, maxWidth = w - 17f)
-        val column = w / rows.size
-        rows.forEachIndexed { i, row ->
-            val cx = x + column * i
-            val cw = column - if (i < rows.lastIndex) 6f else 0f
-            val live = row.state(now) == State.LIVE
-            val label = com.madebycli.aiusage.Texts.get(if (row.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
-            p.text(label, cx, top + 25f, 8.5f, p.medium, colors.muted)
-            p.text(percentText(row, now), cx + cw, top + 25.5f, 11f, p.bold, if (live) colors.text else colors.muted, Paint.Align.RIGHT)
-            if (withBars) p.bar(cx, top + 30f, cw, 5f, progress(row, now), accent(colors, p.config, row, now))
-        }
-    }
-
-    private fun drawCompact(p: Painter, a: WidgetAccount, rows: List<Row>, x: Float, y: Float, w: Float, h: Float, now: Long) {
-        if (w < 190f && rows.size > 1 || w < 130f) { drawCompactNarrow(p, a, rows, x, y, w, h, now); return }
-        val colors = p.palette
-        val mid = y + h / 2
-        p.brand(a.provider, x, mid - 7f, 14f)
-        val wide = w > 300f
-        val chunk = if (wide) 78f else if (rows.size > 1) 54f else 64f
-        val textW = w - 22f - chunk * rows.size - 2f
-        val twoLines = h >= 34f
-        p.text(nameOf(a), x + 22f, if (twoLines) mid - 1.5f else mid + 4f, 12f, p.bold, colors.text, maxWidth = textW)
-        if (twoLines) {
-            val live = rows.firstOrNull { it.state(now) == State.LIVE }
-            val at = live?.window?.resetAt
-            val options = when {
-                live != null && at != null -> {
-                    val clock = Fmt.clock(com.madebycli.aiusage.Texts.resources, at, now)
-                    val left = Fmt.remaining(com.madebycli.aiusage.Texts.resources, at - now)
-                    val short = com.madebycli.aiusage.Texts.get(if (live.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
-                    when (p.config.reset) {
-                        ResetFormat.CLOCK -> listOf("${live.label} $clock", "$short $clock", clock)
-                        ResetFormat.RELATIVE -> listOf("${live.label} $left", "$short $left", left)
-                        ResetFormat.BOTH -> listOf("${live.label} $clock · $left", "${live.label} $clock", "$short $clock", clock)
-                    }
-                }
-                rows.any { it.state(now) == State.EXPIRED } -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_reached), com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.widget_reset_here))
-                else -> listOf(com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading), "–")
-            }
-            p.text(p.fit(options, textW, 9.5f, p.regular), x + 22f, mid + 10f, 9.5f, p.regular, colors.muted, maxWidth = textW)
-        }
-        rows.forEachIndexed { i, row ->
-            val cx = x + w - chunk * (rows.size - i) + 3f
-            val cw = chunk - 7f
-            val label = if (wide || rows.size == 1) row.label else com.madebycli.aiusage.Texts.get(if (row.seconds == FIVE_HOURS) com.madebycli.aiusage.R.string.widget_five_tiny else com.madebycli.aiusage.R.string.widget_week_tiny)
-            p.text(label, cx, mid - 3f, 9f, p.medium, colors.muted, maxWidth = cw * 0.55f)
-            p.text(percentText(row, now), cx + cw, mid - 2.5f, 11.5f, p.bold, if (row.state(now) == State.LIVE) colors.text else colors.muted, Paint.Align.RIGHT)
-            p.bar(cx, mid + 3f, cw, 5f, progress(row, now), accent(colors, p.config, row, now))
-        }
-    }
-
-    private fun drawPercent(p: Painter, a: WidgetAccount, rows: List<Row>, x: Float, y: Float, w: Float, h: Float, now: Long) {
-        val colors = p.palette
-        p.brand(a.provider, x, y, 12f)
-        p.text(nameOf(a), x + 17f, y + 10f, 11f, p.bold, colors.text, maxWidth = w - 17f)
-        val stacked = p.config.windowLayout == WidgetWindowLayout.STACKED
-        val cellHeight = if (stacked) (h - 14f) / rows.size else h
-        val column = if (stacked) w else w / rows.size
-        val sizes = if (cellHeight >= 64f) listOf(24f, 21f, 18f, 16f, 14f, 12f) else listOf(20f, 18f, 16f, 14f, 12f)
-        // One size for all columns of a tile, so the numbers line up.
-        val big = rows.minOf { p.fitSize(percentText(it, now), column - 6f, p.bold, sizes) }
-        rows.forEachIndexed { i, row ->
-            val cx = x + column * (if (stacked) 0 else i) + column / 2
-            val top = y + 14f + if (stacked) i * cellHeight else 0f
-            val live = row.state(now) == State.LIVE
-            p.text(percentText(row, now), cx, top + 3f + big * 0.9f, big, p.bold, if (live) accent(colors, p.config, row, now) else colors.muted, Paint.Align.CENTER)
-            var line = top + big * 0.9f + 3f + 12f
-            p.text(row.label, cx, line, 9.5f, p.medium, colors.muted, Paint.Align.CENTER, column - 2f)
-            if (cellHeight >= 62f) {
-                line += 11.5f
-                val options = resetOptions(row, now, p.config).let { if (p.config.reset == ResetFormat.BOTH) it.drop(1) + it.last() else it }
-                p.text(p.fit(options, column - 2f, 9.5f, p.regular), cx, line, 9.5f, p.regular, colors.muted, Paint.Align.CENTER, column - 2f)
-            }
-        }
-    }
-
-    private fun drawRings(p: Painter, a: WidgetAccount, rows: List<Row>, x: Float, y: Float, w: Float, h: Float, now: Long) {
-        val colors = p.palette
-        p.brand(a.provider, x, y, 12f)
-        p.text(nameOf(a), x + 17f, y + 10f, 11f, p.bold, colors.text, maxWidth = w - 17f)
-        val stacked = p.config.windowLayout == WidgetWindowLayout.STACKED
-        val cellHeight = if (stacked) (h - 16f) / rows.size else h
-        val column = if (stacked) w else w / rows.size
-        val labelRoom = if (cellHeight >= 70f) 24f else 12f
-        val diameter = min(min(column - 8f, cellHeight - 16f - labelRoom), 60f).coerceAtLeast(26f)
-        rows.forEachIndexed { i, row ->
-            val rowTop = y + if (stacked) i * cellHeight else 0f
-            val cy = rowTop + 16f + diameter / 2
-            val cx = x + column * (if (stacked) 0 else i) + column / 2
-            val live = row.state(now) == State.LIVE
-            p.ring(cx, cy, diameter / 2 - 3f, 5f, progress(row, now), accent(colors, p.config, row, now))
-            val text = percentText(row, now)
-            val size = p.fitSize(text, diameter - 14f, p.bold, listOf(12f, 11f, 10f, 9f, 8f))
-            p.text(text, cx, cy + size * 0.35f, size, p.bold, if (live) colors.text else colors.muted, Paint.Align.CENTER)
-            p.text(row.label, cx, rowTop + 16f + diameter + 10f, 9.5f, p.medium, colors.muted, Paint.Align.CENTER, column - 2f)
-            if (cellHeight >= 70f) {
-                val options = resetOptions(row, now, p.config).let { if (p.config.reset == ResetFormat.BOTH) it.drop(1) + it.last() else it }
-                p.text(p.fit(options, column - 2f, 9.5f, p.regular), cx, rowTop + 16f + diameter + 21f, 9.5f, p.regular, colors.muted, Paint.Align.CENTER, column - 2f)
-            }
-        }
     }
 }

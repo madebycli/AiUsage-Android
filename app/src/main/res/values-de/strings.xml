@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_refresh">Jetzt aktualisieren</string>
-    <string name="widget_description">Verbrauch und Reset-Zeiten deiner KI-Accounts</string>
     <string name="widget_config_title">AI-Usage-Widget</string>
 
     <string name="time_in">in %1$s</string>
@@ -63,7 +62,7 @@
     <string name="page_background">Hintergrund</string>
     <string name="page_background_desc">Abrufintervall und Protokoll</string>
     <string name="page_widgets">Widgets</string>
-    <string name="page_widgets_desc">Layouts auf dem Homescreen</string>
+    <string name="page_widgets_desc">Nutzung, Statistik, Planer und Resets auf dem Startbildschirm</string>
     <string name="page_navigation">Navigation &amp; Start</string>
     <string name="page_navigation_desc">Untere Leiste und Startseite</string>
     <string name="page_about">Über AI Usage</string>
@@ -160,8 +159,7 @@
     <string name="nav_start">Startseite</string>
     <string name="nav_start_last">Zuletzt geöffnet</string>
     <string name="nav_stats_defaults">Statistik-Standard</string>
-    <string name="widgets_empty">Homescreen lange drücken, Widgets öffnen, AI Usage wählen.</string>
-    <string name="widgets_item">Widget %1$d</string>
+    <string name="widgets_empty">Noch keins. Füge unten eins hinzu.</string>
     <string name="about_unofficial">Unabhängig von OpenAI, Anthropic und Google.</string>
     <string name="about_source">Quellcode und Lizenzen</string>
     <string name="about_version">Version %1$s · Build %2$d</string>
@@ -175,19 +173,12 @@
     <string name="metric_five">5-Std.-Limit</string>
     <string name="metric_week">Wochenlimit</string>
     <string name="widget_style_bars">Balken</string>
-    <string name="widget_style_bars_hint">Name, Balken und Reset pro Fenster</string>
     <string name="widget_style_compact">Kompakt</string>
-    <string name="widget_style_compact_hint">Eine Zeile pro Account</string>
     <string name="widget_style_percent">Prozent</string>
-    <string name="widget_style_percent_hint">Große Zahlen, ohne Balken</string>
     <string name="widget_style_rings">Ringe</string>
-    <string name="widget_style_rings_hint">Ein Ring pro Account</string>
     <string name="widget_auto">Automatisch</string>
     <string name="widget_stack">Untereinander</string>
     <string name="widget_grid">Raster</string>
-    <string name="widget_side_by_side">Nebeneinander</string>
-    <string name="widget_preset_custom">Eigene</string>
-    <string name="widget_preset_detailed">Detailliert</string>
     <string name="widget_both">Beide</string>
     <string name="widget_reset_clock">Uhrzeit</string>
     <string name="widget_reset_relative">Restzeit</string>
@@ -470,7 +461,6 @@
     <string name="widget_reset_unknown">Reset unbekannt</string>
     <string name="widget_no_account">Noch kein Account verbunden</string>
     <string name="widget_none_chosen">Kein Account gewählt</string>
-    <string name="widget_reset_here">Reset da</string>
     <string name="notify_window_five">5-Stunden</string>
     <string name="notify_window_week">Wochen</string>
     <string name="widget_five_short">5 Std.</string>
@@ -479,26 +469,17 @@
     <string name="widget_week_tiny">Wo</string>
     <string name="widget_more">+%1$d weitere</string>
     <string name="widget_refreshing">Aktualisiere…</string>
-    <string name="widget_as_of">Stand %1$s</string>
-    <string name="widget_stale">veraltet</string>
-    <string name="widget_reset_prefix">Reset %1$s</string>
     <string name="wc_title">Widget anpassen</string>
-    <string name="wc_preset">Vorlage anwenden</string>
     <string name="wc_taller">Für diese Darstellung das Widget im Launcher höher ziehen. In der aktuellen Größe wird es kompakt angezeigt.</string>
     <string name="wc_accounts">Accounts</string>
     <string name="wc_no_accounts">Noch kein Account verbunden. Zuerst in der App einen Account verbinden.</string>
     <string name="wc_display">Anzeige</string>
     <string name="wc_style">Darstellung</string>
     <string name="wc_arrange_accounts">Accounts anordnen</string>
-    <string name="wc_arrange_windows">Zeitfenster anordnen</string>
     <string name="wc_windows">Zeitfenster</string>
     <string name="wc_reset">Reset-Zeit</string>
-    <string name="wc_example_clock">z. B. 17:40</string>
-    <string name="wc_example_relative">z. B. in 2 Std. 50 Min.</string>
-    <string name="wc_example_both">z. B. 17:40 · in 2 Std. 50 Min.</string>
     <string name="wc_bar_color">Balkenfarbe</string>
     <string name="wc_traffic_hint" formatted="false">Grün bis 70 %, Gelb bis 90 %, danach Rot</string>
-    <string name="wc_app_colors">Farben der App</string>
     <string name="wc_colors_shape">Farben und Form</string>
     <string name="wc_background">Hintergrund</string>
     <string name="wc_opacity">Deckkraft</string>
@@ -511,15 +492,58 @@
     <string name="wc_updated_desc">Warnt bei veralteten Daten</string>
     <string name="wc_plan">Tarif anzeigen</string>
     <string name="wc_plan_desc">Plus, Max 5x und so weiter</string>
-    <string name="wc_preview">Vorschau</string>
-    <string name="wc_size_hint">Größen testen; die echte Größe stellst du im Launcher ein.</string>
     <string name="wc_your_widget">Dein Widget</string>
     <string name="wc_wide">Breit</string>
-    <string name="wc_tall">Hoch</string>
     <string name="wc_large">Groß</string>
     <string name="wc_narrow">Schmal</string>
     <string name="wc_all_accounts">Alle Accounts</string>
     <string name="wc_all_accounts_desc">In der Reihenfolge der Startseite, neue kommen dazu</string>
     <string name="alerts_lead">Vorlauf</string>
     <string name="alerts_at_reset">0 Min.</string>
+    <!-- Widget Update -->
+    <string name="widget_kind_usage">Nutzung</string>
+    <string name="widget_kind_usage_desc">Deine Limits als Formen, Balken oder Ringe</string>
+    <string name="widget_kind_stats">Statistik</string>
+    <string name="widget_kind_stats_desc">Verbrauch der letzten Tage als Diagramm</string>
+    <string name="widget_kind_plan">Planer</string>
+    <string name="widget_kind_plan_desc">Welcher Account jetzt dran ist, dazu die Woche</string>
+    <string name="widget_kind_resets">Resets</string>
+    <string name="widget_kind_resets_desc">Die nächsten Resets mit Restzeit</string>
+    <string name="widget_style_liquid">Flüssig</string>
+    <string name="widget_span_week">7 Tage</string>
+    <string name="widget_span_two_weeks">14 Tage</string>
+    <string name="widget_span_month">28 Tage</string>
+    <plurals name="widget_limits_unit">
+        <item quantity="one">Limit</item>
+        <item quantity="other">Limits</item>
+    </plurals>
+    <string name="widget_week_points" formatted="false">% des Wochenlimits</string>
+    <string name="widget_today">Heute</string>
+    <plurals name="widget_streak_chip">
+        <item quantity="one">%d Tag am Stück</item>
+        <item quantity="other">%d Tage am Stück</item>
+    </plurals>
+    <string name="widget_free_at">Frei ab %1$s</string>
+    <string name="widget_week_left_value">%1$s %% der Woche frei</string>
+    <string name="widget_five_left_value">%1$s %% von 5 Std. frei</string>
+    <string name="widget_then">Danach</string>
+    <string name="widget_next_up">Zuerst wieder frei</string>
+    <string name="widget_week_reset">Wochenreset %1$s</string>
+    <string name="widget_next_reset">Nächster Reset</string>
+    <string name="widget_no_resets">Keine Reset-Zeit bekannt</string>
+    <plurals name="widget_banked">
+        <item quantity="one">%d gespeichert</item>
+        <item quantity="other">%d gespeichert</item>
+    </plurals>
+    <string name="widget_no_history">Noch kein Verlauf</string>
+    <string name="wc_small">Klein</string>
+    <string name="wc_save">Speichern</string>
+    <string name="wc_limit">Limit</string>
+    <string name="wc_span">Zeitraum</string>
+    <string name="widgets_placed">Auf dem Startbildschirm</string>
+    <string name="widgets_gallery">Widget hinzufügen</string>
+    <string name="widgets_add">Hinzufügen</string>
+    <string name="widget_from">ab %1$s</string>
+    <string name="widget_left_short">%1$s %% frei</string>
+    <string name="widget_per_day">Ø pro Tag</string>
 </resources>

@@ -18,8 +18,8 @@ import kotlinx.coroutines.*
 import java.time.Instant
 import java.util.concurrent.TimeUnit
 
-/** The home-screen widget. All drawing happens in [WidgetRenderer]; this class only connects it to Android. */
-class UsageWidgetProvider : AppWidgetProvider() {
+/** The home-screen widgets. All drawing happens in [WidgetRenderer]; these classes only connect it to Android. */
+abstract class AiWidgetProvider(val kind: WidgetKind) : AppWidgetProvider() {
     /** Reading the encrypted measurements and drawing take a moment, so they run off the main thread. */
     private fun async(block: () -> Unit) {
         val pending = goAsync()
@@ -60,15 +60,32 @@ class UsageWidgetProvider : AppWidgetProvider() {
     companion object { const val ACTION_REFRESH = "com.madebycli.aiusage.WIDGET_REFRESH" }
 }
 
+class UsageWidgetProvider : AiWidgetProvider(WidgetKind.USAGE)
+class StatsWidgetProvider : AiWidgetProvider(WidgetKind.STATS)
+class PlanWidgetProvider : AiWidgetProvider(WidgetKind.PLAN)
+class ResetWidgetProvider : AiWidgetProvider(WidgetKind.RESETS)
+
 object WidgetUpdater {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pending = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
     @Volatile private var collector: Job? = null
 
-    private fun ids(context: Context): IntArray {
-        val manager = AppWidgetManager.getInstance(context)
-        return manager.getAppWidgetIds(ComponentName(context, UsageWidgetProvider::class.java))
+    val providers: Map<WidgetKind, Class<out AiWidgetProvider>> = mapOf(
+        WidgetKind.USAGE to UsageWidgetProvider::class.java, WidgetKind.STATS to StatsWidgetProvider::class.java,
+        WidgetKind.PLAN to PlanWidgetProvider::class.java, WidgetKind.RESETS to ResetWidgetProvider::class.java)
+
+    fun ids(context: Context, kind: WidgetKind): IntArray =
+        runCatching { AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, providers.getValue(kind))) }.getOrNull() ?: IntArray(0)
+
+    private fun ids(context: Context): IntArray = WidgetKind.entries.flatMap { ids(context, it).toList() }.toIntArray()
+
+    /** The kind of a placed widget, from the provider it belongs to. */
+    fun kindOf(context: Context, id: Int): WidgetKind {
+        val name = runCatching { AppWidgetManager.getInstance(context).getAppWidgetInfo(id)?.provider?.className }.getOrNull()
+        return providers.entries.firstOrNull { it.value.name == name }?.key ?: WidgetKind.USAGE
     }
+
+    fun config(context: Context, id: Int): WidgetConfig = WidgetConfigStore.read(context, id, kindOf(context, id))
 
     fun hasWidgets(context: Context) = ids(context).isNotEmpty()
 
@@ -114,7 +131,7 @@ object WidgetUpdater {
     }
 
     private fun views(context: Context, manager: AppWidgetManager, id: Int, accounts: List<WidgetAccount>, now: Long, quality: Float, reported: Bundle?): RemoteViews {
-        val config = WidgetConfigStore.read(context, id)
+        val config = config(context, id)
         val (width, height) = sizeDp(context, manager, id, reported)
         val refreshing = WidgetConfigStore.refreshingUntil(context, id) > now
         val density = context.resources.displayMetrics.density
@@ -126,17 +143,19 @@ object WidgetUpdater {
         views.setInt(R.id.widget_root, "setBackgroundResource", 0)
         views.setViewVisibility(R.id.widget_placeholder, android.view.View.GONE)
         val shown = WidgetData.select(accounts, config)
-        views.setContentDescription(R.id.widget_image, shown.joinToString(". ") { a ->
-            "${a.title}: " + listOfNotNull(a.window(com.madebycli.aiusage.data.FIVE_HOURS)?.let { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_window_a11y, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.window_five), com.madebycli.aiusage.data.formatPercent(it.usedPercent)) },
-                a.window(com.madebycli.aiusage.data.ONE_WEEK)?.let { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_window_a11y, com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.window_week), com.madebycli.aiusage.data.formatPercent(it.usedPercent)) }).joinToString(", ").ifEmpty { com.madebycli.aiusage.Texts.get(com.madebycli.aiusage.R.string.usage_no_reading) }
-        }.ifEmpty { "AI Usage" })
+        views.setContentDescription(R.id.widget_image, WidgetDescription.describe(config, shown, now).ifEmpty { "AI Usage" })
         val open = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        shown.singleOrNull()?.let { open.putExtra("account", it.account.id) }
+        when (config.kind) {
+            WidgetKind.USAGE -> shown.singleOrNull()?.let { open.putExtra("account", it.account.id) }
+            WidgetKind.STATS -> open.putExtra("tab", "STATS")
+            WidgetKind.PLAN -> open.putExtra("tab", "PLAN")
+            WidgetKind.RESETS -> open.putExtra("tab", "RESETS")
+        }
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, id, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        val refreshVisible = config.showRefresh && height >= 100
+        val refreshVisible = WidgetRenderer.refreshVisible(config, width, height)
         views.setViewVisibility(R.id.widget_refresh, if (refreshVisible) android.view.View.VISIBLE else android.view.View.GONE)
         if (refreshVisible) {
-            val refresh = Intent(context, UsageWidgetProvider::class.java).setAction(UsageWidgetProvider.ACTION_REFRESH)
+            val refresh = Intent(context, providers.getValue(config.kind)).setAction(AiWidgetProvider.ACTION_REFRESH)
                 .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id).setData(android.net.Uri.parse("aiusage://widget/$id"))
             views.setOnClickPendingIntent(R.id.widget_refresh, PendingIntent.getBroadcast(context, id, refresh, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         }
@@ -149,7 +168,7 @@ object WidgetUpdater {
         val now = Instant.now().epochSecond
         WidgetConfigStore.markRefreshing(app, widgetId, now + 45)
         update(app, intArrayOf(widgetId))
-        val ids = WidgetConfigStore.read(app, widgetId).accounts.toTypedArray()
+        val ids = config(app, widgetId).accounts.toTypedArray()
         val request = OneTimeWorkRequestBuilder<WidgetRefreshWorker>().setInputData(workDataOf("ids" to ids, "widget" to widgetId))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .build()

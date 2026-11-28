@@ -23,7 +23,7 @@ object Texts {
     private val res: Resources? get() = context?.resources
     /** Resources of the app language for formatting outside Compose. */
     val resources: Resources get() = context?.resources ?: Resources.getSystem()
-    fun get(@StringRes id: Int, vararg args: Any): String = res?.getString(id, *args) ?: fallback(id)
+    fun get(@StringRes id: Int, vararg args: Any): String = (if (args.isEmpty()) res?.getString(id) else res?.getString(id, *args)) ?: fallback(id)
     fun plural(@PluralsRes id: Int, count: Int, vararg args: Any): String = res?.getQuantityString(id, count, *args) ?: fallback(id)
     /** Only in plain JVM tests without Android resources. */
     private fun fallback(id: Int) = "#$id"

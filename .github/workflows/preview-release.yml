@@ -5,7 +5,7 @@ on:
       tag:
         description: GitHub prerelease tag
         required: true
-        default: v2.0.0-preview.1
+        default: v3.0.0-preview.1
         type: string
 permissions:
   contents: write
@@ -83,7 +83,14 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "AiUsage-$PREVIEW_TAG.apk"
           sha256sum "AiUsage-$PREVIEW_TAG.apk" > SHA256SUMS
           cat > preview-notes.md <<'NOTES'
-          Preview of AI Usage 2.0.
+          Preview of AI Usage 3.0, The Widget Update.
+
+          - Four widgets: Usage, Statistics, Planner and Resets, each in the launcher's widget list.
+          - Usage widget in five styles; new default Liquid, the shapes of the playful home screen. Layouts adapt from 2×1 to 5×4 without cutting text.
+          - Widget settings laid out as in Iris, with the live picture on a wallpaper and every style shown as a real preview. Settings, Widgets lists placed widgets and adds new ones to the home screen.
+          - Tapping the Statistics, Planner or Resets widget opens that tab.
+
+          Also in this build, from 2.0:
 
           - Usage counted per 5-hour window, on the day it started; re-reads never count twice. Windows whose end was not seen are marked as a lower bound.
           - Background reads at a chosen interval (15 min to 5 h) and 3 minutes before every window ends, through AlarmManager. Log of the last 100 reads under Settings, Background.

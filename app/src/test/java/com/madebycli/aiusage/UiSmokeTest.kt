@@ -1,7 +1,9 @@
 package com.madebycli.aiusage
 
 import android.graphics.Bitmap
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -45,41 +47,7 @@ class UiSmokeTest {
 
     private fun model(): UsageViewModel = UsageViewModel(ApplicationProvider.getApplicationContext()).also { models.put("usage", it) }
 
-    /** Three weeks of work at habitual hours; every cycle is read shortly after it starts and shortly before it ends. */
-    private fun history(provider: String, seed: Int, weekPerLimit: Double): Pair<UsageLedger, UsageSnapshot> {
-        val zone = ZoneId.systemDefault()
-        val random = kotlin.random.Random(seed)
-        var ledger = UsageLedger()
-        val today = Instant.ofEpochSecond(now).atZone(zone).toLocalDate()
-        var weekEnd = today.minusDays(20).atTime(17, 0).atZone(zone).toEpochSecond() + ONE_WEEK
-        var weekly = 0.0
-        for (dayAgo in 20 downTo 1) {
-            val day = today.minusDays(dayAgo.toLong())
-            for (hour in listOf(8, 14, 20)) {
-                if (random.nextInt(10) < 3) continue
-                val start = day.atTime(hour, 5 + random.nextInt(50)).atZone(zone).toEpochSecond()
-                if (start >= weekEnd) { weekEnd += ONE_WEEK; weekly = 0.0 }
-                val end = start + FIVE_HOURS
-                val peak = (20 + random.nextInt(81)).toDouble()
-                val mid = peak / 2
-                weekly = (weekly + mid / 100 * weekPerLimit).coerceAtMost(100.0)
-                ledger = UsageTracker.record(ledger, snap(provider, start + 900, mid to end, weekly to weekEnd), provider)
-                weekly = (weekly + (peak - mid) / 100 * weekPerLimit).coerceAtMost(100.0)
-                ledger = UsageTracker.record(ledger, snap(provider, end - 240, peak to end, weekly to weekEnd), provider)
-            }
-        }
-        if (now >= weekEnd) { weekEnd += ONE_WEEK; weekly = 0.0 }
-        val fiveEnd = now + 2 * 3600 + 43 * 60
-        val current = snap(provider, now, 42.0 to fiveEnd, (weekly + 5) to weekEnd)
-        val earlier = UsageSnapshot(null, listOf(QuotaGroup(provider, listOf(UsageWindow(20.0, FIVE_HOURS, fiveEnd), UsageWindow(weekly + 2, ONE_WEEK, weekEnd)))), now - 600)
-        ledger = UsageTracker.record(ledger, earlier, provider)
-        ledger = UsageTracker.record(ledger, current, provider)
-        return ledger to current.copy(plan = if (provider == Providers.CODEX) "Plus" else "Max 5x", availableResets = if (provider == Providers.CODEX) 2 else null,
-            resetCredits = if (provider == Providers.CODEX) listOf(ResetCredit("Reset", "available", now - 86_400, now + 9 * 86_400), ResetCredit("Reset", "available", now - 3600, now + 20 * 86_400)) else emptyList())
-    }
-
-    private fun snap(provider: String, at: Long, five: Pair<Double, Long>, week: Pair<Double, Long>) =
-        UsageSnapshot(null, listOf(QuotaGroup(provider, listOf(UsageWindow(five.first, FIVE_HOURS, five.second), UsageWindow(week.first.coerceAtMost(100.0), ONE_WEEK, week.second)))), at)
+    private fun history(provider: String, seed: Int, weekPerLimit: Double) = Fixtures.history(provider, seed, weekPerLimit, now)
 
     private fun account(id: String, provider: String, label: String?, seed: Int, k: Double): AccountState {
         val (ledger, usage) = history(provider, seed, k)
@@ -197,6 +165,48 @@ class UiSmokeTest {
             compose.onNodeWithContentDescription("Zurück").performClick()
             compose.waitForIdle()
         }
+    }
+
+    /** Pictures drawn off the main thread need a moment before the screenshot. */
+    private fun settle() { repeat(3) { Thread.sleep(400); compose.waitForIdle() } }
+
+    @Test fun `widget settings show the live picture and the options of each kind`() {
+        val widgets = com.madebycli.aiusage.widget.WidgetData.fromStates(accounts)
+        var kind by mutableStateOf(com.madebycli.aiusage.widget.WidgetKind.USAGE)
+        val list = androidx.compose.foundation.lazy.LazyListState()
+        compose.setContent {
+            AniHyouTheme(darkTheme = true, dynamicColor = false) {
+                androidx.compose.runtime.key(kind) {
+                    com.madebycli.aiusage.widget.ConfigScreen(com.madebycli.aiusage.widget.WidgetConfig(kind = kind), 250, 180, {}, {}, given = widgets, now = now, scroll = list)
+                }
+            }
+        }
+        com.madebycli.aiusage.widget.WidgetKind.entries.forEach { k ->
+            kind = k
+            compose.waitForIdle(); compose.runOnIdle { kotlinx.coroutines.runBlocking { list.scrollToItem(0) } }
+            settle()
+            compose.onNodeWithText("Speichern", useUnmergedTree = true).assertExists()
+            screenshot("widget-config-${k.name.lowercase()}")
+            compose.runOnIdle { kotlinx.coroutines.runBlocking { list.scrollToItem(2) } }
+            settle()
+            screenshot("widget-config-${k.name.lowercase()}-scrolled")
+        }
+    }
+
+    @Test fun `widget page lists the gallery with a live picture of every kind`() {
+        show(ui(*accounts.toTypedArray()))
+        compose.onNodeWithContentDescription("Einstellungen").performClick()
+        compose.onNodeWithTag("settings-hub").performScrollToNode(hasText("Widgets"))
+        compose.onNode(hasText("Widgets") and hasClickAction()).performClick()
+        settle()
+        compose.onNodeWithText("Widget hinzufügen").assertExists()
+        screenshot("settings-widgets-gallery")
+        compose.onNodeWithTag("settings-page-WIDGETS").performScrollToIndex(3)
+        settle()
+        screenshot("settings-widgets-gallery-2")
+        compose.onNodeWithTag("settings-page-WIDGETS").performScrollToIndex(5)
+        settle()
+        screenshot("settings-widgets-gallery-3")
     }
 
     @Test fun `background page shows the log of reads`() {

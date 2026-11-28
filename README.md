@@ -19,7 +19,8 @@ Kotlin, Jetpack Compose, Material 3 Expressive, Android 8.0 oder neuer. Sprachen
   Verlauf und gespeicherte Resets.
 - **Hintergrund**: Abruf im gewählten Intervall (15 Minuten bis 5 Stunden) und kurz vor dem Ende jedes laufenden
   Fensters, über AlarmManager. Ein Protokoll der letzten 100 Abrufe zeigt, ob das auf deinem Gerät funktioniert.
-- **Widget**, **Reset-Hinweise**, **mehrere Accounts pro Anbieter**, Einstellungen im Iris-Stil.
+- **Vier Widgets** (3.0, The Widget Update): Nutzung in fünf Stilen (Flüssig, Balken, Ringe, Prozent, Kompakt), Statistik, Planer und Resets. Siehe [docs/WIDGETS.md](docs/WIDGETS.md).
+- **Reset-Hinweise**, **mehrere Accounts pro Anbieter**, Einstellungen im Iris-Stil.
 
 ## Anbieter
 
@@ -61,7 +62,7 @@ Einrichtung mit Weblate: [docs/TRANSLATING.md](docs/TRANSLATING.md).
 - `data/`: Anbieter-Clients, Parser, Ledger (Zyklen), Planer, Formatierung, verschlüsselter Speicher
 - `account/`: Account-Liste, eine Laufzeit pro Account, Anmeldungen
 - `background/`: periodischer Abruf, Abruf vor Fensterende, Protokoll, Reset-Hinweise
-- `widget/`: Renderer, Provider und Konfiguration
+- `widget/`: ein Provider pro Widget-Typ, Renderer (`WidgetKit`, je Typ eine `*WidgetDraw`-Datei), Einstellungen
 - `ui/`: Navigation, Seiten, Einstellungen (Iris), gemeinsame Bausteine
 
 ## Herkunft
